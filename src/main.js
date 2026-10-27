@@ -314,7 +314,8 @@ function makeRig({ scene: root, clips }) {
     map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
     map.needsUpdate = true;
   }
-  const mat = map ? M.toon(0xffffff, { vc: false, map }) : M.toon();
+  const dissolve = { value: 0 };
+  const mat = map ? M.toon(0xffffff, { vc: false, map, dissolve }) : M.toon(0xffffff, { dissolve });
   root.traverse((o) => {
     if (!o.isMesh) return;
     o.material = mat;
@@ -323,7 +324,7 @@ function makeRig({ scene: root, clips }) {
   });
   const mixer = new THREE.AnimationMixer(root);
   const act = Object.fromEntries(Object.entries(clips).map(([n, c]) => [n, mixer.clipAction(c)]));
-  return { group: root, mixer, act, mat, current: null, w: {} };
+  return { group: root, mixer, act, mat, dissolve, current: null, w: {} };
 }
 const bossRig = makeRig(ASSETS.boss);
 bossRig.group.visible = false;
@@ -810,6 +811,28 @@ function beep(freq, dur = 0.08, type = 'square', vol = 0.04, at = 0, to = 0) {
   o.stop(t + dur);
 }
 const chord = (notes, type = 'sawtooth') => notes.forEach((f, k) => beep(f, 0.2, type, 0.04, k * 0.08));
+let noiseBuf = null;
+function boom(dur = 1.2, vol = 0.9, freq = 900) { // low rumble: filtered noise that fades out
+  if (!actx) return;
+  if (!noiseBuf) {
+    noiseBuf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const t = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuf;
+  const f = actx.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(freq, t);
+  f.frequency.exponentialRampToValueAtTime(60, t + dur);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(master);
+  src.start(t);
+  src.stop(t + dur);
+}
 
 function toast(text, color = '#fbf4e4', img) {
   const box = $('toasts');
@@ -2519,6 +2542,44 @@ function revive() {
   addFx(ringGeo, 0xd9483b, P.pos.x, 0.3, P.pos.z, 1, 0.7, { grow: 8, ground: true });
   toast('Cordão Escarlate: você se levanta!', RARITY[4].color, ICON.relic.cordao);
 }
+// Death: the world freezes, the hero falls and crumbles into dust, then the end screen.
+let outro = null;
+let camZoom = 1;
+function startDeath() {
+  state = 'dying';
+  outro = { t: 0 };
+  P.vel.set(0, 0, 0);
+  P.hurtT = 0.6;
+  shake = 1.2;
+  boom(1.6, 1, 800);
+  beep(98, 1.2, 'sine', 0.18, 0, 30);
+  beep(196, 0.9, 'sawtooth', 0.07, 0, 45);
+  [392, 349, 311, 262].forEach((f, k) => beep(f, k === 3 ? 0.9 : 0.3, 'triangle', 0.06, 0.9 + k * 0.3));
+  document.body.classList.add('outro');
+}
+function updateOutro(dt) {
+  const o = outro;
+  o.t += dt;
+  P.hurtT -= dt;
+  shake = Math.max(0, shake - dt * 1.5);
+  updateParticles(dt);
+  updateFx(dt);
+  camZoom += (0.6 - camZoom) * Math.min(1, dt * 2);
+  const k = clamp((o.t - 0.5) / 1.6, 0, 1); // how much has crumbled
+  heroRig.group.visible = k < 1;
+  heroRig.group.rotation.x = Math.min(1, o.t * 2) * 0.35;
+  heroRig.group.position.y = -k * 0.4;
+  heroRig.dissolve.value = k;
+  heroRig.mat.emissive.setRGB(P.hurtT > 0 ? 0.55 : 0, 0, 0);
+  if (k > 0.6) heroRig.group.traverse((m) => { m.castShadow = false; });
+  shadowBlob.scale.setScalar(1 - k);
+  if (k > 0 && k < 1) {
+    const x = P.pos.x + (random() - 0.5) * 0.6;
+    const z = P.pos.z + (random() - 0.5) * 0.6;
+    burst(x, P.pos.y + 0.3 + random() * 1.6, z, random() < 0.5 ? 0xffd27a : 0x6b5a48, 2, 1.2, 0.12, 3);
+  }
+  if (o.t > 2.6) { outro = null; die(); }
+}
 function die() {
   endScreen('Você caiu', `${HEROES[P.hero].name} lutou bravamente em ${B.name}.`);
 }
@@ -2586,7 +2647,7 @@ function step(dt) {
   if ((comboT -= dt) <= 0) combo = 0;
   if (P.hp <= 0) {
     if (P.st.revives >= 1) revive();
-    else return die();
+    else return startDeath();
   }
   if (state === 'play' && pendingLevels > 0) openLevelUp();
 }
@@ -2624,7 +2685,7 @@ function syncMeshes(dt) {
     if (P.castT > 0.7 && !heroRig.act.cast.isRunning()) heroRig.act.cast.reset().play();
     const roll = P.dashT > 0 && P.hero === 'davi'; // Davi's dodge: a quick spin
     heroRig.group.rotation.y = roll ? heroRig.group.rotation.y + dt * 40 : 0;
-    heroRig.group.visible = !runStarted || P.iframes <= 0 || P.dashT > 0 || P.harpT > 0 || Math.floor(time * 20) % 2 === 0;
+    if (!outro) heroRig.group.visible = !runStarted || P.iframes <= 0 || P.dashT > 0 || P.harpT > 0 || Math.floor(time * 20) % 2 === 0;
     const glowing = P.castT > 0 || P.harpT > 0;
     heroRig.mat.emissive.setRGB(P.hurtT > 0 ? 0.55 : glowing ? 0.18 : 0, glowing ? 0.14 : 0, 0);
     heroRig.mixer.update(dt);
@@ -2814,13 +2875,13 @@ function updateCamera(dt) {
         if ((P.vel.x * -Math.sin(yaw) + P.vel.z * -Math.cos(yaw)) / hs > -0.5) yaw += wrap(want - yaw) * Math.min(1, dt * 1.2);
       }
     }
-    const d = cfg.camDist;
+    const d = cfg.camDist * camZoom;
     camTarget.set(P.pos.x, P.pos.y + 1.5, P.pos.z);
     const cp = Math.cos(pitch);
     const cx = camTarget.x + Math.sin(yaw) * cp * d;
     const cz = camTarget.z + Math.cos(yaw) * cp * d;
     const cy = Math.max(camTarget.y + Math.sin(pitch) * d, terrainH(cx, cz) + 0.5);
-    shake = state === 'play' ? Math.max(0, shake - dt * 2) : 0; // paused, cards or end screen: hold still
+    shake = state === 'play' ? Math.max(0, shake - dt * 2) : outro ? shake : 0; // paused, cards or end screen: hold still
   if (state === 'play') dustT = Math.max(0, dustT - dt);
   scene.fog.far = 135 - 75 * Math.min(1, dustT / 3, (16 - dustT) / 2); // wind over the bones: dust closes in, then clears
     camera.position.set(cx + (Math.random() - 0.5) * shake, cy + (Math.random() - 0.5) * shake, cz);
@@ -2975,6 +3036,7 @@ renderer.setAnimationLoop((now) => {
   scene.fog.color.copy(world.horizon);
   scene.background.copy(world.horizon);
   syncMeshes(playing ? dt : raw);
+  if (outro) updateOutro(raw);
   updateCamera(raw);
   updateHud();
   updateDmgNumbers(playing ? dt : 0);

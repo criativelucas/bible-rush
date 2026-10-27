@@ -70,6 +70,16 @@ diffuseColor.rgb *= 0.86 + 0.28 * hash3(floor(vWorld * 9.0));
   #endif
 }
 #endif`;
+// Dissolve (a hero falling): bits of the body vanish in a fixed pixel pattern, with a glowing edge.
+const DISSOLVE = `
+#ifdef DISSOLVE
+float dn = hash3(floor(vWorld * 14.0));
+if (dn < uDissolve) discard;
+#endif`;
+const DISSOLVE_EDGE = `
+#ifdef DISSOLVE
+if (uDissolve > 0.0 && dn < uDissolve + 0.08) diffuseColor.rgb = vec3(1.0, 0.8, 0.42);
+#endif`;
 const FADE = `
 #ifdef FADE
 if (uFadeOn > 0.5) {
@@ -104,15 +114,17 @@ const WATER = `
 // blocking the view of the player. grain: pixel noise. ground: 1 = grass with fallen leaves, 2 = sand,
 // 3 = cracked dust with chips of bone.
 // water: { height, shallow, deep, fall } makes it a water surface.
-export function toon(color = 0xffffff, { vc = true, walk = false, fade = false, grain = false, ground = 0, water = null, ...extra } = {}) {
+// dissolve: a { value } uniform from 0 (whole) to 1 (gone).
+export function toon(color = 0xffffff, { vc = true, walk = false, fade = false, grain = false, ground = 0, water = null, dissolve = null, ...extra } = {}) {
   const m = new THREE.MeshToonMaterial({ color, gradientMap: ramp, vertexColors: vc, ...extra });
-  if (!(walk || fade || grain || ground || water)) return m;
+  if (!(walk || fade || grain || ground || water || dissolve)) return m;
   m.defines = {
     ...m.defines, ...(walk && { WALK: '' }), ...(fade && { FADE: '' }), ...(grain && { GRAIN: '' }),
-    ...(ground && { GROUND: String(ground) }), ...(water?.fall && { FALL: '' }),
+    ...(ground && { GROUND: String(ground) }), ...(water?.fall && { FALL: '' }), ...(dissolve && { DISSOLVE: '' }),
   };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, shared);
+    if (dissolve) sh.uniforms.uDissolve = dissolve;
     if (water) {
       Object.assign(sh.uniforms, {
         uHeight: { value: water.height }, uShallow: { value: new THREE.Color(water.shallow) }, uDeep: { value: new THREE.Color(water.deep) },
@@ -122,11 +134,11 @@ export function toon(color = 0xffffff, { vc = true, walk = false, fade = false, 
       .replace('#include <common>', `#include <common>${VERT_HEAD}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>${WALK}`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>${FRAG_HEAD}${water ? '\nuniform sampler2D uHeight; uniform vec3 uShallow; uniform vec3 uDeep;' : ''}`)
-      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>${FADE}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>${water ? WATER : DETAIL}`);
+      .replace('#include <common>', `#include <common>${FRAG_HEAD}${water ? '\nuniform sampler2D uHeight; uniform vec3 uShallow; uniform vec3 uDeep;' : ''}${dissolve ? '\nuniform float uDissolve;' : ''}`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>${FADE}${DISSOLVE}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>${water ? WATER : DETAIL}${DISSOLVE_EDGE}`);
   };
-  m.customProgramCacheKey = () => `otr-${walk}-${fade}-${grain}-${ground}-${!!water}-${!!water?.fall}`;
+  m.customProgramCacheKey = () => `otr-${walk}-${fade}-${grain}-${ground}-${!!water}-${!!water?.fall}-${!!dissolve}`;
   return m;
 }
 

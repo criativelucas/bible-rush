@@ -81,6 +81,7 @@
 
     /* ---------- HUD (2 screen px per art px) ---------- */
     #hud[hidden] { display: none; }
+    body.outro #hud > :not(#hurt) { opacity: 0; transition: opacity .4s; } /* death: only the hero on screen */
     .hud { position: fixed; pointer-events: none; }
     #hero-panel { top: 12px; left: 12px; display: flex; gap: 10px; align-items: center; padding: 4px 10px 4px 4px; width: 320px; }
     #hero-face { width: 72px; height: 72px; flex: none; border: calc(5 * var(--hx)) solid transparent;
