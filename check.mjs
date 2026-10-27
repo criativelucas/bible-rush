@@ -1,7 +1,7 @@
 // Run: node check.mjs — checks the pure logic in src/sim.js and src/content.js.
 import assert from 'node:assert/strict';
 import { FlowField, SpatialHash, rng } from './src/sim.js';
-import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, MAX_WEAPONS, MAX_LEVEL, baseStats, rollOffers, weaponStats, rollRarity, readyToEvolve } from './src/content.js';
+import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX_LEVEL, baseStats, rollOffers, weaponStats, rollRarity, readyToEvolve, openSet, unlockedBy } from './src/content.js';
 
 // Open field: west of the player, arrows point straight east.
 {
@@ -143,6 +143,18 @@ import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, MAX_WEAPONS, MAX_LEVEL, ba
   assert.equal(readyToEvolve([{ id: 'funda', level: MAX_LEVEL }], [{ id: 'pedras' }]).length, 1);
   assert.equal(readyToEvolve([{ id: 'funda', level: MAX_LEVEL - 1 }], [{ id: 'pedras' }]).length, 0);
   assert.equal(readyToEvolve([{ id: 'funda', level: MAX_LEVEL }], [{ id: 'aguia' }]).length, 0);
+}
+
+// Unlocks: a new profile opens Davi, Sansão, Elá and Mar; everything else has a trophy that opens it;
+// every trophy reward names something that exists; a profile with every trophy opens everything.
+{
+  const fresh = openSet({});
+  assert.deepEqual([...fresh].filter((k) => !k.startsWith('relic:')).sort(), ['hero:davi', 'hero:sansao', 'map:ela', 'map:mar']);
+  const all = [...Object.keys(HEROES).map((id) => `hero:${id}`), ...Object.keys(BIOMES).map((id) => `map:${id}`), ...Object.keys(RELICS).map((id) => `relic:${id}`)];
+  for (const key of all) if (!fresh.has(key)) assert.ok(unlockedBy(key), `${key} is locked with no trophy to open it`);
+  for (const [id, t] of Object.entries(TROPHIES)) if (t.unlock) assert.ok(all.includes(t.unlock), `${id} opens unknown ${t.unlock}`);
+  const full = openSet({ trophies: Object.fromEntries(Object.keys(TROPHIES).map((id) => [id, 1])) });
+  for (const key of all) assert.ok(full.has(key), `${key} never opens`);
 }
 
 console.log('ok');

@@ -119,7 +119,7 @@ export function buildWorld(scene, id, random, PROPS) {
     ribbon(-128, 65, waterMat);
     ribbon(65, 71, M.toon(0xffffff, { vc: false, water: { ...water, fall: true }, transparent: true, side: THREE.DoubleSide }));
     ribbon(71, 128, waterMat);
-  } else if (sea) {
+  } else if (B.water > -20) { // the sea, or Jericho's spring pool
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(900, 900).rotateX(-Math.PI / 2), waterMat);
     plane.position.y = B.water;
     plane.receiveShadow = true;
@@ -148,6 +148,13 @@ export function buildWorld(scene, id, random, PROPS) {
   });
 
   // ---- Landmarks ----
+  // Jericho's wall ring is reserved before anything else is placed (altars and chests keep clear of it).
+  const C = B.city;
+  const wallAt = (k, n, extra = 0) => {
+    const a = (k / n) * Math.PI * 2;
+    return { a, x: C.x + Math.cos(a) * (C.r + extra), z: C.z + Math.sin(a) * (C.r + extra) };
+  };
+  if (C) for (let k = 0; k < 14; k++) placed.push(wallAt(k, 14));
   const stones = [];
   const pileGeo = geo('memorial');
   const a0 = random() * Math.PI * 2;
@@ -196,7 +203,7 @@ export function buildWorld(scene, id, random, PROPS) {
   // Wells (or springs): drink to heal; they fill again after a while.
   const wells = [];
   for (let k = 0; k < 2; k++) {
-    const s = spot(18, B.radius * 0.75, 16);
+    const s = B.oasis && k === 0 ? { x: B.oasis.x + 8, z: B.oasis.z + 2 } : spot(18, B.radius * 0.75, 16); // Elisha's spring by the pool
     if (!s) continue;
     const y = H(s.x, s.z);
     const m = M.solid(geo('prop_well'), fadeMat);
@@ -292,6 +299,8 @@ export function buildWorld(scene, id, random, PROPS) {
   const flatMat = M.toon();
   const glints = [];
   const bonePiles = [];
+  const gates = [];
+  let rahab = null;
   if (ela) {
     // Waterfall: the brook drops off the eastern ledge between two cliffs; more cliffs line the ledge.
     const lx = B.ledgeX;
@@ -394,6 +403,55 @@ export function buildWorld(scene, id, random, PROPS) {
       pyr.castShadow = pyr.receiveShadow = false;
       scene.add(pyr);
     }
+  } else if (C) {
+    // Jericho (Js 6): the walled city on its mound, two gates, fallen stretches you can climb, houses inside,
+    // Rahab's house built into the wall; palms by the spring (Dt 34:3, "the city of palms"); Israel's camp.
+    const n = 14;
+    for (let k = 0; k < n; k++) {
+      const w = wallAt(k, n);
+      const rot = -w.a - Math.PI / 2; // along the ring
+      if (k === 0 || k === 7) {
+        build('gate', geo('prop_gate'), w.x, w.z, rot, [[-2.6, 0, 1.25, 6], [2.6, 0, 1.25, 6]]);
+        gates.push({ x: C.x + Math.cos(w.a) * (C.r + 4), z: C.z + Math.sin(w.a) * (C.r + 4) });
+      } else if (k === 3 || k === 10 || k === 12) {
+        build('rubble', geo('prop_wallRubble'), w.x, w.z, rot, [[-2, 0, 0.9, 0.8], [0, 0, 0.9, 1.0], [2, 0, 0.9, 0.8]]);
+      } else build('cityWall', geo('prop_cityWall'), w.x, w.z, rot, [[-2.2, 0, 1.0, 4.6], [0, 0, 1.0, 4.6], [2.2, 0, 1.0, 4.6]]);
+      if (k === 5) { // Rahab's house against the outside of the wall, its window toward the plain
+        const h = wallAt(k, n, 2.4);
+        build('rahab', geo('prop_rahab'), h.x, h.z, Math.atan2(Math.cos(w.a), Math.sin(w.a)), [[0, 0, 1.5, 2.4]]);
+        rahab = { x: C.x + Math.cos(w.a) * (C.r + 4.4), z: C.z + Math.sin(w.a) * (C.r + 4.4), used: false };
+      }
+    }
+    for (let k = 0; k < 6; k++) { // houses inside
+      const a = (k / 6) * Math.PI * 2 + 0.4;
+      const r = 4 + (k % 2) * 3;
+      build('house', geo('prop_house'), C.x + Math.cos(a) * r, C.z + Math.sin(a) * r, -a, [[0, 0, 1.7, 2.6]]);
+    }
+    placed.push({ x: C.x, z: C.z });
+    const O = B.oasis;
+    for (let k = 0; k < 12; k++) { // palms round the spring
+      const a = (k / 12) * Math.PI * 2 + random() * 0.4;
+      const r = 7 + random() * 5;
+      const x = O.x + Math.cos(a) * r;
+      const z = O.z + Math.sin(a) * r;
+      if (dry(x, z, 0.4) && clear(x, z, 3)) { piece('palm', geo('prop_palm'), x, z, random() * 6.28, 0.9 + random() * 0.4); collide(x, z, 0.45, H(x, z) + 6); }
+    }
+    placed.push({ x: O.x, z: O.z });
+    scatter(22, 'palm', geo('prop_palm'), 0.45, 6, 0.85, 1.25);
+    scatter(6, 'olive', geo('prop_olive'), 0.6, 6, 0.9, 1.3);
+    scatter(10, 'sandstone', geo('prop_sandstone'), 1.1, 1.0, 0.9, 1.7);
+    for (let k = 0; k < 2; k++) {
+      const s = spot(18, 70, 10);
+      if (s) build('cart', geo('prop_cart'), s.x, s.z, random() * 6.28, [[0, 0, 1.2, 1.0]]);
+    }
+    for (let k = 0; k < 9; k++) { // Israel's camp out on the plain (Js 6:11)
+      const a = 0.7 + k * 0.16;
+      const x = Math.cos(a) * (68 + (k % 2) * 5);
+      const z = Math.sin(a) * (68 + (k % 2) * 5);
+      if (!dry(x, z, 0.5)) continue;
+      piece('tentI', geo('prop_tentI'), x, z);
+      collide(x, z, 1.5, H(x, z) + 2.2);
+    }
   } else {
     // Valley of dry bones (Ez 37): ruins, dead trees, great ribcages and skulls, heaps of bones, red rock.
     for (let k = 0; k < 3; k++) {
@@ -477,6 +535,16 @@ export function buildWorld(scene, id, random, PROPS) {
     decor(geo('decor_shell'), 300, (x, z, h) => h > w && h < w + 0.8, 0.8, 1.6);
     decor(geo('decor_reed'), 200, (x, z, h) => h > w - 0.35 && h < w + 0.3);
     decor(geo('decor_pebble'), 260, (x, z, h) => h < w && h > w - 1, 0.8, 1.8);
+  } else if (C) {
+    const O = B.oasis;
+    const nearPool = (x, z) => Math.hypot(x - O.x, z - O.z);
+    decor(geo('decor_grass'), 900, (x, z, h) => nearPool(x, z) < 16 && h > B.water + 0.2);
+    decor(geo('decor_reed'), 160, (x, z, h) => h > B.water - 0.3 && h < B.water + 0.5);
+    decor(geo('decor_lily'), 30, (x, z, h) => h < B.water - 0.4, 0.7, 1.1, () => B.water + 0.02);
+    for (const k of [0, 1, 2]) decor(geo(`decor_flower${k}`), 40, (x, z, h) => nearPool(x, z) < 15 && h > B.water + 0.3);
+    decor(geo('decor_shrub'), 240, (x, z, h) => h > B.water + 1 && Math.hypot(x - C.x, z - C.z) > C.r + 3);
+    decor(geo('decor_drygrass'), 600, (x, z, h) => h > B.water + 1 && Math.hypot(x - C.x, z - C.z) > C.r + 3);
+    decor(geo('decor_pebble'), 200, () => true, 0.6, 1.4);
   } else {
     decor(geo('decor_drygrass'), 1600, (x, z, h) => h < 9);
     decor(geo('decor_bone'), 500, (x, z, h) => h < 6, 0.8, 1.6);
@@ -504,5 +572,5 @@ export function buildWorld(scene, id, random, PROPS) {
     for (const c of chests) c.lid.rotation.x += ((c.open ? -1.9 : 0) - c.lid.rotation.x) * Math.min(1, dt * 8);
   }
 
-  return { B, terrainH: H, obstacles, stones, altars, wells, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, update, horizon: skyMat.uniforms.horizon.value };
+  return { B, terrainH: H, obstacles, stones, altars, wells, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, gates, rahab, update, horizon: skyMat.uniforms.horizon.value };
 }

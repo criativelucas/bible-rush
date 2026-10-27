@@ -46,13 +46,26 @@ export const HEROES = {
     move: ['Abrir Caminho', 'Avança empurrando inimigos para os lados.', 3.5],
     miracle: ['Abrir o Mar', 'Paredes de água abrem um corredor e depois se fecham esmagando.'],
   },
+  josue: {
+    name: 'Josué', role: 'Líder, abre caminho', hp: 120, speed: 8, weapon: 'trombeta', color: 0x3e5f99, noSprite: true,
+    passive: ['Conquistador', 'Cada Pedra do Memorial erguida e cada baú aberto dão +8% de dano (até +80%).'],
+    move: ['Avançar', 'Investida curta que atordoa quem estiver no caminho.', 3.5],
+    miracle: ['O Sol Parou', 'Por 7 s o tempo para para os inimigos (Js 10:13).'],
+  },
+  debora: {
+    name: 'Débora', role: 'Profetisa, à distância', hp: 90, speed: 8.6, weapon: 'flechas', color: 0x6a4a8a, noSprite: true, luck: 0.2,
+    passive: ['Profetisa', 'Vê 4 cartas a cada nível e tem +20% de sorte.'],
+    move: ['Torrente de Quisom', 'Avança numa onda que arrasta os inimigos para os lados.', 3.5],
+    miracle: ['Estrelas na Batalha', 'Estrelas caem do céu sobre os inimigos por perto (Jz 5:20).'],
+  },
 };
 
 export function baseStats(hero) {
   return {
     dmg: 0, cd: 0, area: 0, dur: 0, amount: 0, speed: 0, maxHp: hero.hp, regen: 0, armor: 0,
-    pickup: 0, luck: 0, crit: 0.05, xp: 0, burn: 0, airJumps: 0, revives: 0, rerolls: 1,
+    pickup: 0, luck: hero.luck || 0, crit: 0.05, xp: 0, burn: 0, airJumps: 0, revives: 0, rerolls: 1,
     vamp: 0, gold: 0, faith: 0, // life per kill, extra siclos, extra Fé
+    critDmg: 0, dodge: 0, // Tábuas da Lei, Escudo de Abraão
   };
 }
 
@@ -89,6 +102,13 @@ export const RELICS = {
   anel: { name: 'Anel de José', ref: 'Gn 41:42', stat: 'gold', base: 0.15, pct: true, label: 'Siclos' },
   cetro: { name: 'Cetro de Judá', ref: 'Gn 49:10', stat: 'dmg', base: 0.06, pct: true, label: 'Dano' },
   harpa: { name: 'Harpa de Davi', ref: '1 Sm 16:23', stat: 'faith', base: 0.15, pct: true, label: 'Fé' },
+  // Unlocked by trophies (see TROPHIES).
+  tabuas: { name: 'Tábuas da Lei', ref: 'Êx 31:18', stat: 'critDmg', base: 0.25, pct: true, label: 'Dano crítico' },
+  escudo: { name: 'Escudo de Abraão', ref: 'Gn 15:1', stat: 'dodge', base: 0.05, pct: true, label: 'Esquiva' },
+  candelabro: { name: 'Candelabro de Ouro', ref: 'Êx 25:31', stat: 'pickup', base: 0.2, pct: true, label: 'Coleta' },
+  paes: { name: 'Pães da Proposição', ref: 'Êx 25:30', stat: 'maxHp', base: 15, label: 'Vida máx.' },
+  arco: { name: 'Arco nas Nuvens', ref: 'Gn 9:13', stat: 'luck', base: 0.1, pct: true, label: 'Sorte' },
+  sal: { name: 'Sal da Aliança', ref: 'Lv 2:13', stat: 'armor', base: 0.04, pct: true, label: 'Armadura' },
 };
 
 export function entryValue(e, tier) {
@@ -106,8 +126,7 @@ export function applyEntry(st, e, tier) {
   for (const k in e.extra || {}) st[k] += e.extra[k];
 }
 
-export function rollRelic(luck, rand, min = 0) {
-  const ids = Object.keys(RELICS);
+export function rollRelic(luck, rand, min = 0, ids = Object.keys(RELICS)) {
   const id = ids[pickWeighted(ids.map((k) => (RELICS[k].flat ? 0.4 : 1)), rand)];
   const e = RELICS[id];
   return { id, tier: e.flat ? e.tier : rollRarity(luck, rand, min) };
@@ -335,6 +354,8 @@ export const smooth = (a, b, x) => {
 };
 const brookZ = (x) => 8 * Math.sin(x * 0.04) + 4;
 const wadi = (z) => 9 * Math.sin(z * 0.045) - 6;
+const CITY = { x: -20, z: -12, r: 12 }; // Jericho: its walls on their mound (a tell)
+const OASIS = { x: 24, z: 18 }; // Elisha's spring (2 Rs 2:21)
 export const BIOMES = {
   ela: {
     name: 'Vale de Elá', ref: '1 Sm 17',
@@ -413,8 +434,74 @@ export const BIOMES = {
       return n > 0.5 ? 0xc4a57a : n > -0.3 ? 0xb39470 : 0xa48663; // dust
     },
   },
+  jerico: {
+    name: 'Muralhas de Jericó', ref: 'Js 6',
+    desc: 'A cidade das palmeiras, murada sobre um monte. Ao som das trombetas, as muralhas vão cair.',
+    radius: 90, water: -0.6,
+    water2: { shallow: 0x6fd6c0, deep: 0x2f8f9e },
+    sky: { top: 0x78b4e4, horizon: 0xf6dcae, nightTop: 0x0b1230, nightHorizon: 0x34305a },
+    boss: 'Rei de Jericó', bossIntro: 'O rei de Jericó abre as portas e sai para a batalha!', summon: 'Guardas da muralha, avante!',
+    elite: 'Um guardião da muralha avançou! Ele guarda um baú.', win: 'As muralhas de Jericó caíram.',
+    bossModel: 'rei', groundKind: 2, death: [0x7a3a6a, 0xb8463a, 0x8a5a2b, 0xc08a3e], summonChariots: true,
+    well: ['Fonte de Eliseu', '2 Rs 2:21'], event: 'As trombetas soam: guardas saem pelas portas da cidade!', carrier: 'Um mercador de Jericó foge com ouro!',
+    city: CITY, oasis: OASIS,
+    terrain(x, z) {
+      const r = Math.hypot(x, z);
+      const dc = Math.hypot(x - CITY.x, z - CITY.z);
+      return 1.5 + 0.9 * Math.sin(x * 0.05 + 0.3) * Math.cos(z * 0.06) + 0.4 * Math.sin(x * 0.14) * Math.sin(z * 0.12)
+        + 3.2 * smooth(CITY.r + 6, CITY.r - 1, dc) // the tell under the city
+        + 5 * Math.exp(-((x - 40) ** 2 + (z + 34) ** 2) / 260) // a hill to slide down
+        + 14 * smooth(64, 96, r)
+        - 3.8 * Math.exp(-((x - OASIS.x) ** 2 + (z - OASIS.z) ** 2) / 60); // the spring's pool
+    },
+    ground(h, ny, n, x, z) {
+      if (h < -0.4) return 0xb8a27a; // pool bed
+      if (Math.hypot(x - OASIS.x, z - OASIS.z) < 13) return n > 0 ? 0x8aa04e : 0x7a9446; // green around the spring
+      if (ny < 0.82 && h > 6) return n > 0 ? 0xb88a5e : 0xa87c52; // rock only on the far hills, not the city's mound
+      if (Math.hypot(x - CITY.x, z - CITY.z) < CITY.r + 2) return n > 0 ? 0xcfb48a : 0xc4a87e; // packed earth in the city
+      return n > 0.4 ? 0xd9be8a : n > -0.4 ? 0xcfb27c : 0xc4a670;
+    },
+  },
 };
 export const BOSS = 4;
+
+// ---------- Trophies and what they open ----------
+// Open from the start: two heroes, two maps, and every relic no trophy holds back.
+export const START_OPEN = ['hero:davi', 'hero:sansao', 'map:ela', 'map:mar'];
+export const TIERS = [{ name: 'Bronze', color: '#e09a55' }, { name: 'Prata', color: '#dfe7ee' }, { name: 'Ouro', color: '#f2c14e' }];
+export const TROPHIES = {
+  inicio: { name: 'Primeira Jornada', desc: 'Termine uma partida.', tier: 0 },
+  memorial: { name: 'Memorial Erguido', desc: 'Erga as 3 Pedras do Memorial numa partida.', tier: 0, unlock: 'hero:moises' },
+  golias: { name: 'O Gigante Caiu', desc: 'Vença no Vale de Elá.', tier: 1, unlock: 'map:ossos' },
+  farao: { name: 'Cavalo e Cavaleiro', desc: 'Vença no Mar Vermelho.', tier: 1, unlock: 'map:jerico' },
+  gogue: { name: 'Ossos que Vivem', desc: 'Vença no Vale dos Ossos Secos.', tier: 2, unlock: 'hero:josue' },
+  rei: { name: 'As Muralhas Caíram', desc: 'Vença em Jericó.', tier: 2, unlock: 'relic:arco' },
+  perseveranca: { name: 'Perseverança', desc: 'Sobreviva 8 minutos numa partida.', tier: 1, unlock: 'hero:debora' },
+  evolucao: { name: 'Transformação', desc: 'Evolua uma arma.', tier: 1, unlock: 'relic:tabuas' },
+  pedras: { name: 'Cinco Pedras Lisas', desc: 'Junte as 5 pedras do ribeiro em Elá.', tier: 0, unlock: 'relic:escudo' },
+  mil: { name: 'Mil Abates', desc: 'Derrote 1000 inimigos numa partida.', tier: 1, unlock: 'relic:candelabro' },
+  tesouro: { name: 'Tesouro Recuperado', desc: 'Alcance um tesouro em fuga.', tier: 0, unlock: 'relic:sal' },
+  selo: { name: 'Selo Rompido', desc: 'Resista à emboscada de um baú selado.', tier: 0, unlock: 'relic:paes' },
+  poco: { name: 'Água Viva', desc: 'Beba de um poço ou fonte.', tier: 0 },
+  ungido: { name: 'Ungido', desc: 'Alcance o nível 20 numa partida.', tier: 1 },
+  noite: { name: 'Coluna de Fogo', desc: 'Atravesse uma noite inteira.', tier: 0 },
+  salomao: { name: 'Riqueza de Salomão', desc: 'Junte 300 siclos de uma vez.', tier: 1 },
+  relicario: { name: 'Relicário', desc: 'Tenha 8 relíquias numa partida.', tier: 1 },
+  maos: { name: 'Mãos Levantadas', desc: 'Faça 5 milagres numa partida.', tier: 0 },
+  valentes: { name: 'Os Valentes', desc: 'Vença com 3 heróis diferentes.', tier: 2 },
+  conquista: { name: 'Terra Prometida', desc: 'Vença nos 4 cenários.', tier: 2 },
+};
+
+// Everything a saved profile has opened ('hero:id', 'map:id', 'relic:id').
+export function openSet(profile) {
+  const open = new Set(START_OPEN);
+  const gated = new Set(Object.values(TROPHIES).map((t) => t.unlock).filter(Boolean));
+  for (const id in RELICS) if (!gated.has(`relic:${id}`)) open.add(`relic:${id}`);
+  for (const id in profile.trophies || {}) if (TROPHIES[id]?.unlock) open.add(TROPHIES[id].unlock);
+  return open;
+}
+// The trophy that opens a hero/map/relic key, if any.
+export const unlockedBy = (key) => Object.keys(TROPHIES).find((id) => TROPHIES[id].unlock === key);
 
 // Which enemy types join the horde as the minutes pass.
 export function spawnWeights(t) {

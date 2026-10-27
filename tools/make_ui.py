@@ -278,6 +278,11 @@ def icons():
     sprite(['.kkkkkk.', 'kwwwwwWk', 'kwkwwkWk', 'kwwwwwWk', 'kwwkwwWk', 'kwkwwkWk', 'kWWWWWWk', '.kkkkkk.'], 'die')
     sprite(['..kkkkk..', '.kwwwwwk.', 'kwwkkkwwk', 'kwwkNkwwk', 'kwwkkkwwk', '.kwwwwwk.', '..kkkkk..'], 'eye')
     sprite(['kkkkkkkkk', 'kpppkpppk', 'kpKpkpKpk', 'kpppkpppk', 'kpKpkpKpk', 'kpppkpppk', 'kbbbkbbbk', 'kkkkkkkkk'], 'book')
+    # Trophies: a cup in bronze, silver and gold; grey and dark while not yet won. And a padlock.
+    cup = ['.kkkkkkkkk.', 'kk1222223kk', 'k1k122223k3', 'k1k122223k3', '.kk122223kk', '..k122233k.', '...k1223k..', '....k23k...', '....k23k...', '..kk1223kk.', '..k122223k.', '..kkkkkkkk.']
+    for name, (c1, c2, c3) in {'trophy-0': ('R', 'o', 'b'), 'trophy-1': ('w', 's', 'S'), 'trophy-2': ('y', 'Y', 'd'), 'trophy-off': ('S', 'S', 'K')}.items():
+        sprite([r.replace('1', c1).replace('2', c2).replace('3', c3) for r in cup], name)
+    sprite(['..kkkk..', '.kSsSSk.', '.kk..kk.', '.k....k.', 'kkkkkkkk', 'kYYYYYgk', 'kYgkkggk', 'kYggkggk', 'kggggggk', 'kdddddk.'[:8], '.kkkkkk.'], 'lock')
 
 
 if __name__ == '__main__':

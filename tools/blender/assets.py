@@ -227,6 +227,41 @@ def mobs():
     m.part('torus', 0.14, 0.04, 2 * PI, 10, p=(0.56, 2.7, 0.15), color=GOLD, **RH(1.8))
     out('mobs', m)
     bone_mobs()
+    jericho_mobs()
+
+
+PURPLE, PURPLE2, BRICK = 0x6a3a6a, 0x8a4a8a, [0xc9a46e, 0xbf9963, 0xd2ad78, 0xb58e5a]  # Jericho
+
+
+def jericho_mobs():
+    # Canaanite guard: purple tunic, tall bronze helmet, small round shield, spear.
+    m = humanoid(Model('mob_0_jerico', 41), 1, dict(skin=SKIN2, top=PURPLE, bottom=CREAM, leg=SKIN2, feet=LEATHER, fringe=PURPLE2, beard=0x2a1a10))
+    m.part('cone', 0.17, 0.32, 8, p=(0, 1.58, 0), color=BRONZE)
+    m.part('cyl', 0.17, 0.17, 0.04, 8, p=(0, 1.44, 0), color=0x8a6a2e)
+    m.part('cyl', 0.2, 0.2, 0.05, 12, p=(-0.38, 0.84, 0.13), r=(PI / 2, 0, 0), color=BRONZE, bevel=0.01, **LH(1))
+    m.part('cyl', 0.02, 0.02, 1.6, 6, p=(0.34, 0.95, 0.12), color=WOOD, **RH(1))
+    m.part('cone', 0.05, 0.2, 6, p=(0.34, 1.84, 0.12), color=IRON, **RH(1))
+    out('mobs', m)
+    # Archer: red tunic and headband, a bow.
+    m = humanoid(Model('mob_1_jerico', 42), 0.95, dict(skin=SKIN2, top=0xa83a32, bottom=CREAM, leg=SKIN2, feet=LEATHER, beard=0x2a1a10))
+    m.part('box', 0.3, 0.05, 0.28, p=(0, 1.38, 0), color=PURPLE)
+    m.part('torus', 0.36, 0.022, PI, 12, p=(-0.35, 0.82, 0.16), r=(0, PI / 2, -PI / 2), color=DARKWOOD, **LH(0.95))
+    m.part('box', 0.008, 0.72, 0.008, p=(-0.35, 0.82, 0.16), color=WHITE, **LH(0.95))
+    m.part('cyl', 0.07, 0.06, 0.5, 8, p=(0.1, 1.0, -0.17), r=(0.3, 0, 0.3), color=LEATHER, bevel=0.01)
+    out('mobs', m)
+    # Chariot of the king's guard.
+    m = Model('mob_2_jerico', 43)
+    chariot(m, WOOD, BRONZE, BRONZE, 0x7a5232, PURPLE)
+    humanoid_driver(m, PURPLE, SKIN2, philistine='canaan')
+    out('mobs', m)
+    # Guardian of the wall: bronze armour, tower shield, long spear.
+    m = humanoid(Model('mob_3_jerico', 44), 1.8, dict(skin=SKIN2, top=BRONZE, sleeve=PURPLE, bottom=PURPLE, leg=SKIN2, feet=LEATHER, beard=BLACK, belt=GOLD))
+    m.part('cone', 0.3, 0.5, 8, p=(0, 2.85, 0), color=BRONZE)
+    m.part('box', 0.12, 1.5, 0.9, p=(-0.62, 1.4, 0.2), color=0x8a5a2b, bevel=0.04, **LH(1.8))
+    m.part('box', 0.14, 1.4, 0.08, p=(-0.64, 1.4, 0.2), color=BRONZE, **LH(1.8))
+    m.part('cyl', 0.035, 0.035, 2.8, 6, p=(0.56, 1.7, 0.2), color=WOOD, **RH(1.8))
+    m.part('cone', 0.08, 0.35, 6, p=(0.56, 3.25, 0.2), color=IRON, **RH(1.8))
+    out('mobs', m)
 
 
 def skeleton(m, h, c=None):
@@ -293,7 +328,9 @@ def humanoid_driver(m, top, skin, philistine):
         m.part('box', 0.04, 0.04, 0.02, p=(x, 1.57, z + 0.11), color=DARK)
     m.part('box', 0.08, 0.3, 0.08, p=(-0.2, 1.25, z + 0.08), r=(-0.6, 0, 0), color=skin)
     m.part('box', 0.08, 0.3, 0.08, p=(0.2, 1.25, z + 0.08), r=(-0.6, 0, 0), color=skin)
-    if philistine is None:  # a skeleton: hollow eyes, rusty helmet
+    if philistine == 'canaan':  # Jericho: a tall bronze helmet
+        m.part('cone', 0.15, 0.26, 8, p=(0, 1.78, z), color=BRONZE)
+    elif philistine is None:  # a skeleton: hollow eyes, rusty helmet
         for x in (-0.05, 0.05):
             m.part('box', 0.06, 0.06, 0.02, p=(x, 1.58, z + 0.115), color=DARK)
         m.part('box', 0.27, 0.12, 0.26, p=(0, 1.7, z), color=RUST, bevel=0.03)
@@ -543,6 +580,75 @@ def gogue():
     rigged('gogue', m, bones, clips, S)
 
 
+def rei():
+    """The king of Jericho (Js 2:2): a crown, purple robes, gold breastplate, a sceptre-spear and a gold shield."""
+    m = Model('rei', 24)
+    S = 0.82
+    for x, b in ((-0.42, 'leg.L'), (0.42, 'leg.R')):
+        lg = dict(bone=b)
+        m.part('box', 0.55, 1.7, 0.6, p=(x, 1.05, 0), color=SKIN2, bevel=0.05, **lg)
+        m.part('box', 0.62, 0.7, 0.68, p=(x, 0.5, 0.02), color=BRONZE, bevel=0.06, **lg)
+        m.part('box', 0.64, 0.25, 0.98, p=(x, 0.12, 0.12), color=LEATHER, bevel=0.05, **lg)
+    body = dict(bone='hips')
+    m.part('cyl', 0.85, 1.15, 1.2, 14, p=(0, 1.7, 0), color=PURPLE, bevel=0.03, **body)  # royal robe
+    m.part('box', 1.9, 1.6, 1.15, p=(0, 2.95, 0), color=PURPLE2, bevel=0.12, **body)
+    m.part('box', 1.5, 1.2, 0.2, p=(0, 3.0, 0.55), color=GOLD, bevel=0.08, **body)  # breastplate
+    for k in range(3):
+        m.part('box', 1.3 - k * 0.2, 0.06, 0.05, p=(0, 2.6 + k * 0.3, 0.66), color=0xc99a2e, **body)
+    m.part('box', 1.95, 0.24, 1.2, p=(0, 2.2, 0), color=GOLD, bevel=0.04, **body)
+    m.part('box', 1.8, 2.6, 0.12, p=(0, 2.4, -0.62), r=(-0.08, 0, 0), color=PURPLE, bevel=0.03, **body)  # cape
+    for x in (-1.0, 1.0):
+        m.part('ball', 0.48, 1, p=(x, 3.65, 0), color=GOLD, **body)
+    hd = dict(bone='head')
+    m.part('box', 0.5, 0.3, 0.5, p=(0, 3.95, 0), color=SKIN2, **hd)
+    m.part('box', 0.82, 0.86, 0.8, p=(0, 4.45, 0), color=SKIN2, bevel=0.08, **hd)
+    m.part('box', 0.74, 0.6, 0.28, p=(0, 4.15, 0.4), color=BLACK, bevel=0.06, **hd)
+    for x in (-0.18, 0.18):
+        m.part('box', 0.14, 0.1, 0.04, p=(x, 4.57, 0.41), color=WHITE, **hd)
+        m.part('box', 0.07, 0.08, 0.04, p=(x, 4.57, 0.43), color=DARK, **hd)
+        m.part('box', 0.2, 0.06, 0.05, p=(x, 4.68, 0.41), r=(0, 0, -0.2 if x < 0 else 0.2), color=BLACK, **hd)
+    m.part('box', 0.86, 0.3, 0.84, p=(0, 4.9, 0), color=BLACK, bevel=0.08, **hd)  # hair under the crown
+    m.part('cyl', 0.5, 0.48, 0.3, 12, p=(0, 5.08, 0), color=GOLD, **hd)
+    for k in range(6):
+        a = k / 6 * 2 * PI
+        m.part('cone', 0.1, 0.32, 5, p=(math.sin(a) * 0.46, 5.36, math.cos(a) * 0.46), color=GOLD, **hd)
+    m.part('ball', 0.09, 1, p=(0, 5.12, 0.5), color=0xd94a4a, **hd)
+    for x, b in ((-1.2, 'arm.L'), (1.2, 'arm.R')):
+        a_ = dict(bone=b)
+        m.part('box', 0.45, 1.5, 0.48, p=(x, 2.95, 0), color=PURPLE2, bevel=0.06, **a_)
+        m.part('box', 0.42, 0.34, 0.46, p=(x, 2.1, 0), color=SKIN2, bevel=0.06, **a_)
+        m.part('cyl', 0.26, 0.26, 0.18, 10, p=(x, 2.35, 0), color=GOLD, **a_)
+    sh = dict(bone='arm.L')
+    m.part('cyl', 0.85, 0.85, 0.16, 16, p=(-1.5, 2.65, 0.25), r=(0, 0, PI / 2), color=GOLD, **sh)
+    m.part('cyl', 0.5, 0.5, 0.18, 12, p=(-1.52, 2.65, 0.25), r=(0, 0, PI / 2), color=PURPLE, **sh)
+    m.part('ball', 0.2, 1, p=(-1.6, 2.65, 0.25), color=GOLD, **sh)
+    sp = dict(bone='arm.R')
+    m.part('cyl', 0.1, 0.1, 4.6, 8, p=(1.2, 2.75, 0.3), color=GOLD, **sp)
+    m.part('cone', 0.22, 0.8, 6, p=(1.2, 5.45, 0.3), color=0xd8dde3, bevel=0.01, **sp)
+    m.part('ball', 0.22, 1, p=(1.2, 4.9, 0.3), color=GOLD, **sp)
+    bones = [
+        ('hips', None, (0, 1.9, 0), (0, 3.7, 0)),
+        ('head', 'hips', (0, 3.85, 0), (0, 5.2, 0)),
+        ('leg.L', 'hips', (-0.42, 1.9, 0), (-0.42, 0.1, 0)),
+        ('leg.R', 'hips', (0.42, 1.9, 0), (0.42, 0.1, 0)),
+        ('arm.L', 'hips', (-1.2, 3.65, 0), (-1.2, 2.0, 0)),
+        ('arm.R', 'hips', (1.2, 3.65, 0), (1.2, 2.0, 0)),
+    ]
+    clips = {
+        'idle': [(0, {}, {}), (30, {'hips': 2, 'head': -4, 'arm.L': 4, 'arm.R': 5}, {'hips': (0, 0.03, 0)}), (60, {}, {})],
+        'walk': [(0, {'leg.L': -22, 'leg.R': 22, 'arm.L': 10, 'arm.R': -12, 'hips': 4}, {'hips': (0, 0, 0)}),
+                 (8, {'leg.L': 0, 'leg.R': 0, 'arm.L': 0, 'arm.R': 0, 'hips': 4}, {'hips': (0, 0.12, 0)}),
+                 (15, {'leg.L': 22, 'leg.R': -22, 'arm.L': -10, 'arm.R': 12, 'hips': 4}, {'hips': (0, 0, 0)}),
+                 (23, {'leg.L': 0, 'leg.R': 0, 'arm.L': 0, 'arm.R': 0, 'hips': 4}, {'hips': (0, 0.12, 0)}),
+                 (30, {'leg.L': -22, 'leg.R': 22, 'arm.L': 10, 'arm.R': -12, 'hips': 4}, {'hips': (0, 0, 0)})],
+        'spear': [(0, {}, {}), (14, {'arm.R': -160, 'hips': -8}, {}), (28, {'arm.R': -165, 'hips': -10}, {}), (33, {'arm.R': -40, 'hips': 10}, {}), (40, {}, {})],
+        'stomp': [(0, {}, {}), (26, {'leg.R': -70, 'hips': -12, 'arm.L': -30, 'arm.R': -30}, {'hips': (0, 0.2, 0)}),
+                  (36, {'leg.R': 5, 'hips': 12}, {'hips': (0, -0.15, 0)}), (48, {}, {})],
+        'summon': [(0, {}, {}), (10, {'arm.L': -150, 'arm.R': -165, 'head': -15}, {}), (24, {'arm.L': -150, 'arm.R': -165, 'head': -15}, {}), (32, {}, {})],
+    }
+    rigged('rei', m, bones, clips, S)
+
+
 def rigged(name, m, bones, clips, scale):
     if scale != 1:
         m.V = [v * scale for v in m.V]
@@ -552,7 +658,7 @@ def rigged(name, m, bones, clips, scale):
     skin(mesh, arm, [{b: 1.0} for b in m.BONE])
     actions(arm, clips)
     export_glb(os.path.join(ROOT, 'assets/models/bosses', f'{name}.glb'), [mesh, arm], animations=True, draco=True)
-    arm.location.x = {'golias': 8, 'farao': -8}.get(name, 16)
+    arm.location.x = {'golias': 8, 'farao': -8, 'rei': 24}.get(name, 16)
 
 
 # ---------- Relics, weapons, the scroll ----------
@@ -881,6 +987,49 @@ def stage2_items(mk):
     m.part('lathe', [(0, -0.35), (0.22, -0.3), (0.28, -0.05), (0.2, 0.18), (0.08, 0.28), (0.1, 0.38), (0.07, 0.4)], 12, color=0xb0643a)
     m.part('ball', 0.08, 1, p=(0, 0.47, 0), s=(0.8, 1.2, 0.8), color=0xf2c14e)
     out('items', m)
+    # Relics opened by trophies.
+    m = mk('relic_tabuas')  # the tablets of the Law (Êx 31:18)
+    for x in (-0.28, 0.28):
+        m.part('box', 0.5, 0.72, 0.1, p=(x, -0.05, 0), color=0xb8b0a0, bevel=0.03)
+        m.part('cyl', 0.25, 0.25, 0.1, 12, p=(x, 0.31, 0), r=(PI / 2, 0, 0), color=0xb8b0a0)
+        for k in range(5):
+            m.part('box', 0.3, 0.025, 0.02, p=(x, 0.25 - k * 0.12, 0.06), color=0x6a6458)
+    out('items', m)
+    m = mk('relic_escudo')  # "I am your shield" (Gn 15:1)
+    m.part('cyl', 0.5, 0.5, 0.1, 18, r=(PI / 2, 0, 0), color=BRONZE, bevel=0.02)
+    m.part('torus', 0.48, 0.04, 2 * PI, 18, p=(0, 0, 0.05), color=GOLD)
+    m.part('cone', 0.12, 0.12, 8, p=(0, 0, 0.1), r=(PI / 2, 0, 0), color=GOLD)
+    for k in range(8):
+        a = k / 8 * 2 * PI
+        m.part('ball', 0.035, 1, p=(math.cos(a) * 0.36, math.sin(a) * 0.36, 0.06), color=GOLD)
+    shine(m, (0, 0, 0.05), 0.4)
+    out('items', m)
+    m = mk('relic_candelabro')  # the golden lampstand, seven lamps (Êx 25:31-37)
+    m.part('cyl', 0.03, 0.04, 0.8, 8, p=(0, 0, 0), color=GOLD)
+    m.part('cyl', 0.2, 0.26, 0.08, 10, p=(0, -0.42, 0), color=GOLD)
+    for k, x in enumerate((0.36, 0.24, 0.12)):
+        for sd in (-1, 1):
+            m.part('torus', x / 2, 0.022, PI, 10, p=(sd * x / 2, 0.02, 0), r=(0, 0, PI), color=GOLD)
+            m.part('cyl', 0.022, 0.022, 0.3 + k * 0.05, 6, p=(sd * x, 0.16, 0), color=GOLD)
+    for x in (-0.36, -0.24, -0.12, 0, 0.12, 0.24, 0.36):
+        m.part('cone', 0.035, 0.12, 6, p=(x, 0.4 if x else 0.46, 0), color=0xffd25a)
+    out('items', m)
+    m = mk('relic_paes')  # the bread of the Presence on its table (Êx 25:30)
+    m.part('box', 0.9, 0.06, 0.55, p=(0, -0.2, 0), color=GOLD, bevel=0.02)
+    for k in range(6):
+        m.part('ball', 0.13, 1, p=(-0.3 + (k % 3) * 0.3, -0.1 + (k // 3) * 0.12, -0.08 + (k // 3) * 0.12), s=(1.3, 0.6, 1), color=0xc9862e)
+    out('items', m)
+    m = mk('relic_arco')  # the rainbow in the cloud (Gn 9:13)
+    for k, c in enumerate((0xd94a4a, 0xf08a3a, 0xe8c84a, 0x4ad97a, 0x4a8ad9, 0x9a4ad9)):
+        m.part('torus', 0.55 - k * 0.06, 0.035, PI, 18, color=c)
+    for x in (-0.45, 0.45):
+        m.part('ball', 0.16, 1, p=(x, -0.05, 0.02), s=(1.4, 0.8, 1), color=WHITE)
+    out('items', m)
+    m = mk('relic_sal')  # salt of the covenant (Lv 2:13)
+    m.part('lathe', [(0, -0.3), (0.3, -0.28), (0.36, -0.05), (0.3, 0.12), (0.32, 0.18)], 12, color=0x8a6a4a)
+    for k in range(7):
+        m.part('box', 0.1, 0.1, 0.1, p=((k % 3 - 1) * 0.12, 0.18 + (k // 3) * 0.06, ((k + 1) % 2 - 0.5) * 0.12), r=(k, k * 2, 0), color=WHITE)
+    out('items', m)
     m = mk('pick_tocha')  # Gideon's torch in a broken jar (Jz 7:20)
     m.part('cyl', 0.05, 0.06, 0.8, 6, p=(0, -0.1, 0), color=DARKWOOD)
     m.part('lathe', [(0.12, 0.2), (0.2, 0.25), (0.18, 0.4), (0.1, 0.45)], 8, color=0xb0643a)
@@ -898,7 +1047,7 @@ def locust(m, x, y, z, s):
 
 
 # ---------- Scenery ----------
-def bricks(m, w, h, d, seed, x=0, y=0, z=0, row=0.38, moss=True, ragged=0.0, alongz=False):
+def bricks(m, w, h, d, seed, x=0, y=0, z=0, row=0.38, moss=True, ragged=0.0, alongz=False, pal=None):
     r = random.Random(seed)
     rows = max(1, round(h / row))
     rh = h / rows
@@ -910,7 +1059,7 @@ def bricks(m, w, h, d, seed, x=0, y=0, z=0, row=0.38, moss=True, ragged=0.0, alo
             if not (top and ragged and r.random() < ragged):
                 cx, cz = (x, z + u + bw / 2) if alongz else (x + u + bw / 2, z)
                 size = (d - r.random() * 0.06, rh - 0.04, bw - 0.04) if alongz else (bw - 0.04, rh - 0.04, d - r.random() * 0.06)
-                m.part('box', *size, p=(cx, y + rh * (j + 0.5), cz), color=r.choice(SLATE), bevel=0.025, jitter=0.1)
+                m.part('box', *size, p=(cx, y + rh * (j + 0.5), cz), color=r.choice(pal or SLATE), bevel=0.025, jitter=0.1)
                 if top and moss and r.random() < 0.5:
                     ms = (d * 0.8, 0.06, bw * 0.8) if alongz else (bw * 0.8, 0.06, d * 0.8)
                     m.part('box', *ms, p=(cx, y + rh * (j + 1) + 0.02, cz), color=MOSS, bevel=0.02, jitter=0.15)
@@ -1190,12 +1339,58 @@ def props():
     out('props', m)
     bone_props(P)
     stage2_props(P)
+    jericho_props(P)
     m = P('decor_lily')
     m.part('cyl', 0.35, 0.35, 0.02, 10, color=0x5f8f3a)
     m.part('cyl', 0.2, 0.2, 0.025, 8, p=(0.25, 0.005, 0.1), color=0x7aa84a)
     for j in range(5):
         a = j / 5 * 2 * PI
         m.part('box', 0.08, 0.03, 0.04, p=(0.05 + math.cos(a) * 0.05, 0.05, math.sin(a) * 0.05), r=(0, -a, 0.4), color=0xf3d0e0)
+    out('props', m)
+
+
+def jericho_props(P):
+    # A stretch of the city wall (6 m along X, 4.5 m tall) with battlements, mud brick on stone footing.
+    m = P('prop_cityWall', 71)
+    bricks(m, 6.2, 1.0, 1.9, 71, row=0.5, moss=False, pal=SLATE)
+    bricks(m, 6.0, 3.0, 1.6, 72, y=1.0, row=0.42, moss=False, pal=BRICK)
+    for k in range(5):
+        m.part('box', 0.8, 0.6, 1.6, p=(-2.4 + k * 1.2, 4.3, 0), color=BRICK[k % 4], bevel=0.04, jitter=0.08)
+    out('props', m)
+    # Fallen wall: a slope of loose bricks you can climb over (Js 6:20).
+    m = P('prop_wallRubble', 73)
+    r = random.Random(73)
+    for k in range(26):
+        x, z = (r.random() - 0.5) * 6, (r.random() - 0.5) * 3
+        h = max(0.1, 1.1 - abs(z) * 0.5) * r.random()
+        m.part('box', 0.6 + r.random() * 0.4, 0.35, 0.45, p=(x, h * 0.8, z), r=(r.random() * 0.6, r.random() * 3, r.random() * 0.6), color=r.choice(BRICK), bevel=0.04)
+    bricks(m, 6.0, 0.8, 1.6, 74, row=0.4, moss=False, ragged=0.6, pal=BRICK)
+    out('props', m)
+    # City gate: two towers and a lintel (the opening is 3 m wide).
+    m = P('prop_gate', 75)
+    for x in (-2.6, 2.6):
+        bricks(m, 2.2, 5.6, 2.4, 75 + int(x), x=x, row=0.45, moss=False, pal=BRICK)
+        for k in range(2):
+            m.part('box', 0.7, 0.6, 2.4, p=(x - 0.55 + k * 1.1, 5.9, 0), color=BRICK[k], bevel=0.04)
+    m.part('box', 3.2, 0.7, 2.4, p=(0, 4.6, 0), color=0x8a6a4a, bevel=0.05)
+    for x in (-0.75, 0.75):  # the gates, thrown open
+        m.part('box', 0.12, 3.6, 1.5, p=(x * 2.0, 1.8, 0.9), r=(0, x * 0.6, 0), color=WOOD, bevel=0.03)
+    out('props', m)
+    # A flat-roofed mud-brick house.
+    m = P('prop_house', 76)
+    bricks(m, 3.2, 2.4, 3.0, 76, row=0.4, moss=False, pal=BRICK)
+    m.part('box', 3.5, 0.18, 3.3, p=(0, 2.5, 0), color=0x9a7a52, bevel=0.03)
+    m.part('box', 0.8, 1.4, 0.1, p=(0.6, 0.7, 1.52), color=0x5a3a20)
+    m.part('box', 0.5, 0.4, 0.1, p=(-0.8, 1.6, 1.52), color=0x3a2a1a)
+    out('props', m)
+    # Rahab's house on the wall, with the scarlet cord in the window (Js 2:15-21).
+    m = P('prop_rahab', 77)
+    bricks(m, 3.2, 2.2, 2.6, 77, row=0.4, moss=False, pal=BRICK)
+    m.part('box', 3.5, 0.18, 2.9, p=(0, 2.3, 0), color=0x9a7a52, bevel=0.03)
+    m.part('box', 0.6, 0.5, 0.1, p=(0.5, 1.4, 1.32), color=0x3a2a1a)
+    m.part('box', 0.06, 1.6, 0.06, p=(0.5, 0.55, 1.38), color=0xc8243a)
+    for k in range(4):
+        m.part('box', 0.08, 0.08, 0.08, p=(0.5, 0.1 + k * 0.4, 1.4), color=0xe03a50)
     out('props', m)
 
 
@@ -1336,6 +1531,7 @@ if __name__ == '__main__':
     goliath()
     pharaoh()
     gogue()
+    rei()
     items()
     props()
     for group, objs in built.items():

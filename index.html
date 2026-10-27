@@ -217,6 +217,7 @@
     .art.ela { background-image: url(assets/ui/ela.jpg); } /* frames of each map rendered by the game (dev.shot) */
     .art.mar { background-image: url(assets/ui/mar.jpg); }
     .art.ossos { background-image: url(assets/ui/ossos.jpg); }
+    .art.jerico { background-image: url(assets/ui/jerico.jpg); }
     #hero-info { margin-top: 10px; display: grid; gap: 6px; font-size: 16px; }
     .stat { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; color: var(--dim); }
     .stat .bar { height: 18px; }
@@ -224,6 +225,34 @@
     .ab > :first-child { justify-self: center; }
     .ab .icon { width: 48px; height: 48px; }
     .ab em { font-style: normal; font-weight: 600; color: var(--gold2); }
+
+    #heroes { grid-template-columns: repeat(5, 1fr); }
+    #heroes .opt img { width: 64px; height: 64px; }
+    #heroes .opt b { font-size: calc(8 * var(--px)); }
+    .pick.maps { grid-template-columns: repeat(2, 1fr); }
+    .opt.locked img { filter: brightness(0) opacity(.5); }
+    .opt.locked b, .opt.locked small { color: var(--dim); }
+    .opt.locked::after { content: ''; position: absolute; top: 4px; right: 4px; width: 24px; height: 33px; image-rendering: pixelated;
+      background: url(assets/ui/lock.png) 0 0 / 100% 100%; }
+    .biome.locked .art { filter: grayscale(1) brightness(.45); }
+    .lock-hint { min-height: 1.3em; margin-top: 8px; color: var(--gold); font-size: 16px; }
+
+    /* Trophies */
+    .tcount { text-align: center; color: var(--gold2); font-size: 20px; margin: 2px 0 10px; }
+    .tgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    @media (max-width: 640px) { .tgrid { grid-template-columns: 1fr; } }
+    .tro { display: flex; gap: 10px; align-items: center; padding: 6px 8px; background: rgba(0, 0, 0, .22); box-shadow: 0 0 0 2px var(--line); }
+    .tro img { width: 33px; height: 36px; flex: none; }
+    .tro b { display: block; font: 400 20px/1.1 var(--f-title); color: var(--dim); }
+    .tro.won b { color: var(--gold2); }
+    .tro small { display: block; color: var(--dim); font-size: 15px; line-height: 1.2; }
+    .tro em { display: block; font-style: normal; font-size: 14px; color: var(--gold); }
+    .tro:not(.won) { opacity: .8; }
+    .end-tro { margin-top: 6px; }
+    .tro-line { display: flex; gap: 8px; align-items: center; justify-content: center; margin: 2px 0; }
+    .tro-line .ico { width: 22px; height: 24px; }
+    .tro-line small { color: var(--gold); }
+    body.sunstop #view { filter: sepia(.45) saturate(1.4) brightness(1.05); } /* Josué: the sun stands still */
 
     /* Settings */
     .settings { display: grid; grid-template-columns: 1fr auto; gap: 10px 24px; align-items: center; }
@@ -341,6 +370,7 @@
       <div class="logo"><h1><img src="assets/ui/logo.png" alt="Bible Rush"></h1><p>Heróis do Antigo Testamento</p></div>
       <nav class="nav">
         <button class="btn primary" data-go="setup"><img class="ico" src="assets/ui/sword.png" alt="">Nova jornada</button>
+        <button class="btn" data-go="trophies"><img class="ico" src="assets/ui/trophy-2.png" alt="">Troféus</button>
         <button class="btn" data-go="settings"><img class="ico" src="assets/ui/gear.png" alt="">Configurações</button>
         <button class="btn" data-go="howto"><img class="ico" src="assets/ui/scroll.png" alt="">Como jogar</button>
       </nav>
@@ -357,8 +387,18 @@
       <div id="heroes" class="pick"></div>
       <div id="hero-info"></div>
       <h3>Cenário</h3>
-      <div id="biomes" class="pick"></div>
+      <div id="biomes" class="pick maps"></div>
+      <div id="lock-hint" class="lock-hint"></div>
       <div class="row-btns nav"><button id="go" class="btn primary">Começar jornada</button></div>
+    </div>
+  </div>
+
+  <div id="trophies" class="screen center dim">
+    <div class="panel frame" style="max-width:780px">
+      <h2 class="ribbon">Troféus</h2>
+      <button class="btn round back" data-go="menu" aria-label="Voltar">←</button>
+      <div id="trophy-count" class="tcount"></div>
+      <div id="trophy-grid" class="tgrid"></div>
     </div>
   </div>
 
@@ -418,6 +458,8 @@
         <span>Pão, codornizes, óleo, tocha</span><span>Caem de cântaros e inimigos fortes: cura, ímã de maná, Fé e um susto que atordoa a multidão.</span>
         <span>Cada mapa</span><span>Elá esconde cinco pedras lisas no ribeiro; no Mar Vermelho os carros atravessam a ilha; no Vale dos Ossos o vento levanta os mortos.</span>
       </div>
+      <h3>Troféus</h3>
+      <p>Conquistas ficam salvas neste navegador. Muitas abrem heróis, cenários e relíquias novas: comece com Davi e Sansão no Vale de Elá e no Mar Vermelho e veja a lista em Troféus, no menu.</p>
       <h3>Dicas</h3>
       <p>Passar raspando por pedras inimigas enche a Fé. À noite o Maná vale o dobro. Baús custam siclos; quebre cântaros para juntar.</p>
     </div>
@@ -447,6 +489,7 @@
       <h2 id="end-title" class="ribbon"></h2>
       <div id="end-text"></div>
       <div id="end-summary" class="summary"></div>
+      <div id="end-trophies" class="end-tro"></div>
       <div class="row-btns mid nav">
         <button id="again" class="btn primary">Jogar de novo</button>
         <button id="to-menu" class="btn">Menu</button>

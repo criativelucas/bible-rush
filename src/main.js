@@ -1,16 +1,30 @@
 import * as THREE from 'three';
 import { rng, FlowField, SpatialHash } from './sim.js';
 import {
-  HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL,
+  HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL, TROPHIES, TIERS, openSet, unlockedBy,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
 import { buildWorld } from './world.js';
 import { loadAll } from './assets.js';
 
+// ---------- Profile: trophies won and what they opened, kept in this browser ----------
+const PROFILE_KEY = 'bible-rush-profile';
+const profile = (() => { try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || {}; } catch { return {}; } })();
+profile.trophies ??= {};
+profile.wins ??= {}; // hero -> { map: true }
+const saveProfile = () => { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch {} };
+let OPEN = openSet(profile);
+const isOpen = (kind, id) => OPEN.has(`${kind}:${id}`);
+const unlockName = (key) => {
+  const [kind, id] = key.split(':');
+  return kind === 'hero' ? HEROES[id].name : kind === 'map' ? BIOMES[id].name : `relíquia ${RELICS[id].name}`;
+};
+
 // ---------- URL + settings ----------
 const params = new URLSearchParams(location.search);
-const BIOME_ID = BIOMES[params.get('biome')] ? params.get('biome') : 'ela';
+const wantBiome = params.get('biome');
+const BIOME_ID = BIOMES[wantBiome] && isOpen('map', wantBiome) ? wantBiome : 'ela'; // a locked map in the URL falls back
 const DEFAULTS = { style: 'crisp', shadows: true, dmgNumbers: true, fps: false, sens: 1, camDist: 8.5, invertY: false, autoCam: true, lockMouse: true, volume: 0.7 };
 const cfg = { ...DEFAULTS };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('otr-cfg') || '{}')); } catch {}
@@ -202,6 +216,7 @@ const orbMesh = instanced(ASSETS.items.proj_wheel, M.toon(), MAX_ORBS, false, tr
 const strikeMesh = instanced(new THREE.RingGeometry(0.8, 1, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.7, depthWrite: false }), MAX_STRIKES);
 const hailMesh = instanced(ASSETS.items.proj_hail, M.toon(), MAX_STRIKES, false, true);
 const fireBolt = instanced(ASSETS.items.proj_fire, flameMatOf(), MAX_STRIKES); // fire strikes fall as a bolt
+const starMesh = instanced(ASSETS.items.proj_mana, new THREE.MeshBasicMaterial({ color: 0xfff1b8 }), MAX_STRIKES); // Débora's stars
 const pickMeshes = PICKUPS.map((p) => instanced(ASSETS.items[`pick_${p.id}`], M.toon(), 64, false, true));
 const pickGlow = instanced(new THREE.RingGeometry(0.3, 0.62, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd66b, transparent: true, opacity: 0.75, depthWrite: false }), 256);
 const locustMesh = instanced(ASSETS.items.proj_locust, M.toon(), 160);
@@ -333,7 +348,7 @@ function bossAnim(dt) {
 // ---------- Hero sprites: assets/heroes/<id>.png = 4 views (front, back, facing left, facing right) ----------
 // Built from the turnaround sheets by tools/make_sprites.py. In game the heroes are the 3D models
 // Blender builds from these same sprites; the sprites remain for portraits.
-const SPRITES = Object.fromEntries(await Promise.all(Object.keys(HEROES).map((id) => new Promise((ok, fail) => {
+const SPRITES = Object.fromEntries(await Promise.all(Object.keys(HEROES).filter((id) => !HEROES[id].noSprite).map((id) => new Promise((ok, fail) => {
   const img = new Image();
   img.onload = () => ok([id, img]);
   img.onerror = () => fail(new Error(`missing assets/heroes/${id}.png`));
@@ -445,7 +460,11 @@ const ICON = (() => {
   const out = { hero: {}, face: {}, weapon: {}, relic: {} };
   for (const id in HEROES) {
     out.hero[id] = snap(HERO_RIGS[id].group, { yaw: 0.42, pitch: 0.1, size: 32 }); // the 3D model as a 32 px sprite
-    out.face[id] = spriteFace(id);
+    if (SPRITES[id]) out.face[id] = spriteFace(id);
+    else { // no sprite sheet: a close-up of the 3D model's head
+      const top = new THREE.Box3().setFromObject(HERO_RIGS[id].group).max.y;
+      out.face[id] = snap(HERO_RIGS[id].group, { yaw: 0.25, pitch: 0.05, size: 32, center: new THREE.Vector3(0, top - 0.2, 0.04), r: 0.3 });
+    }
   }
   const item = (name) => M.solid(ASSETS.items[name], M.toon());
   for (const [id, w] of Object.entries(WEAPONS)) { // evolutions: the base weapon with a gold outline and a star
@@ -475,10 +494,12 @@ const P = {
   st: null, weapons: [], relics: [],
   hp: 100, fe: 0, gold: 0, level: 1, xp: 0, xpNext: 5, kills: 0, iframes: 0, hurtT: 0,
   stacks: 0, shotCount: 0, specialCd: 0, dashT: 0, dashX: 0, dashZ: 0, dashSpeed: 0, dashId: 0, harpT: 0, attackT: 0, castT: 0,
+  sunT: 0, miracles: 0, conquests: 0, // Josué: the sun standing still, and stones/chests taken
 };
 const moveSpeed = () => HEROES[P.hero].speed * (1 + P.st.speed);
 const pickupR = () => 3.5 * (1 + P.st.pickup);
-const globalDmg = () => (1 + P.st.dmg) * (P.hero === 'sansao' ? 1 + P.stacks / 100 : 1);
+const globalDmg = () => (1 + P.st.dmg) * (P.hero === 'sansao' ? 1 + P.stacks / 100 : 1)
+  * (P.hero === 'josue' ? 1 + Math.min(0.8, 0.08 * P.conquests) : 1);
 
 const player = new THREE.Group();
 scene.add(player);
@@ -506,7 +527,7 @@ function setHero(id) {
 let state = 'menu'; // menu | setup | settings | howto | play | pause | choice | end
 let prevScreen = 'menu';
 let runStarted = false;
-let selHero = HEROES[params.get('hero')] ? params.get('hero') : 'davi';
+let selHero = HEROES[params.get('hero')] && isOpen('hero', params.get('hero')) ? params.get('hero') : 'davi';
 let time = 0;
 let night = 0;
 let wasNight = false;
@@ -554,7 +575,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Space' && !e.repeat) P.jumpBuffer = 0.15;
   if (e.repeat) return;
   if (state === 'choice') {
-    if (/^Digit[1-3]$/.test(e.code)) pick(Number(e.code.slice(5)) - 1);
+    if (/^Digit[1-4]$/.test(e.code)) pick(Number(e.code.slice(5)) - 1);
     if (e.code === 'KeyR') reroll();
   } else if (state === 'play') {
     if (e.code === 'KeyE') useSpecial();
@@ -621,6 +642,7 @@ function go(id) {
     syncSettingsForm();
   }
   if (id === 'setup') renderSetup();
+  if (id === 'trophies') renderTrophies();
   state = id;
   show(id);
   beep(660, 0.05, 'triangle', 0.03);
@@ -646,12 +668,25 @@ $('reroll').onclick = () => reroll();
 $('go').onclick = () => startRun();
 addEventListener('pointerdown', () => audio(), { once: true });
 
+// Locked heroes and maps show as dark silhouettes with a padlock; clicking says which trophy opens them.
+function lockedHint(key) {
+  $('lock-hint').textContent = `${unlockName(key)} está bloqueado. Para abrir: ${TROPHIES[unlockedBy(key)].desc}`;
+  beep(180, 0.12, 'square', 0.03);
+}
 function renderSetup() {
+  $('lock-hint').textContent = '';
   $('heroes').replaceChildren(...Object.entries(HEROES).map(([id, h]) => {
     const b = document.createElement('button');
-    b.className = `opt well${id === selHero ? ' sel' : ''}`;
-    b.innerHTML = `${iconImg(ICON.hero[id])}<b>${h.name}</b><small>${h.role}</small>`;
-    b.onclick = () => { selHero = id; setHero(id); renderSetup(); beep(520, 0.06, 'triangle', 0.03); };
+    const open = isOpen('hero', id);
+    b.className = `opt well${id === selHero ? ' sel' : ''}${open ? '' : ' locked'}`;
+    b.innerHTML = `${iconImg(ICON.hero[id])}<b>${h.name}</b><small>${open ? h.role : 'Bloqueado'}</small>`;
+    b.onclick = () => {
+      if (!open) return lockedHint(`hero:${id}`);
+      selHero = id;
+      setHero(id);
+      renderSetup();
+      beep(520, 0.06, 'triangle', 0.03);
+    };
     return b;
   }));
   const h = HEROES[selHero];
@@ -666,12 +701,28 @@ function renderSetup() {
     ${ab('<kbd class="k">Q</kbd>', h.miracle[0], h.miracle[1])}`;
   $('biomes').replaceChildren(...Object.entries(BIOMES).map(([id, b]) => {
     const el = document.createElement('button');
-    el.className = `opt biome well${id === BIOME_ID ? ' sel' : ''}`;
+    const open = isOpen('map', id);
+    el.className = `opt biome well${id === BIOME_ID ? ' sel' : ''}${open ? '' : ' locked'}`;
     el.title = b.desc;
-    el.innerHTML = `<div class="art ${id}"></div><div class="t"><b>${b.name}</b><small>${b.ref}</small></div>`;
-    el.onclick = () => { if (id !== BIOME_ID) reload({ biome: id, hero: selHero, screen: 'setup' }); };
+    el.innerHTML = `<div class="art ${id}"></div><div class="t"><b>${b.name}</b><small>${open ? b.ref : 'Bloqueado'}</small></div>`;
+    el.onclick = () => {
+      if (!open) return lockedHint(`map:${id}`);
+      if (id !== BIOME_ID) reload({ biome: id, hero: selHero, screen: 'setup' });
+    };
     return el;
   }));
+}
+
+function renderTrophies() {
+  const ids = Object.keys(TROPHIES);
+  $('trophy-count').textContent = `${ids.filter((id) => profile.trophies[id]).length} de ${ids.length} troféus`;
+  $('trophy-grid').innerHTML = ids.map((id) => {
+    const t = TROPHIES[id];
+    const won = profile.trophies[id];
+    const opens = t.unlock ? `<em>${won ? 'Desbloqueou' : 'Desbloqueia'}: ${unlockName(t.unlock)}</em>` : '';
+    return `<div class="tro${won ? ' won' : ''}"><img class="icon" src="assets/ui/trophy-${won ? t.tier : 'off'}.png" alt="${TIERS[t.tier].name}">
+      <div><b>${t.name}</b><small>${t.desc}</small>${opens}</div></div>`;
+  }).join('');
 }
 
 function syncSettingsForm() {
@@ -807,12 +858,12 @@ const dmgEls = Array.from({ length: 40 }, () => {
 });
 let dmgNext = 0;
 let dmgLast = 0;
-function dmgNumber(x, y, z, v, crit) {
-  if (!cfg.dmgNumbers || (!crit && time - dmgLast < 0.04)) return;
+function dmgNumber(x, y, z, v, crit, label) {
+  if (!cfg.dmgNumbers || (!crit && !label && time - dmgLast < 0.04)) return;
   dmgLast = time;
   const d = dmgEls[dmgNext++ % dmgEls.length];
   Object.assign(d, { t: 0.8, x: x + (random() - 0.5) * 0.6, y, z });
-  d.el.textContent = Math.round(v);
+  d.el.textContent = label ?? Math.round(v);
   d.el.className = crit ? 'crit' : '';
 }
 const _v = new THREE.Vector3();
@@ -950,6 +1001,12 @@ function updatePlayer(dt) {
 
 function hurt(dmg, fromX, fromZ) {
   if (P.iframes > 0 || state !== 'play') return;
+  if (random() < P.st.dodge) { // Escudo de Abraão
+    P.iframes = 0.3;
+    burst(P.pos.x, P.pos.y + 1, P.pos.z, 0xf2c14e, 8, 3, 0.1, 3);
+    dmgNumber(P.pos.x, P.pos.y + 2, P.pos.z, 0, false, 'Esquiva');
+    return;
+  }
   P.hp -= dmg * (1 - Math.min(0.6, P.st.armor));
   P.iframes = 0.6;
   P.hurtT = 0.25;
@@ -979,17 +1036,18 @@ function useSpecial() {
   let dx = P.wishX;
   let dz = P.wishZ;
   if (!dx && !dz) { dx = P.faceX; dz = P.faceZ; }
-  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32] }[P.hero];
+  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32], josue: [24, 0.28], debora: [22, 0.3] }[P.hero];
   Object.assign(P, { dashX: dx, dashZ: dz, dashSpeed: speed, dashT: dur, sliding: false });
   P.dashId++;
   P.iframes = Math.max(P.iframes, dur + 0.12);
   P.specialCd = HEROES[P.hero].move[2] * Math.max(0.4, 1 - P.st.cd);
-  burst(P.pos.x, P.pos.y + 0.2, P.pos.z, P.hero === 'moises' ? 0x9fd8ff : 0xcbb89a, 10, 4, 0.13, 1);
+  burst(P.pos.x, P.pos.y + 0.2, P.pos.z, P.hero === 'moises' || P.hero === 'debora' ? 0x9fd8ff : 0xcbb89a, 10, 4, 0.13, 1);
   beep(260, 0.18, 'sawtooth', 0.04, 0, 900);
 }
 
 function dashHits() {
   if (P.dashT <= 0 || P.hero === 'davi') return;
+  if (P.hero === 'debora' && random() < 0.6) burst(P.pos.x, P.pos.y + 0.3, P.pos.z, 0x9fd8ff, 2, 3, 0.14, 2); // the torrent of Kishon
   const n = hash.query(P.pos.x, P.pos.z, 2.2 + MAX_R, near);
   for (let q = 0; q < n; q++) {
     const j = near[q];
@@ -999,7 +1057,10 @@ function dashHits() {
     if (Math.hypot(ex, ez) > 2.2 + E.r[j]) continue;
     E.mark[j] = P.dashId;
     if (P.hero === 'sansao') damage(j, 40, P.dashX, P.dashZ, 16);
-    else {
+    else if (P.hero === 'josue') { // Avançar: rams through and leaves them dazed
+      damage(j, 25, P.dashX, P.dashZ, 10);
+      if (!ENEMIES[E.type[j]].boss) E.stun[j] = Math.max(E.stun[j], 1.2);
+    } else { // Moisés and Débora: a wave that sweeps them aside
       const side = ex * -P.dashZ + ez * P.dashX >= 0 ? 1 : -1;
       damage(j, 8, -P.dashZ * side, P.dashX * side, 18);
     }
@@ -1016,8 +1077,21 @@ function useMiracle() {
   const dz = -Math.cos(yaw);
   const { x, z } = P.pos;
   const y = terrainH(x, z);
+  P.miracles++;
+  if (P.miracles >= 5) award('maos');
   if (P.hero === 'davi') P.harpT = 6 * (1 + P.st.dur);
-  else {
+  else if (P.hero === 'josue') { // "Sun, stand still" (Js 10:13): enemies freeze in time
+    P.sunT = 7 * (1 + P.st.dur);
+    toast('O sol parou!', '#ffe08f');
+  } else if (P.hero === 'debora') { // "The stars fought from heaven" (Jz 5:20)
+    const m = nearestEnemies(x, z, 16, 26, -1);
+    for (let k = 0; k < 30; k++) {
+      const t = m ? targets[k % m] : -1;
+      const sx = t >= 0 ? E.x[t] + (random() - 0.5) * 2 : x + (random() - 0.5) * 30;
+      const sz = t >= 0 ? E.z[t] + (random() - 0.5) * 2 : z + (random() - 0.5) * 30;
+      addStrike(sx, sz, 2.2, 70, 0.25 + k * 0.08, 2);
+    }
+  } else {
     const g = new THREE.Group();
     g.position.set(x, y, z);
     g.rotation.y = Math.atan2(dx, dz); // local +Z = forward
@@ -1077,6 +1151,13 @@ function inRect(m, i, len, halfW) {
 }
 
 function updateMiracles(dt) {
+  if (P.sunT > 0) { // the sun stands still: everyone but the boss is frozen, the boss slowed
+    P.sunT -= dt;
+    for (let i = 0; i < E.n; i++) {
+      if (ENEMIES[E.type[i]].boss) E.slow[i] = 0.3;
+      else E.stun[i] = Math.max(E.stun[i], 0.15);
+    }
+  }
   if (P.harpT > 0) {
     const r = 7 * (1 + P.st.area);
     const n = hash.query(P.pos.x, P.pos.z, r + MAX_R, near);
@@ -1151,7 +1232,7 @@ function damage(i, base, kx = 0, kz = 0, knock = 0, forceCrit = false) {
   let dmg = base * globalDmg();
   if (P.hero === 'davi' && (type.big || E.elite[i])) dmg *= 1.5;
   const crit = forceCrit || random() < P.st.crit;
-  if (crit) dmg *= 2;
+  if (crit) dmg *= 2 + P.st.critDmg; // Tábuas da Lei
   E.hp[i] -= dmg;
   E.flash[i] = 0.1;
   if (knock && type.mass) {
@@ -1248,7 +1329,16 @@ function mapEvent() {
     const z = cz + fx * off;
     return walkable(x, z) && !flow.blocked[flow.index(x, z)] ? [x, z] : null;
   };
-  if (BIOME_ID === 'ela') { // the Philistine line advances (1 Sm 17:21)
+  if (BIOME_ID === 'jerico') { // guards pour out of both gates
+    for (const g of world.gates) {
+      for (let k = 0; k < 13; k++) {
+        const x = g.x + (random() - 0.5) * 6;
+        const z = g.z + (random() - 0.5) * 6;
+        if (walkable(x, z) && !flow.blocked[flow.index(x, z)]) spawnEnemy(k === 12 ? 2 : k % 4 === 3 ? 1 : 0, x, z);
+      }
+      burst(g.x, terrainH(g.x, g.z) + 1, g.z, 0xcbb89a, 20, 5, 0.2, 4);
+    }
+  } else if (BIOME_ID === 'ela') { // the Philistine line advances (1 Sm 17:21)
     for (let k = 0; k < 30; k++) {
       const p = at(k, 30, 1.8);
       if (p) spawnEnemy(k % 5 === 2 ? 1 : 0, ...p);
@@ -1596,6 +1686,7 @@ function reapEnemies() {
       dropPickup(x + 0.8, y + 0.5, z, 0);
       burst(x, y + 1, z, 0xf2c14e, 30, 6, 0.14, 7);
       toast('Tesouro recuperado!', '#ffd66b');
+      award('tesouro');
       chord([784, 988, 1175], 'square');
     } else if (E.elite[i]) {
       const s = world.freeSpot(x, z); // never inside a rock or tree, where it could not be reached
@@ -1633,6 +1724,7 @@ function evolve(w) {
   refreshWeapons();
   const e = WEAPONS[w.id];
   banner(ICON.weapon[w.id], 'Evolução!', e.name, '#ffd66b', `${from.name} + ${RELICS[evo.needs].name}`, `${e.ref} · ${e.desc}`);
+  award('evolucao');
   burst(P.pos.x, P.pos.y + 1, P.pos.z, 0xffd66b, 40, 7, 0.16, 8);
   chord([523, 659, 784, 1046, 1318], 'square');
 }
@@ -1980,7 +2072,8 @@ function updateStrikes(dt) {
   for (let i = 0; i < K.n; ) {
     if ((K.t[i] -= dt) > 0) { i++; continue; }
     const y = terrainH(K.x[i], K.z[i]);
-    const fire = K.fire[i];
+    const fire = K.fire[i] === 1;
+    if (K.fire[i] === 2) burst(K.x[i], y + 0.4, K.z[i], 0xfff1b8, 10, 5, 0.12, 5); // a star lands
     hitArea(K.x[i], y + 0.5, K.z[i], K.r[i], K.dmg[i], 0, K.burn[i]);
     addFx(ringGeo, fire ? 0xff8a3d : 0xdff4ff, K.x[i], 0.2, K.z[i], K.r[i], fire ? 0.5 : 0.25, { grow: 0.5, ground: true });
     burst(K.x[i], y + 0.3, K.z[i], fire ? 0xffb347 : 0xdff4ff, fire ? 14 : 6, fire ? 6 : 4, fire ? 0.18 : 0.12, fire ? 6 : 3);
@@ -2088,6 +2181,7 @@ function gainXp(v) {
 const chestCost = () => 10 + 8 * chestsOpened; // linear: every chest stays within reach of a run's siclos
 function openChest(c) {
   c.open = true;
+  P.conquests++;
   if (!c.free && !c.challenge) {
     P.gold -= chestCost();
     chestsOpened++;
@@ -2097,7 +2191,7 @@ function openChest(c) {
     dropPickup(c.x, c.y + 0.8, c.z + 1.4);
   }
   const evoW = readyToEvolve(P.weapons, P.relics)[0]; // a weapon ready to evolve takes the chest's gift
-  const r = rollRelic(P.st.luck, random, c.challenge ? 3 : c.free ? 1 : 0);
+  const r = rollRelic(P.st.luck, random, c.challenge ? 3 : c.free ? 1 : 0, Object.keys(RELICS).filter((id) => isOpen('relic', id)));
   const e = RELICS[r.id];
   // The gift rises out of the chest, then flies into the hero: that is when it counts.
   const relic = M.solid(ASSETS.items[evoW ? `weapon_${evoW.id}` : `relic_${r.id}`], M.toon());
@@ -2169,6 +2263,8 @@ function updateWorld(dt) {
       if (s.p >= 1) {
         s.done = true;
         stonesDone++;
+        P.conquests++;
+        if (stonesDone === 3) award('memorial');
         s.beam.scale.set(0.3, 1, 0.3);
         s.beam.material.color.copy(STONE_DONE);
         gainFe(30);
@@ -2212,6 +2308,7 @@ function updateWorld(dt) {
       w.p = 0;
       burst(w.x, w.y + 1.2, w.z, 0x9fd8ff, 24, 4, 0.14, 6);
       toast(`${B.well[0]} (${B.well[1]}): vida restaurada`, '#9fd8ff');
+      award('poco');
       chord([523, 784, 1046], 'triangle');
     }
   }
@@ -2226,12 +2323,21 @@ function updateWorld(dt) {
     burst(g.x, g.y + 0.5, g.z, 0xffffff, 12, 3, 0.1, 4);
     if (glintsGot < 5) toast(`Pedra lisa do ribeiro ${glintsGot}/5`, '#e8e4da');
     else {
+      award('pedras');
       P.st.amount += 1;
       P.st.dmg += 0.1;
       refreshWeapons();
       toast('As cinco pedras lisas (1 Sm 17:40): +1 projétil, +10% de dano', '#ffe08f');
       chord([392, 494, 587, 784]);
     }
+  }
+  const rh = world.rahab; // Jericho: the scarlet cord in Rahab's window (Js 2:18-21)
+  if (rh && !rh.used && Math.hypot(p.x - rh.x, p.z - rh.z) < 3.5) {
+    rh.used = true;
+    P.st.revives += 1;
+    burst(rh.x, terrainH(rh.x, rh.z) + 1.5, rh.z, 0xe03a50, 24, 4, 0.12, 6);
+    toast('Cordão escarlate (Js 2:18): você se levantará uma vez nesta jornada', '#ff8a9a');
+    chord([523, 659, 784], 'triangle');
   }
   if (challenge) { // the sealed chest's ambush: waves until the timer runs out
     challenge.t -= dt;
@@ -2250,6 +2356,7 @@ function updateWorld(dt) {
     if (challenge.t <= 0) {
       openChest(challenge.c);
       toast('Você resistiu! O selo se rompeu.', '#ffd66b');
+      award('selo');
       challenge = null;
     }
   }
@@ -2287,8 +2394,9 @@ function updateWorld(dt) {
 }
 
 // ---------- Choices (level-up cards and altars) ----------
+const cardCount = () => (P.hero === 'debora' ? 4 : 3); // Débora, the prophetess, sees one card more
 function openLevelUp() {
-  openChoice(`Nível ${P.level - pendingLevels + 1}!`, rollOffers({ weapons: P.weapons, luck: P.st.luck }, random), 'level');
+  openChoice(`Nível ${P.level - pendingLevels + 1}!`, rollOffers({ weapons: P.weapons, luck: P.st.luck }, random, cardCount()), 'level');
 }
 
 function openChoice(title, offers, source) {
@@ -2358,19 +2466,49 @@ function pick(i) {
 function reroll() {
   if (state !== 'choice' || choice.source !== 'level' || P.st.rerolls < 1) return;
   P.st.rerolls--;
-  choice.offers = rollOffers({ weapons: P.weapons, luck: P.st.luck }, random);
+  choice.offers = rollOffers({ weapons: P.weapons, luck: P.st.luck }, random, cardCount());
   renderChoice();
 }
 
 // ---------- End of run ----------
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+// ---------- Trophies ----------
+const runTrophies = [];
+function award(id) {
+  if (!id || profile.trophies[id] || !runStarted) return;
+  profile.trophies[id] = Date.now();
+  saveProfile();
+  OPEN = openSet(profile);
+  runTrophies.push(id);
+  const t = TROPHIES[id];
+  banner(`assets/ui/trophy-${t.tier}.png`, `Troféu de ${TIERS[t.tier].name.toLowerCase()}`, t.name, TIERS[t.tier].color, t.desc,
+    t.unlock ? `Desbloqueado: ${unlockName(t.unlock)}` : '');
+  toast(`Troféu: ${t.name}${t.unlock ? ` · ${unlockName(t.unlock)} desbloqueado` : ''}`, TIERS[t.tier].color);
+  chord([659, 784, 988, 1319], 'triangle');
+}
+let trophyT = 0;
+function checkTrophies(dt) { // the ones that build up over a run, checked once a second
+  if ((trophyT -= dt) > 0) return;
+  trophyT = 1;
+  if (time >= 480) award('perseveranca');
+  if (P.kills >= 1000) award('mil');
+  if (P.level >= 20) award('ungido');
+  if (P.gold >= 300) award('salomao');
+  if (P.relics.length >= 8) award('relicario');
+}
+
 function endScreen(title, text) {
+  award('inicio');
   state = 'end';
   document.exitPointerLock?.();
   $('end-title').textContent = title;
   $('end-text').textContent = text;
   $('end-summary').innerHTML = [[fmt(time), 'Tempo', 'hourglass'], [P.level, 'Nível', 'star'], [P.kills, 'Abates', 'skull'], [P.relics.length, 'Relíquias', 'gem']]
     .map(([v, l, ic]) => `<div class="well"><img class="ico" src="assets/ui/${ic}.png" alt=""><b>${v}</b><small>${l}</small></div>`).join('');
+  $('end-trophies').innerHTML = runTrophies.length ? `<h3>Troféus nesta jornada</h3>${runTrophies.map((id) => {
+    const t = TROPHIES[id];
+    return `<div class="tro-line"><img class="ico" src="assets/ui/trophy-${t.tier}.png" alt=""><b>${t.name}</b>${t.unlock ? `<small>Desbloqueado: ${unlockName(t.unlock)}</small>` : ''}</div>`;
+  }).join('')}` : '';
   show('end');
 }
 function revive() {
@@ -2388,6 +2526,12 @@ function win() {
   bossRig.group.visible = false;
   teleLine.visible = teleCircle.visible = false;
   $('bossbar').hidden = true;
+  profile.wins[P.hero] = { ...profile.wins[P.hero], [BIOME_ID]: true };
+  saveProfile();
+  award({ ela: 'golias', mar: 'farao', ossos: 'gogue', jerico: 'rei' }[BIOME_ID]);
+  if (Object.keys(profile.wins).length >= 3) award('valentes');
+  const mapsWon = new Set(Object.values(profile.wins).flatMap((w) => Object.keys(w)));
+  if (Object.keys(BIOMES).every((m) => mapsWon.has(m))) award('conquista');
   endScreen('Vitória!', B.win);
   chord([523, 659, 784, 1046, 1318], 'square');
 }
@@ -2404,6 +2548,7 @@ function updateSky() {
   const isNight = night > 0.5;
   if (isNight !== wasNight) {
     wasNight = isNight;
+    if (!isNight) award('noite'); // dawn after a whole night
     toast(isNight ? 'A noite caiu · Coluna de Fogo · Maná em dobro' : 'Amanheceu · Coluna de Nuvem', isNight ? '#ffb37a' : '#fbf4e4');
   }
 }
@@ -2432,6 +2577,7 @@ function step(dt) {
   if (state !== 'play') return;
   updateGems(dt);
   updateWorld(dt);
+  checkTrophies(dt);
   P.iframes -= dt;
   P.hurtT -= dt;
   P.harpT -= dt;
@@ -2608,14 +2754,18 @@ function syncMeshes(dt) {
     dummy.scale.setScalar(K.fire[i] ? 0 : 1);
     dummy.updateMatrix();
     hailMesh.setMatrixAt(i, dummy.matrix);
+    dummy.scale.setScalar(K.fire[i] === 2 ? 2.4 : 0);
+    dummy.updateMatrix();
+    starMesh.setMatrixAt(i, dummy.matrix);
     dummy.position.y = y + fall * 14; // fire: a narrow bolt coming down
     dummy.rotation.set(0, time * 3, 0);
-    dummy.scale.set(K.fire[i] ? 0.35 : 0, K.fire[i] ? 0.7 : 0, K.fire[i] ? 0.35 : 0);
+    const bolt = K.fire[i] === 1;
+    dummy.scale.set(bolt ? 0.35 : 0, bolt ? 0.7 : 0, bolt ? 0.35 : 0);
     dummy.updateMatrix();
     fireBolt.setMatrixAt(i, dummy.matrix);
   }
-  strikeMesh.count = hailMesh.count = fireBolt.count = K.n;
-  strikeMesh.instanceMatrix.needsUpdate = hailMesh.instanceMatrix.needsUpdate = fireBolt.instanceMatrix.needsUpdate = true;
+  strikeMesh.count = hailMesh.count = fireBolt.count = starMesh.count = K.n;
+  strikeMesh.instanceMatrix.needsUpdate = hailMesh.instanceMatrix.needsUpdate = fireBolt.instanceMatrix.needsUpdate = starMesh.instanceMatrix.needsUpdate = true;
 
   let nl = 0; // locusts whirling around each swarm's centre
   for (let k = 0; k < swarmDraw.length; k += 4) {
@@ -2750,6 +2900,7 @@ function updateCompass() {
     marks.push([c, c.free || P.gold >= chestCost() ? '#ffd66b' : '#9a8f80']);
   }
   for (const w of world.wells) if (w.cd <= 0) marks.push([w, '#7fc6ff']);
+  if (world.rahab && !world.rahab.used) marks.push([world.rahab, '#e03a50']);
   for (const c of chests) if (c.challenge && !c.open && Math.hypot(c.x - P.pos.x, c.z - P.pos.z) < 60) marks.push([c, '#c8243a']);
   for (const g of world.glints) if (!g.got && Math.hypot(g.x - P.pos.x, g.z - P.pos.z) < 40) marks.push([g, '#e8e4da']);
   for (let i = 0; i < E.n; i++) if (E.elite[i] === 2) marks.push([{ x: E.x[i], z: E.z[i] }, '#ffd66b']);
@@ -2775,7 +2926,11 @@ function updateHud() {
   hud.fe.style.width = `${P.fe}%`;
   hud['fe-bar'].classList.toggle('full', P.fe >= 100);
   setText(hud['fe-text'], P.fe >= 100 ? `Fé cheia · Q ${h.miracle[0]}` : `Fé ${Math.floor(P.fe)}`);
-  setText(hud.extra, P.hero === 'sansao' ? `Nazireu +${P.stacks}%` : P.hero === 'davi' ? `Pedra Lisa em ${5 - (P.shotCount % 5)}` : 'Praga a cada nível');
+  setText(hud.extra, {
+    sansao: `Nazireu +${P.stacks}%`, davi: `Pedra Lisa em ${5 - (P.shotCount % 5)}`, moises: 'Praga a cada nível',
+    josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas',
+  }[P.hero]);
+  document.body.classList.toggle('sunstop', P.sunT > 0);
   setText(hud.timer, fmt(time));
   hud['phase-dot'].classList.toggle('night', night > 0.5);
   setHtml(hud.objective, boss.spawned ? `<b>Derrote ${B.boss}</b>`
@@ -2873,10 +3028,14 @@ window.dev = {
   relic: (id, tier = 2) => { const r = { id, tier: RELICS[id].flat ? RELICS[id].tier : tier }; applyEntry(P.st, RELICS[id], r.tier); P.relics.push(r); refreshWeapons(); return P.relics.map((x) => x.id); },
   chest: () => { const c = chests.filter((k) => !k.open && !k.challenge).sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.z) - Math.hypot(b.x - P.pos.x, b.z - P.pos.z))[0]; c.free = true; openChest(c); return c; },
   pickup: (k) => usePickup(k),
+  // Trophies: dev.unlockAll() opens everything; dev.resetProfile() starts over (reload after either).
+  unlockAll: () => { for (const id in TROPHIES) profile.trophies[id] ??= Date.now(); saveProfile(); OPEN = openSet(profile); return 'ok'; },
+  resetProfile: () => { localStorage.removeItem(PROFILE_KEY); return 'ok'; },
+  award: (id) => award(id),
   event: () => mapEvent(),
   carrier: () => spawnCarrier(),
   // Show a choice of cards, e.g. dev.choice([{ kind: 'scroll', id: 'sorte', tier: 2 }]).
-  choice: (offers = rollOffers({ weapons: P.weapons, luck: P.st.luck }, random), title = 'Nível 2!') => openChoice(title, offers, 'level'),
+  choice: (offers = rollOffers({ weapons: P.weapons, luck: P.st.luck }, random, cardCount()), title = 'Nível 2!') => openChoice(title, offers, 'level'),
   // Renders one w×h frame and saves it through serve.py (PUT, shots/ or assets/ui/ only), optionally
   // from cam = [[x, y, z], [lookX, lookY, lookZ]], e.g. dev.shot('shots/a.png', 640, 360).
   shot: (path, w = 640, h = 360, cam) => new Promise((ok, fail) => {

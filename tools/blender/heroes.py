@@ -341,10 +341,78 @@ def moises():
     return s
 
 
+def josue():
+    """Joshua: general of Israel. Bronze helmet and scale vest, blue cloak, sword, a ram's horn (Js 6:20)."""
+    s = Sculpt('josue', 1.8)
+    skin_, hair, bronze, bronze2 = 0xc98d64, 0x3a2618, 0xb07a3a, 0x8a5a24
+    cream, blue, leather = 0xe8dcc0, 0x3e5f99, 0x6b4426
+    head(s, dict(skin=skin_, eye=0x2a1a12, brow=hair, hair=hair, brow_h=0.006, neck=0.038))
+    s.add(ellipsoid((0, 0.958, -0.006), (0.074, 0.052, 0.078)), bronze, 'head')  # helmet
+    s.add(belt(0.93, 0.072, 0.077, 0.008, cz=-0.004), bronze2, 'head')
+    s.add(prim('box', 0.012, 0.05, 0.11, p=(0, 1.0, -0.01), bevel=0.004), 0xb8463a, 'head', smooth=False)  # crest
+    s.add(ellipsoid((0, 0.866, 0.036), (0.056, 0.038, 0.042)), hair, 'head')  # beard
+    s.add(ellipsoid((0, 0.888, 0.068), (0.027, 0.007, 0.01)), hair, 'head', shade=0)
+    s.add(loft([(0.4, 0, 0.004, 0.122, 0.097), (0.47, 0, 0, 0.11, 0.082), (0.54, 0, 0, 0.102, 0.074), (0.64, 0, 0, 0.104, 0.072),
+                (0.72, 0, 0, 0.116, 0.074), (0.78, 0, -0.003, 0.13, 0.072), (0.808, 0, -0.005, 0.1, 0.06), (0.828, 0, -0.005, 0.05, 0.046)], folds=0.05),
+          cream, skirt)
+    s.add(loft([(0.53, 0, 0, 0.112, 0.082), (0.62, 0, 0, 0.113, 0.081), (0.71, 0, 0.002, 0.125, 0.083), (0.775, 0, -0.002, 0.138, 0.08),
+                (0.8, 0, -0.004, 0.11, 0.068)]), bronze, torso, shade=0.3)  # scale vest
+    for x in (-1, 1):
+        s.add(ellipsoid((0.14 * x, 0.778, 0), (0.05, 0.034, 0.055)), bronze2, f'upperarm.{"L" if x > 0 else "R"}')
+    s.add(belt(0.535, 0.112, 0.083, 0.014), leather, 'spine')
+    s.add(prim('box', 0.034, 0.03, 0.012, p=(0, 0.535, 0.086), bevel=0.003), 0xe8b84a, 'spine', smooth=False)
+    arms(s, dict(skin=skin_), 0.14)
+    for x in (-1, 1):  # leather bracers
+        s.add(capsule((0.153 * x, 0.6, 0.0), (0.158 * x, 0.51, 0.008), 0.032, 0.029), leather, f'forearm.{"L" if x > 0 else "R"}')
+    legs(s, dict(thigh=skin_, shin=leather, foot=skin_), 0.062, thigh=(0.05, 0.04), shin=(0.036, 0.028))
+    s.add(shell([(0.3, 0, -0.045, 0.158, 0.118), (0.5, 0, -0.035, 0.152, 0.106), (0.68, 0, -0.022, 0.15, 0.096),
+                  (0.78, 0, -0.014, 0.158, 0.092), (0.812, 0, -0.01, 0.13, 0.075)], gap=0.85, thick=0.012, folds=0.06), blue, cape)
+    s.add(capsule((0.125, 0.5, 0.05), (0.165, 0.26, 0.09), 0.016, 0.013), leather, 'spine')  # sword in its scabbard
+    s.add(capsule((0.115, 0.53, 0.045), (0.11, 0.6, 0.04), 0.009, 0.009), 0xe8b84a, 'spine')
+    s.add(prim('box', 0.06, 0.012, 0.016, p=(0.118, 0.53, 0.046), bevel=0.003), 0xe8b84a, 'spine', smooth=False)
+    pts = [(-0.162, 0.44, 0.03), (-0.158, 0.39, 0.1), (-0.145, 0.38, 0.17), (-0.13, 0.42, 0.235)]  # ram's horn in the right hand
+    for k, (a, b) in enumerate(zip(pts, pts[1:])):
+        s.add(capsule(a, b, 0.012 + k * 0.007, 0.019 + k * 0.009), 0xd9c49a if k % 2 else 0xb89a6a, 'forearm.R')
+    return s
+
+
+def debora():
+    """Deborah: prophetess and judge (Jz 4-5). Headscarf, long purple dress, a bow and a quiver."""
+    s = Sculpt('debora', 1.68)
+    skin_, hair, teal, purple, gold, leather = 0xd9a07a, 0x2a1a14, 0x2e8a8a, 0x6a4a8a, 0xe8b84a, 0x6b4426
+    head(s, dict(skin=skin_, eye=0x3a2a1a, brow=hair, hair=hair))
+    s.add(ellipsoid((0, 0.872, 0.066), (0.014, 0.005, 0.006), seg=10, rings=6), 0xb8584a, 'head', shade=0)  # lips
+    s.add(ellipsoid((0, 0.945, -0.022), (0.075, 0.068, 0.08)), teal, 'head')  # headscarf
+    s.add(loft([(0.74, 0, -0.072, 0.09, 0.04), (0.82, 0, -0.06, 0.082, 0.05), (0.9, 0, -0.045, 0.076, 0.06)]), teal, locks)
+    for k in range(4):  # braid down the back, over the scarf
+        s.add(ellipsoid((0, 0.82 - k * 0.055, -0.1 - k * 0.004), (0.022 - k * 0.002, 0.03, 0.02)), hair, locks)
+    s.add(loft([(0.05, 0, 0.006, 0.14, 0.112), (0.2, 0, 0, 0.13, 0.102), (0.4, 0, 0, 0.114, 0.084), (0.53, 0, 0, 0.098, 0.072),
+                (0.64, 0, 0, 0.104, 0.074), (0.73, 0, 0, 0.118, 0.074), (0.79, 0, -0.004, 0.118, 0.066), (0.82, 0, -0.006, 0.052, 0.046)],
+               folds=0.07, nf=9), purple, lambda p: skirt(p, 0.6))
+    s.add(belt(0.56, 0.1, 0.074, 0.012), gold, 'spine')
+    s.add(capsule((-0.04, 0.55, 0.075), (-0.06, 0.4, 0.09), 0.012, 0.009), gold, 'spine')  # sash end
+    arms(s, dict(skin=skin_, arm=purple), 0.13, upper=(0.036, 0.034), fore=(0.028, 0.022))
+    for x in (-1, 1):
+        s.add(ellipsoid((0.056 * x, 0.024, 0.045), (0.028, 0.018, 0.048)), 0x8a5a32, f'shin.{"L" if x > 0 else "R"}')
+    # Bow in the left hand: an arc bulging forward and its string.
+    c = (0.172, 0.47, -0.04)
+    R, span = 0.26, 0.62 * PI  # a shallow arc, centred forward
+    a0 = PI - span / 2
+    s.add(prim('torus', R, 0.011, span, 16, p=c, r=(0, PI / 2, a0)), 0x7a4a26, 'forearm.L')
+    ey, ez = math.sin(a0) * R, -math.cos(a0) * R
+    s.add(capsule((c[0], c[1] + ey, c[2] + ez), (c[0], c[1] - ey, c[2] + ez), 0.003, 0.003, seg=5), 0xf3e6c4, 'forearm.L')
+    s.add(capsule((0.07, 0.8, -0.1), (-0.035, 0.56, -0.108), 0.03, 0.026), leather, 'chest')  # quiver
+    for k in range(3):
+        s.add(prim('box', 0.012, 0.05, 0.022, p=(0.07 + k * 0.016, 0.85, -0.098), r=(0, 0, -0.4), bevel=0.003), 0xf3e6c4, 'chest', smooth=False)
+    return s
+
+
 HEROES = {
     'davi': dict(make=davi, sx=0.135, lx=0.058, attack='sling'),
     'sansao': dict(make=sansao, sx=0.165, lx=0.07, attack='club', hair=True),
     'moises': dict(make=moises, sx=0.14, lx=0.06, attack='staff', staff=True, robe=True),
+    'josue': dict(make=josue, sx=0.14, lx=0.062, attack='horn'),
+    'debora': dict(make=debora, sx=0.13, lx=0.056, attack='bow', robe=True, hair=True),
 }
 
 
@@ -414,6 +482,10 @@ def clips(cfg, h):
                  (9, {'upperarm.R': -22, 'forearm.R': -12, 'chest': (16, -22, 0), 'spine': (7, -8, 0)}, {}), (17, {}, {})],
         'staff': [(0, {}, {}), (4, {'upperarm.R': -14, 'forearm.R': 12, 'chest': (-5, 16, 0)}, {}),
                   (8, {'upperarm.R': -78, 'forearm.R': -8, 'chest': (10, -12, 0)}, {}), (15, {}, {})],
+        'horn': [(0, {}, {}), (5, {'upperarm.R': -72, 'forearm.R': -96, 'chest': (-6, 8, 0), 'head': (-10, 0, 0)}, {}),  # the horn to the lips
+                 (12, {'upperarm.R': -74, 'forearm.R': -98, 'chest': (-9, 8, 0), 'head': (-12, 0, 0)}, {}), (17, {}, {})],
+        'bow': [(0, {}, {}), (4, {'upperarm.L': -86, 'upperarm.R': -82, 'forearm.R': -112, 'chest': (0, -16, 0)}, {}),  # draw...
+                (7, {'upperarm.L': -86, 'upperarm.R': -60, 'forearm.R': -40, 'chest': (0, -12, 0)}, {}), (13, {}, {})],  # ...and loose
     }[cfg['attack']]
     raise_ = {'upperarm.L': -158, 'upperarm.R': -158, 'forearm.L': -12, 'forearm.R': -12, 'head': (-16, 0, 0), 'chest': (-8, 0, 0), flow: 26}
     cast = [(0, {}, {}), (7, raise_, up(0.04)), (18, raise_, up(0.04)), (24, {}, {})]
