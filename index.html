@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bible Rush</title>
+  <script>
+    // Changing map reloads the page straight into the setup screen: keep the main menu from flashing meanwhile.
+    if (new URLSearchParams(location.search).get('screen') === 'setup') document.documentElement.classList.add('boot-setup');
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Jersey+15&display=swap" rel="stylesheet">
@@ -772,6 +776,8 @@
     .hero-detail { padding: 10px 14px; background: rgba(31, 18, 13, .95); box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; font-size: 15px; }
     .hero-detail .full { grid-column: 1 / -1; }
     @media (max-width: 900px) { .hero-cards { grid-template-columns: repeat(2, 1fr); } .hero-detail { grid-template-columns: 1fr; } .hero-bottom { grid-template-columns: 1fr; } }
+    .boot-setup #menu { display: none; }
+    .boot-setup body::after { content: 'Carregando…'; position: fixed; inset: 0; display: grid; place-items: center; font: 400 40px var(--f-title); color: var(--gold2); background: #1a0f0a; z-index: 50; }
   </style>
 </head>
 <body>

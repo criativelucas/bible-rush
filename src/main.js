@@ -5423,7 +5423,10 @@ renderer.setAnimationLoop((now) => {
 applyCfg();
 syncSettingsForm();
 setHero(selHero);
-if (params.get('screen') === 'setup') go('setup');
+if (params.get('screen') === 'setup') {
+  go('setup');
+  document.documentElement.classList.remove('boot-setup');
+}
 else {
   setCur(document.querySelector('#menu .nav .btn'));
   renderPurse();
