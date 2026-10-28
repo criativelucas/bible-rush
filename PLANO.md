@@ -63,6 +63,17 @@ locais e um código para exportar e importar o progresso.
 - A tela de detalhe do herói com a linha de evolução: depende da Fase 3.
 - A escolha de dificuldade na tela do mapa: depende da Fase 5.
 
+**Telas e ranking (depois das fases):** tela inicial no estilo das referências (barra de perfil e moedas,
+Jogar, Sobrevivência, Desafio do dia, Tarefas, atalhos e o painel da temporada), escolha do cenário com
+prévia grande e painel "Preparar partida", escolha do herói em cartas, e ranking online por temporada
+(mês) no Supabase: `tools/ranking.sql` e os passos no README. Falta só criar o projeto no Supabase.
+
+## Para depois
+
+- **Modo Torre de Babel** (Gn 11): uma torre de andares pequenos, cada um uma arena curta com uma horda
+  pequena; vencer um andar abre a escada para o próximo, mais difícil. O desafio é subir o mais alto possível;
+  o andar mais alto alcançado vira recorde e um quadro novo no ranking.
+
 ## Fase 0 — Preparar a base
 
 1. Sincronizar esta pasta com o GitHub (o Antigravity publicou a animação de derrota em `80a0bf9`).

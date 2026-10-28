@@ -4,13 +4,14 @@ import {
   HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL, TROPHIES, TIERS, openSet, migrateProfile, exportCode, importCode, unlockedBy,
   TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
   STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, researchOf, MASTERY, masteryOf,
-  TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES,
+  TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES, hashStr,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
 import { buildGear, dress, PIECES } from './gear.js';
 import { forgeModels } from './forge.js';
 import { clone as cloneRig } from 'three/addons/utils/SkeletonUtils.js';
+import { onlineOn, submitRun, flushPending, leaderboard, clearBoards, seasonKey, prevSeason, seasonEnd, seasonName, NAME_RE } from './online.js';
 import { buildWorld } from './world.js';
 import { loadAll } from './assets.js';
 
@@ -419,6 +420,7 @@ const stageOf = (id) => heroStage(heroRec(id).xp);
 const hasCosmetic = (cid) => {
   const c = COSMETICS[cid];
   if (c.unlock?.startsWith('research:')) return researchDone(c.unlock.slice(9));
+  if (c.unlock === 'season') return profile.owned.includes(`cos:${cid}`); // given by a season prize
   return profile.owned.includes(`cos:${cid}`);
 };
 // The pieces a hero shows: the stage's, with the wardrobe's head and back pieces in place of the stage's own.
@@ -654,6 +656,15 @@ addEventListener('keydown', (e) => {
     if (e.code === 'Escape' || e.code === 'KeyP') pause();
     if (e.code === 'KeyK') for (let i = 0; i < 100; i++) spawnEnemy(0);
   } else if (state === 'pause' && e.code === 'Escape') resume();
+  else if (e.code === 'Escape' && !typing && !$('name-dlg').open && BACK[state]) { coachOn && endGuide(); go(BACK[state] === 'prev' ? prevScreen : BACK[state]); }
+  else if (e.code === 'Enter' && state === 'menu' && !typing && !coachOn && document.activeElement === document.body) go('setup');
+  else if (state === 'setup' && !typing && !coachOn) {
+    if (e.code === 'Enter' && document.activeElement === document.body) startRun();
+    if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') stepMap(e.code === 'ArrowLeft' ? -1 : 1);
+  } else if (state === 'hero-pick' && !typing) {
+    if (e.code === 'Enter' && document.activeElement === document.body) confirmHero();
+    if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') stepHero(e.code === 'ArrowLeft' ? -1 : 1);
+  }
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
 canvas.addEventListener('mousedown', (e) => {
@@ -713,11 +724,13 @@ function go(id) {
     syncSettingsForm();
   }
   if (id === 'setup') renderSetup();
+  if (id === 'hero-pick') renderHeroPick();
   if (id === 'trophies') renderTrophies();
   if (id === 'shop') renderShop();
   if (id === 'tasks') renderTasks();
   if (id === 'bestiary') renderBestiary();
-  if (id === 'menu') { renderPurse(); updateDots(); }
+  if (id === 'menu') { renderPurse(); updateDots(); renderMenu(); }
+  if (id === 'ranking') renderRanking();
   state = id;
   show(id);
   if (id === 'menu') guide('menu', MENU_GUIDE);
@@ -741,7 +754,7 @@ $('resume').onclick = resume;
 const reload = (q) => { location.search = new URLSearchParams(q).toString(); };
 $('quit').onclick = () => reload({ biome: BIOME_ID });
 $('to-menu').onclick = () => reload({ biome: BIOME_ID });
-$('again').onclick = () => reload({ biome: BIOME_ID, hero: P.hero, screen: 'setup', diff: DIFF_ID, mode: SURV ? 'surv' : 'classic' });
+$('again').onclick = () => reload(playQuery());
 $('reroll').onclick = () => reroll();
 $('skip').onclick = () => skip();
 $('ban').onclick = () => toggleBan();
@@ -753,44 +766,42 @@ function lockedHint(key) {
   $('lock-hint').textContent = `${unlockName(key)} está bloqueado. Para abrir: ${TROPHIES[unlockedBy(key)].desc}`;
   beep(180, 0.12, 'square', 0.03);
 }
+const playQuery = (biome = BIOME_ID) => ({ biome, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : 'classic', diff: DIFF_ID });
+// Map screen: the maps as tabs, a big view of the chosen one (its hero, its milestones), and the panel to
+// prepare the run (mode, difficulty, saddlebag, records).
 function renderSetup() {
   $('lock-hint').textContent = '';
-  $('heroes').replaceChildren(...Object.entries(HEROES).map(([id, h]) => {
-    const b = document.createElement('button');
-    const open = isOpen('hero', id);
-    b.className = `opt well${id === selHero ? ' sel' : ''}${open ? '' : ' locked'}`;
-    b.innerHTML = `${iconImg(ICON.hero[id])}<b>${h.name}</b><small>${open ? h.role : 'Bloqueado'}</small>`;
-    b.onclick = () => {
-      if (!open) return lockedHint(`hero:${id}`);
-      selHero = id;
-      setHero(id);
-      renderSetup();
-      beep(520, 0.06, 'triangle', 0.03);
+  $('prep-sub').textContent = `${Object.keys(BIOMES).filter((id) => isOpen('map', id)).length} de ${Object.keys(BIOMES).length} cenários abertos`;
+  $('biomes').replaceChildren(...Object.entries(BIOMES).map(([id, b]) => {
+    const el = document.createElement('button');
+    const open = isOpen('map', id);
+    el.className = `map-tab${id === BIOME_ID ? ' sel' : ''}${open ? '' : ' locked'}`;
+    el.innerHTML = `<span class="art ${id}"></span><span><b>${b.name}</b><small>${open ? `${b.ref}${id === EVENT_MAP ? ' · desafio do dia' : ''}` : 'Bloqueado'}</small></span>`;
+    el.onclick = () => {
+      if (!open) return lockedHint(`map:${id}`);
+      if (id !== BIOME_ID) reload(playQuery(id));
     };
-    return b;
+    return el;
   }));
+  $('map-art').className = `map-art art ${BIOME_ID}`;
+  $('mv-name').textContent = B.name;
+  $('map-info').innerHTML = `<div class="tags">${B.tags.map((t) => `<i>${t}</i>`).join('')}</div><p>${B.desc}</p>`;
   const h = HEROES[selHero];
-  const w = WEAPONS[h.weapon];
-  const bar = (label, v, kind = '') => `<div class="stat"><span>${label}</span><div class="bar ${kind}"><i style="width:${Math.round(v * 100)}%"></i></div></div>`;
-  const ab = (badge, name, text) => `<div class="ab">${badge}<div><em>${name}.</em> ${text}</div></div>`;
-  $('hero-info').innerHTML = `
-    ${bar('Vida', h.hp / 140, 'hp')}${bar('Velocidade', h.speed / 8.6)}
-    ${ab(iconImg(ICON.weapon[h.weapon]), `Arma: ${w.name}`, w.desc)}
-    ${ab('<img class="ico" src="assets/ui/star.png" alt="">', `Passiva: ${h.passive[0]}`, h.passive[1])}
-    ${ab('<kbd class="k">E</kbd>', h.move[0], h.move[1])}
-    ${ab('<kbd class="k">Q</kbd>', h.miracle[0], h.miracle[1])}
-    ${evoLine(selHero)}<div id="wardrobe" class="wardrobe"></div>`;
-  renderWardrobe();
-  renderPack();
-  const rec = SURV ? profile.records[`surv:${BIOME_ID}`] : profile.records[BIOME_ID];
-  $('map-info').innerHTML = `<div class="tags">${B.tags.map((t) => `<i>${t}</i>`).join('')}</div><p>${B.desc}</p>
-    <small>${rec ? `Seu recorde${SURV ? ' na Sobrevivência' : ''}: ${fmt(rec.best)}${rec.fastest ? ` · vitória mais rápida ${fmt(rec.fastest)}` : ''}` : 'Ainda sem recorde aqui.'}</small>
-    <div class="modes">${[['classic', 'Clássico', 'Erga as 3 pedras e vença o chefe'], ['surv', 'Sobrevivência', 'Sem fim: um guardião a cada 5 min e uma aliança depois de cada um']]
-      .map(([k, n, d]) => `<button data-mode="${k}" class="${(k === 'surv') === SURV ? 'on' : ''}"><b>${n}</b><small>${d}</small></button>`).join('')}</div>
-    <div class="diffs">${DIFFS.map((d, k) => `<button data-diff="${k}" class="${k === DIFF_ID ? 'on' : ''}${diffOpen(profile, BIOME_ID, k) ? '' : ' locked'}"><b>${d.name}</b><small>${k ? `×${d.pay} denários` : 'denários ×1'}</small></button>`).join('')}</div>
-    <small class="diff-note">${diffOpen(profile, BIOME_ID, Math.min(2, DIFF_ID + 1)) || DIFF_ID === 2 ? DIFFS[DIFF_ID].text : `${DIFFS[DIFF_ID].text} · vença no ${DIFFS[DIFF_ID].name} para abrir o ${DIFFS[DIFF_ID + 1].name} neste cenário`}</small>`;
-  $('map-info').querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => { SURV = b.dataset.mode === 'surv'; renderSetup(); beep(600, 0.05, 'triangle', 0.03); }; });
-  $('map-info').querySelectorAll('[data-diff]').forEach((b) => {
+  $('mv-face').src = ICON.face[selHero];
+  $('mv-face').className = frameClass(selHero);
+  $('mv-hero-name').textContent = h.name;
+  $('mv-stage').textContent = STAGES[selHero].names[stageOf(selHero)];
+  $('mv-marks').innerHTML = SURV
+    ? `<small>Marcos · um guardião a cada 5 minutos</small>${[5, 10, 15, 20, 25, 30].map((m) => `<span class="mk"><b>${m} min</b>Guardião</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>45 min</b>Noite sem fim</span>`
+    : `<small>Objetivo · erga as pedras e o chefe aparece (ou vem furioso aos 10:00)</small>${[1, 2, 3].map((k) => `<span class="mk"><b>Pedra ${k}</b>do Memorial</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>${B.boss}</b>Chefe</span>`;
+  $('pp-map').textContent = B.name;
+  $('modes').innerHTML = [['classic', 'Clássico', 'Pedras e chefe'], ['surv', 'Sobrevivência', 'Sem fim, guardiões e alianças']]
+    .map(([k, n, d]) => `<button data-mode="${k}" class="${(k === 'surv') === SURV ? 'on' : ''}"><b>${n}</b><small>${d}</small></button>`).join('');
+  $('diffs').innerHTML = DIFFS.map((d, k) => `<button data-diff="${k}" class="${k === DIFF_ID ? 'on' : ''}${diffOpen(profile, BIOME_ID, k) ? '' : ' locked'}"><b>${d.name}</b><small>${k ? `×${d.pay} denários` : 'denários ×1'}</small></button>`).join('');
+  $('diff-note').textContent = diffOpen(profile, BIOME_ID, Math.min(2, DIFF_ID + 1)) || DIFF_ID === 2 ? DIFFS[DIFF_ID].text
+    : `${DIFFS[DIFF_ID].text} · vença no ${DIFFS[DIFF_ID].name} para abrir o ${DIFFS[DIFF_ID + 1].name}`;
+  $('modes').querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => { SURV = b.dataset.mode === 'surv'; renderSetup(); beep(600, 0.05, 'triangle', 0.03); }; });
+  $('diffs').querySelectorAll('[data-diff]').forEach((b) => {
     b.onclick = () => {
       const k = Number(b.dataset.diff);
       if (!diffOpen(profile, BIOME_ID, k)) { $('lock-hint').textContent = `${DIFFS[k].name} está bloqueado: vença ${B.name} no ${DIFFS[k - 1].name}.`; return beep(180, 0.12, 'square', 0.03); }
@@ -800,20 +811,69 @@ function renderSetup() {
       beep(600, 0.05, 'triangle', 0.03);
     };
   });
-  $('biomes').replaceChildren(...Object.entries(BIOMES).map(([id, b]) => {
-    const el = document.createElement('button');
-    const open = isOpen('map', id);
-    el.className = `opt biome well${id === BIOME_ID ? ' sel' : ''}${open ? '' : ' locked'}`;
-    el.title = b.desc;
-    const rec = profile.records[id];
-    const recTxt = !open || !rec ? '' : rec.fastest ? `Vencido em ${fmt(rec.fastest)}` : `Recorde ${fmt(rec.best)}`;
-    el.innerHTML = `<div class="art ${id}"></div><div class="t"><b>${b.name}</b><small>${open ? b.ref : 'Bloqueado'}</small><span class="rec">${recTxt}</span></div>`;
-    el.onclick = () => {
-      if (!open) return lockedHint(`map:${id}`);
-      if (id !== BIOME_ID) reload({ biome: id, hero: selHero, screen: 'setup' });
+  renderPack();
+  const rec = profile.records[BIOME_ID];
+  const srec = profile.records[`surv:${BIOME_ID}`];
+  $('my-marks').innerHTML = `<div>Clássico · ${rec ? `recorde <b>${fmt(rec.best)}</b>${rec.fastest ? ` · vitória em <b>${fmt(rec.fastest)}</b>` : ''}` : 'sem marca'}</div>
+    <div>Sobrevivência · ${srec ? `recorde <b>${fmt(srec.best)}</b>` : 'sem marca'}</div>
+    <div>Vencido até: <b>${(profile.mapWins[BIOME_ID] ?? -1) >= 0 ? DIFFS[profile.mapWins[BIOME_ID]].name : '—'}</b></div>`;
+}
+$('mv-hero').onclick = () => go('hero-pick');
+
+// Hero screen: one card per hero (art, role, passive, first weapon), the chosen one's details below.
+function renderHeroPick() {
+  const ids = Object.keys(HEROES);
+  $('hp-sub').textContent = `${ids.filter((id) => isOpen('hero', id)).length} de ${ids.length} heróis`;
+  $('hero-cards').replaceChildren(...ids.map((id, k) => {
+    const h = HEROES[id];
+    const open = isOpen('hero', id);
+    const b = document.createElement('button');
+    b.className = `hcard${id === selHero ? ' sel' : ''}${open ? '' : ' locked'}`;
+    b.style.setProperty('--hc', `#${h.color.toString(16).padStart(6, '0')}`);
+    b.innerHTML = `<div class="top"><span class="num">#${k + 1}</span><img src="${ICON.hero[id]}" alt=""></div>
+      <div class="plate"><small>${open ? h.role : 'Bloqueado'}</small><b>${h.name}</b><em>${STAGES[id].names[stageOf(id)]}</em></div>
+      <div class="body">${open ? `<small>Passiva</small><b>${h.passive[0]}</b><span>${h.passive[1]}</span>
+        <div class="atk"><img src="${ICON.weapon[h.weapon]}" alt=""><span><small>Ataque inicial</small><br>${WEAPONS[h.weapon].name}</span></div>`
+        : `<span>${TROPHIES[unlockedBy(`hero:${id}`)].desc}</span>`}</div>`;
+    b.onclick = () => {
+      if (!open) { beep(180, 0.12, 'square', 0.03); return toast(`${h.name}: ${TROPHIES[unlockedBy(`hero:${id}`)].desc}`, '#ffd66b'); }
+      if (id === selHero) return confirmHero();
+      selHero = id;
+      setHero(id);
+      renderHeroPick();
+      beep(520, 0.06, 'triangle', 0.03);
     };
-    return el;
+    return b;
   }));
+  const h = HEROES[selHero];
+  const w = WEAPONS[h.weapon];
+  const bar = (label, v, kind = '') => `<div class="stat"><span>${label}</span><div class="bar ${kind}"><i style="width:${Math.round(v * 100)}%"></i></div></div>`;
+  const ab = (badge, name, text) => `<div class="ab">${badge}<div><em>${name}.</em> ${text}</div></div>`;
+  $('hero-info').innerHTML = `
+    <div>${bar('Vida', h.hp / 140, 'hp')}${bar('Velocidade', h.speed / 8.6)}
+    ${ab(iconImg(ICON.weapon[h.weapon]), `Arma: ${w.name}`, w.desc)}
+    ${ab('<kbd class="k">E</kbd>', h.move[0], h.move[1])}
+    ${ab('<kbd class="k">Q</kbd>', h.miracle[0], h.miracle[1])}</div>
+    <div>${evoLine(selHero)}<h3>Guarda-roupa</h3><div id="wardrobe" class="wardrobe"></div></div>`;
+  renderWardrobe();
+  $('hero-ok').innerHTML = `Eu escolho ${h.name}!<kbd class="k">Enter</kbd>`;
+}
+function confirmHero() {
+  beep(784, 0.08, 'triangle', 0.04);
+  go('setup');
+}
+$('hero-ok').onclick = confirmHero;
+function stepHero(dir) {
+  const open = Object.keys(HEROES).filter((id) => isOpen('hero', id));
+  selHero = open[(open.indexOf(selHero) + dir + open.length) % open.length];
+  setHero(selHero);
+  renderHeroPick();
+  beep(520, 0.04, 'triangle', 0.03);
+}
+function stepMap(dir) {
+  const open = Object.keys(BIOMES).filter((id) => isOpen('map', id));
+  const next = open[(open.indexOf(BIOME_ID) + dir + open.length) % open.length];
+  if (next !== BIOME_ID) reload(playQuery(next));
 }
 
 // Evolution: the three stages, the one reached, time to the next and what it gives.
@@ -842,7 +902,7 @@ function renderWardrobe() {
       saveProfile();
       dressHero(selHero);
       ICON.redoHero(selHero);
-      renderSetup();
+      if (state === 'hero-pick') renderHeroPick(); else renderSetup();
       beep(600, 0.05, 'triangle', 0.03);
     };
     return b;
@@ -949,7 +1009,8 @@ function renderShop() {
     items = Object.entries(COSMETICS).map(([cid, c]) => {
       const have = hasCosmetic(cid);
       const w = ware({ icon: `assets/ui/${{ head: 'star', back: 'scroll', trail: 'wing', frame: 'gem' }[c.slot]}.png`, name: c.name,
-        text: `${SLOT_NAME[c.slot]}${c.ref ? ` · ${c.ref}` : ''}${c.unlock ? ` · complete a pesquisa de ${BIOMES[c.unlock.slice(9)].name} no Bestiário` : ''}`,
+        text: `${SLOT_NAME[c.slot]}${c.ref ? ` · ${c.ref}` : ''}${c.unlock === 'season' ? ' · fique entre os 50 primeiros de uma temporada do Ranking'
+          : c.unlock ? ` · complete a pesquisa de ${BIOMES[c.unlock.slice(9)].name} no Bestiário` : ''}`,
         level: have ? 1 : 0, max: 1, cost: c.cost ?? 0, note: have ? 'Seu' : '', buy: () => profile.owned.push(`cos:${cid}`) });
       if (c.unlock && !have) { const b = w.querySelector('.buy'); b.disabled = true; b.textContent = 'Conquista'; }
       return w;
@@ -968,8 +1029,9 @@ function renderShop() {
 const MENU_GUIDE = [
   ['#menu-purse', 'Denários', 'A moeda do Mercado. Você ganha ao fim de cada partida (mais quanto mais longe chegar), ao erguer as pedras, vencer chefes e ganhar troféus.'],
   ['[data-go="shop"]', 'Mercado', 'Gaste denários em melhorias permanentes, ferramentas para as cartas, armas novas e itens para levar no alforje.'],
-  ['[data-go="trophies"]', 'Troféus', 'Conquistas abrem heróis, cenários e relíquias, e cada uma paga denários.'],
-  ['[data-go="setup"]', 'Nova jornada', 'Escolha o herói, o cenário e o que levar no alforje. Boa jornada!'],
+  ['#menu [data-go="trophies"]', 'Troféus', 'Conquistas abrem heróis, cenários e relíquias, e cada uma paga denários.'],
+  ['#season', 'Temporada', 'O ranking online do mês: abates, vitórias mais rápidas e Sobrevivência. Escolha seu nome clicando no seu perfil, lá em cima.'],
+  ['#menu [data-go="setup"]', 'Jogar', 'Escolha o cenário, o modo, a dificuldade e o herói. Boa jornada!'],
 ];
 const SHOP_GUIDE = [
   ['#shop-tabs', 'Quatro bancas', 'Treinamento deixa todos os heróis mais fortes para sempre. Ferramentas mudam as cartas de nível. Arsenal traz armas novas. Alforje vende itens para uma partida.'],
@@ -1016,6 +1078,143 @@ $('coach-next').onclick = () => { if (++coachOn.at >= coachOn.steps.length) endG
 $('coach-back').onclick = () => { coachOn.at = Math.max(0, coachOn.at - 1); showGuide(); };
 $('coach-skip').onclick = () => endGuide();
 addEventListener('resize', () => { if (coachOn) showGuide(); });
+
+// ---------- Title hub ----------
+const BACK = { setup: 'menu', 'hero-pick': 'setup', shop: 'menu', trophies: 'menu', tasks: 'menu', bestiary: 'menu', ranking: 'menu', settings: 'prev', howto: 'prev' };
+// Today's challenge: one open map pays 50% more denários all day (the same map for everyone).
+const EVENT_MAP = (() => { const open = Object.keys(BIOMES).filter((id) => isOpen('map', id)); return open[hashStr(`evento${dayKey()}`) % open.length]; })();
+profile.pid ??= crypto.randomUUID?.() ?? `${Date.now().toString(16)}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`;
+const timeLeft = (to) => { const m = Math.max(0, Math.round((to - Date.now()) / 60000)); return m >= 1440 ? `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+function renderMenu() {
+  $('pp-face').src = ICON.face[selHero];
+  $('pp-face').className = frameClass(selHero);
+  $('pp-name').textContent = profile.name || 'Convidado';
+  $('pp-title').textContent = titleOf() || (profile.name ? 'Peregrino' : 'Clique para escolher um nome');
+  $('play-face').src = ICON.face[selHero];
+  $('play-sub').textContent = `${SURV ? 'Sobrevivência' : 'Clássico'} · ${HEROES[selHero].name} · ${B.name}${DIFF_ID ? ` · ${DIFF.name}` : ''}`;
+  const sr = Object.keys(BIOMES).map((b) => profile.records[`surv:${b}`]?.best || 0);
+  $('surv-sub').textContent = Math.max(...sr) ? `Sem fim · seu recorde ${fmt(Math.max(...sr))}` : 'Sem fim · um guardião a cada 5 min';
+  $('event-sub').textContent = `${BIOMES[EVENT_MAP].name} · +50% de denários hoje`;
+  const tk = tasksNow();
+  const doneN = tk.daily.filter((t) => t.prog >= taskDef(t).goal).length;
+  $('tasks-sub').textContent = `${doneN} de 3 hoje · novas em ${timeLeft(new Date(new Date().setHours(24, 0, 0, 0)))}`;
+  $('tasks-pips').innerHTML = tk.daily.map((t) => `<i class="${t.prog >= taskDef(t).goal ? 'on' : ''}"></i>`).join('');
+  const kills = profile.bestiary.kills ?? {};
+  $('tile-beast').textContent = `${Object.keys(BIOMES).flatMap((b) => BEAST_KINDS.map((k) => kills[`${b}:${k}`])).filter(Boolean).length}/${Object.keys(BIOMES).length * BEAST_KINDS.length}`;
+  $('tile-shop').textContent = `${profile.denarios} denários`;
+  const trophiesWon = Object.keys(TROPHIES).filter((id) => profile.trophies[id]).length;
+  $('tile-tro').textContent = `${trophiesWon}/${Object.keys(TROPHIES).length}`;
+  $('tb-trophies').textContent = trophiesWon;
+  $('tile-rank').textContent = timeLeft(seasonEnd());
+  renderSeason();
+}
+$('surv-card').onclick = () => { SURV = true; go('setup'); };
+$('event-card').onclick = () => (EVENT_MAP === BIOME_ID ? go('setup') : reload({ biome: EVENT_MAP, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : 'classic' }));
+$('fs-btn').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
+$('profile-pill').onclick = () => askName();
+
+// ---------- Rankings ----------
+const BOARDS = { abates: ['Abates', 'abates'], relogio: ['Contra o relógio', 'vitória mais rápida'], sobrevivencia: ['Sobrevivência', 'mais tempo de pé'] };
+const boardValue = (board, v) => (board === 'abates' ? Number(v).toLocaleString('pt-BR') : fmt(v));
+function rankRow(r, board) {
+  const tier = r.pos <= 3 ? ` p${r.pos}` : '';
+  return `<div class="rk${tier}${r.me ? ' me' : ''}"><span class="n">${r.pos}</span><img src="${ICON.face[r.hero] ?? ICON.face.davi}" class="${r.frame && COSMETICS[r.frame] ? `frame-${r.frame}` : ''}" alt="">
+    <div><b>${esc(r.name)}</b><small>${r.title ? esc(r.title) : HEROES[r.hero]?.name ?? ''}${r.map && BIOMES[r.map] ? ` · ${BIOMES[r.map].name}` : ''}</small></div><span class="v">${boardValue(board, r.value)}</span></div>`;
+}
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+let seasonTab = 'abates';
+async function renderSeason() {
+  $('season-name').textContent = `Temporada de ${seasonName(seasonKey())}`;
+  $('season-left').textContent = `Termina em ${timeLeft(seasonEnd())}`;
+  $('season-tabs').replaceChildren(...Object.entries(BOARDS).map(([k, [name]]) => {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.className = k === seasonTab ? 'on' : '';
+    b.onclick = () => { seasonTab = k; renderSeason(); };
+    return b;
+  }));
+  const list = $('season-list');
+  if (!onlineOn()) {
+    const best = Object.entries(profile.records).filter(([k]) => !k.startsWith('surv:')).map(([k, r]) => `${BIOMES[k]?.name}: ${fmt(r.best)}${r.fastest ? ` · venceu em ${fmt(r.fastest)}` : ''}`);
+    list.innerHTML = `<div class="off">O ranking online ainda não foi ligado neste site.${best.length ? `<br><br>Seus recordes:<br>${best.join('<br>')}` : ''}</div>`;
+    return;
+  }
+  list.innerHTML = '<div class="off">Carregando…</div>';
+  try {
+    const rows = await leaderboard(seasonTab, seasonKey(), null, profile, 7);
+    list.innerHTML = rows.length ? rows.map((r) => rankRow(r, seasonTab)).join('') : '<div class="off">Ninguém ainda nesta temporada. Seja o primeiro!</div>';
+  } catch (e) { list.innerHTML = `<div class="off">Sem conexão com o ranking (${esc(e.message)}).</div>`; }
+}
+let rankTab = 'abates';
+let rankMap = '';
+async function renderRanking() {
+  $('rank-season').textContent = `Temporada de ${seasonName(seasonKey())}`;
+  $('rank-left').textContent = `Termina em ${timeLeft(seasonEnd())} · ${BOARDS[rankTab][1]}`;
+  $('rank-name').textContent = profile.name || 'sem nome (não aparece no ranking)';
+  $('rank-tabs').replaceChildren(...Object.entries(BOARDS).map(([k, [name]]) => {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.className = k === rankTab ? 'on' : '';
+    b.onclick = () => { rankTab = k; renderRanking(); };
+    return b;
+  }));
+  $('rank-map').innerHTML = `<option value="">Todos os cenários</option>${Object.entries(BIOMES).map(([id, b]) => `<option value="${id}"${id === rankMap ? ' selected' : ''}>${b.name}</option>`).join('')}`;
+  const body = $('rank-body');
+  if (!onlineOn()) { body.innerHTML = '<div class="off">O ranking online ainda não foi ligado neste site. Veja como no README do projeto.</div>'; return; }
+  body.innerHTML = '<div class="off">Carregando…</div>';
+  claimSeasonPrize();
+  try {
+    const rows = await leaderboard(rankTab, seasonKey(), rankMap || null, profile, 50);
+    const top = rows.filter((r) => r.pos <= 50);
+    const mine = rows.find((r) => r.me && r.pos > 50);
+    body.innerHTML = rows.length ? `${top.map((r) => rankRow(r, rankTab)).join('')}${mine ? `<div class="gap">…</div>${rankRow(mine, rankTab)}` : ''}` : '<div class="off">Ninguém ainda nesta temporada. Seja o primeiro!</div>';
+  } catch (e) { body.innerHTML = `<div class="off">Sem conexão com o ranking (${esc(e.message)}).</div>`; }
+}
+$('rank-map').onchange = (e) => { rankMap = e.target.value; renderRanking(); };
+$('rank-rename').onclick = () => askName();
+// Last season's prize, once: by place on the Abates board.
+async function claimSeasonPrize() {
+  const last = prevSeason();
+  $('rank-claim').innerHTML = '';
+  if (!profile.name || profile.prizes?.[last]) return;
+  try {
+    const rows = await leaderboard('abates', last, null, profile, 1);
+    const me = rows.find((r) => r.me);
+    if (!me || me.pos > 50) return;
+    const pay = me.pos === 1 ? 1000 : me.pos <= 3 ? 600 : me.pos <= 10 ? 300 : 150;
+    const row = document.createElement('div');
+    row.className = 'claim';
+    row.innerHTML = `<img src="assets/ui/trophy-2.png" alt=""><div><b>Temporada de ${seasonName(last)}: ${me.pos}º lugar</b><small>Prêmio: ${pay} denários e a Moldura de campeão</small></div><button class="btn primary">Resgatar</button>`;
+    row.querySelector('button').onclick = () => {
+      (profile.prizes ??= {})[last] = me.pos;
+      profile.denarios += pay;
+      if (!profile.owned.includes('cos:molduraCampeao')) profile.owned.push('cos:molduraCampeao');
+      saveProfile();
+      chord([523, 659, 784, 1046, 1318], 'triangle');
+      row.remove();
+      renderPurse();
+    };
+    $('rank-claim').append(row);
+  } catch { /* offline: try next time */ }
+}
+// The name shown on the rankings (and on the hub's profile).
+function askName() {
+  const dlg = $('name-dlg');
+  $('name-in').value = profile.name || '';
+  $('name-msg').textContent = '';
+  dlg.showModal();
+  $('name-in').focus();
+}
+$('name-ok').onclick = (e) => {
+  const v = $('name-in').value.trim();
+  if (!NAME_RE.test(v)) { e.preventDefault(); $('name-msg').textContent = 'Use de 2 a 16 letras, números, espaço, ponto, hífen ou sublinhado.'; return; }
+  profile.name = v;
+  saveProfile();
+  clearBoards();
+  if (state === 'menu') renderMenu();
+  if (state === 'ranking') renderRanking();
+};
+flushPending(profile).then(saveProfile);
 
 let trophyTab = 'todos';
 const titleOf = () => (profile.title && TROPHIES[profile.title]?.title && profile.trophies[profile.title] ? TROPHIES[profile.title].title : '');
@@ -3361,6 +3560,7 @@ function endScreen(title, text, verse, won = false) {
   const pay = runDenarios({ time, kills: P.kills, stones: stonesDone, chests: chestsOpened, won });
   if (P.guardians) { pay.lines.push([`Guardiões vencidos (${P.guardians})`, P.guardians * 40]); pay.total += P.guardians * 40; }
   if (DIFF.pay > 1) { const extra = Math.round(pay.total * (DIFF.pay - 1)); pay.lines.push([`${DIFF.name} ×${DIFF.pay}`, extra]); pay.total += extra; }
+  if (BIOME_ID === EVENT_MAP && pay.total) { const extra = Math.round(pay.total * 0.5); pay.lines.push(['Desafio do dia +50%', extra]); pay.total += extra; }
   const trophyPay = 0;
   profile.denarios += pay.total;
   const rec = (profile.records[BIOME_ID] ??= { best: 0 });
@@ -3381,6 +3581,17 @@ function endScreen(title, text, verse, won = false) {
   $('end-den').innerHTML = `<div class="tot">${coinImg}+${pay.total + trophyPay} denários<small>Agora você tem ${profile.denarios}</small></div>
     <ul>${pay.lines.map(([l, v]) => `<li>${l}<b>+${v}</b></li>`).join('')}</ul>`;
   $('end-report').innerHTML = `<div><h3>Dano por ataque</h3>${dmgRows()}</div><div><h3>Inimigos derrotados</h3>${killRows()}</div>`;
+  // The season's ranking: this run goes online (or waits for the network).
+  const online = $('end-online');
+  if (!onlineOn()) online.textContent = '';
+  else if (!profile.name) online.innerHTML = 'Escolha um nome no Ranking para suas partidas contarem na temporada.';
+  else {
+    online.textContent = 'Enviando ao ranking…';
+    const lookF = heroRec(P.hero).look.frame;
+    submitRun(profile, { map: BIOME_ID, mode: SURV ? 'surv' : 'classic', diff: DIFF_ID, hero: P.hero, kills: P.kills, seconds: Math.floor(time), won,
+      title: titleOf(), frame: lookF && hasCosmetic(lookF) ? lookF : '' })
+      .then((r) => { online.textContent = r === 'sent' ? `Partida registrada na temporada de ${seasonName(seasonKey())}.` : `Ranking: ${r}`; clearBoards(); saveProfile(); });
+  }
   show('end');
 }
 // Run report: who dealt the damage, and what fell.
@@ -4280,6 +4491,7 @@ else {
   setCur(document.querySelector('#menu .nav .btn'));
   renderPurse();
   updateDots();
+  renderMenu();
   guide('menu', MENU_GUIDE);
 }
 

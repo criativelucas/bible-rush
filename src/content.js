@@ -778,6 +778,7 @@ export const COSMETICS = {
   molduraMar: { name: 'Moldura do Mar', slot: 'frame', unlock: 'research:mar' },
   molduraOssos: { name: 'Moldura dos Ossos', slot: 'frame', unlock: 'research:ossos' },
   molduraJerico: { name: 'Moldura de Jericó', slot: 'frame', unlock: 'research:jerico' },
+  molduraCampeao: { name: 'Moldura de campeão', slot: 'frame', unlock: 'season' }, // top 50 of a season's ranking
 };
 export const SLOT_NAME = { head: 'Cabeça', back: 'Costas', trail: 'Rastro', frame: 'Moldura' };
 
@@ -840,7 +841,7 @@ export const TASKS = {
 };
 export const TASK_PAY = { facil: 40, media: 80, dificil: 140, semana: [200, 300, 500] };
 export const TASK_BONUS = { day: 60, week: 400 }; // all three done: extra denários and supplies
-const hashStr = (str) => { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
+export const hashStr = (str) => { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 export const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export function weekKey(d = new Date()) { // Monday-first weeks
   const m = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));

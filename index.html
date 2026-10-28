@@ -194,19 +194,16 @@
     /* Title screen */
     #menu { align-items: safe center; background: linear-gradient(90deg, rgba(20, 12, 6, .72), rgba(20, 12, 6, .3) 42%, transparent 66%),
       linear-gradient(0deg, rgba(20, 12, 6, .55), transparent 28%); }
-    #menu .side { width: min(480px, 92vw); margin-left: 5vw; display: grid; gap: 14px; justify-items: center; }
     .logo h1 { margin: 0; line-height: 0; }
     .logo img { width: min(480px, 90vw); height: auto; filter: drop-shadow(0 calc(3 * var(--px)) 0 rgba(10, 5, 2, .45)); animation: drop .7s steps(7) both; }
     .logo p { margin: 2px 0 0; text-align: center; font-size: 20px; color: var(--gold2); text-shadow: 0 2px 0 var(--line); }
     @keyframes drop { from { transform: translateY(-48px); opacity: 0; } }
-    #menu nav { display: grid; gap: calc(2 * var(--px)); width: 300px; animation: appear .3s .7s steps(3) both; }
-    #menu nav .btn { justify-content: flex-start; font-size: 22px; padding: 5px 16px 6px; }
     @keyframes appear { from { opacity: 0; } }
     .verse { position: fixed; left: 5vw; bottom: 24px; max-width: 420px; font-size: 17px; color: var(--ink); text-shadow: 0 2px 0 var(--line); }
     .verse cite { display: block; font-style: normal; font-size: 15px; color: var(--gold); }
     .version { position: fixed; right: 18px; bottom: 14px; font-size: 14px; color: var(--ink); opacity: .7; text-shadow: 0 2px 0 var(--line); }
     @media (prefers-reduced-motion: reduce) {
-      .logo img, #menu nav, .nav .btn.cur::before, .card, .toast { animation: none; }
+      .logo img, .hub-main, .season, .nav .btn.cur::before, .card, .toast { animation: none; }
     }
 
     /* New journey */
@@ -417,7 +414,6 @@
     .purse { display: inline-flex; align-items: center; gap: 6px; padding: 2px 12px 2px 6px; font-size: 16px; color: var(--dim); }
     .purse img { width: 27px; height: 27px; }
     .purse b { font: 400 26px / 1 var(--f-title); color: #e8eef4; text-shadow: 0 2px 0 var(--line); }
-    #menu-purse { position: fixed; top: 16px; right: 18px; }
     .shop { max-width: 1000px; }
     .shop-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
     .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -528,6 +524,195 @@
     .coach-btns [hidden] { display: none; }
     .coach-btns .link { margin-right: auto; background: none; border: 0; padding: 0; font: 600 15px var(--f-ui); color: #7a5634; text-decoration: underline; cursor: pointer; }
     .coach-hl { outline: 3px solid var(--gold2) !important; outline-offset: 4px; animation: glow .5s steps(2) infinite alternate; }
+
+    /* ---------- Title hub ---------- */
+    #menu { display: none; flex-direction: column; align-items: stretch; padding: 0; }
+    #menu.on { display: flex; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 18px; flex-wrap: wrap; }
+    .tb-side { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pill { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; border: 0; cursor: pointer;
+      font: 600 18px/1 var(--f-ui); color: var(--ink); background: rgba(31, 18, 13, .9); box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line), 0 4px 0 2px rgba(10, 5, 2, .35); }
+    .pill img { width: 24px; height: 24px; image-rendering: pixelated; }
+    .pill b { font: 400 24px/1 var(--f-title); color: #e8eef4; }
+    .pill:hover { filter: brightness(1.15); }
+    .shop-pill { color: var(--ink-d); background: linear-gradient(var(--gold2), var(--gold)); }
+    .pill.profile { height: 48px; padding: 0 14px 0 4px; }
+    .pill.profile img { width: 40px; height: 40px; background: #2a1810; }
+    .pill.profile span { display: grid; text-align: left; }
+    .pill.profile b { font-size: 22px; color: var(--gold2); }
+    .pill.profile small { font-size: 13px; color: var(--dim); }
+    .hub { flex: 1; display: grid; grid-template-columns: minmax(0, 600px) minmax(300px, 380px); justify-content: space-between; gap: 24px; padding: 0 3vw 70px; align-items: start; }
+    .hub-main { display: grid; gap: 14px; }
+    .hub .logo { display: grid; justify-items: start; }
+    .hub .logo img { width: min(420px, 80vw); }
+    .hub .logo .ver { margin: -4px 0 0 8px; padding: 0 8px 2px; font-size: 15px; color: var(--ink-d); background: var(--gold); box-shadow: 0 0 0 2px var(--line); }
+    .hub .btn.cur::before { display: none; }
+    .hub .btn.cur, .hub .btn:focus-visible { outline: 3px solid var(--gold2); outline-offset: 3px; }
+    .hub-card { display: flex; align-items: center; gap: 12px; padding: 10px 14px; text-align: left; border: 0; border-image: none; color: #fff8e6;
+      background: repeating-linear-gradient(-45deg, var(--c1) 0 14px, var(--c2) 14px 28px); box-shadow: 0 0 0 3px var(--line), inset 0 -6px 0 rgba(0, 0, 0, .25), 0 6px 0 2px rgba(10, 5, 2, .4); }
+    .hub-card:hover { filter: brightness(1.12); transform: translateY(-2px); }
+    .hub-card b { display: block; font: 400 34px/1 var(--f-title); text-shadow: 0 2px 0 var(--line); }
+    .hub-card small { display: block; font-size: 15px; color: #fff1d6; opacity: .9; }
+    .hc-txt { display: grid; gap: 2px; }
+    .play-row { display: grid; grid-template-columns: 1.35fr 1fr; gap: 12px; }
+    .hub-card.play { --c1: #9a2a2f; --c2: #ae3a3a; min-height: 150px; }
+    .hub-card.play b { font-size: 64px; }
+    .hub-card.play kbd { margin-left: auto; align-self: flex-end; }
+    .hc-face { flex: none; display: grid; place-items: center; width: 88px; height: 88px; border-radius: 50%; background: #f6e8c6; box-shadow: 0 0 0 4px var(--gold), 0 0 0 7px var(--line); }
+    .hc-face img { width: 72px; height: 72px; image-rendering: pixelated; }
+    .mode-col { display: grid; gap: 12px; }
+    .hub-card.surv { --c1: #3e5a2a; --c2: #4a6a34; }
+    .hub-card.event { --c1: #5b3a8a; --c2: #6a4a9a; }
+    .hub-card.surv, .hub-card.event { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
+    .hub-card.surv b, .hub-card.event b { font-size: 30px; }
+    .hub-card.tasks { --c1: #8a5a14; --c2: #a8701c; }
+    .hub-card.tasks img { width: 40px; height: 40px; image-rendering: pixelated; }
+    .pips3 { margin-left: auto; display: flex; gap: 6px; }
+    .pips3 i { width: 18px; height: 18px; border-radius: 50%; background: rgba(0, 0, 0, .35); box-shadow: 0 0 0 2px var(--line); }
+    .pips3 i.on { background: var(--gold2); }
+    .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+    .tile { display: grid; justify-items: center; gap: 2px; padding: 10px 4px 12px; border: 0; border-image: none; color: var(--ink); background: rgba(31, 18, 13, .92);
+      box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line), inset 0 -5px 0 var(--bar, #a8701c), 0 5px 0 2px rgba(10, 5, 2, .35); }
+    .tile:hover { filter: brightness(1.15); transform: translateY(-2px); }
+    .tile img { width: 36px; height: 36px; image-rendering: pixelated; }
+    .tile b { font: 400 22px/1 var(--f-title); color: var(--gold2); }
+    .tile small { font-size: 14px; color: var(--dim); min-height: 1.2em; }
+    .tile:nth-child(1) { --bar: #8fdc7a; } .tile:nth-child(2) { --bar: #7fc6ff; } .tile:nth-child(3) { --bar: #f2c14e; } .tile:nth-child(4) { --bar: #c9a8ff; } .tile:nth-child(5) { --bar: #ff9a8a; }
+    .season { display: grid; gap: 8px; padding: 0 0 10px; background: rgba(31, 18, 13, .94); box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line), 0 8px 0 4px rgba(10, 5, 2, .35);
+ }
+    .season-head { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: repeating-linear-gradient(-45deg, #a8701c 0 12px, #b8802a 12px 24px); box-shadow: 0 3px 0 var(--line); }
+    .season-head img { width: 36px; height: 40px; }
+    .season-head b { display: block; font: 400 28px/1 var(--f-title); color: #fff1b8; text-shadow: 0 2px 0 var(--line); }
+    .season-head small { color: #f6e8c6; font-size: 14px; }
+    .mini-tabs { display: flex; gap: 4px; padding: 0 10px; }
+    .mini-tabs button { flex: 1; padding: 3px 4px 5px; border: 0; cursor: pointer; font: 600 14px/1.1 var(--f-ui); color: var(--dim); background: #2a1810; box-shadow: 0 0 0 2px var(--line); }
+    .mini-tabs button.on { color: var(--ink-d); background: var(--gold); }
+    .season-list { display: grid; gap: 4px; padding: 0 10px; min-height: 120px; }
+    .season-list .off { padding: 10px 4px; font-size: 15px; color: var(--dim); }
+    .rk { display: grid; grid-template-columns: 30px 34px 1fr auto; gap: 8px; align-items: center; padding: 3px 6px; background: #2a1810; box-shadow: 0 0 0 2px var(--line); font-size: 15px; }
+    .rk .n { font: 400 22px/1 var(--f-title); text-align: center; color: var(--dim); }
+    .rk img { width: 34px; height: 34px; image-rendering: pixelated; background: #f6e8c6; }
+    .rk b { display: block; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rk small { display: block; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rk .v { font: 400 22px/1 var(--f-title); color: #e8eef4; text-align: right; }
+    .rk.p1 { background: linear-gradient(90deg, rgba(242, 193, 78, .35), #2a1810); box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--line); }
+    .rk.p2 { background: linear-gradient(90deg, rgba(223, 231, 238, .25), #2a1810); }
+    .rk.p3 { background: linear-gradient(90deg, rgba(224, 154, 85, .3), #2a1810); }
+    .rk.p1 .n { color: var(--gold2); } .rk.p2 .n { color: #dfe7ee; } .rk.p3 .n { color: #e09a55; }
+    .rk.me { box-shadow: 0 0 0 2px #8fdc7a, 0 0 0 4px var(--line); }
+    .season-more { margin: 2px 10px 0; }
+    @media (max-width: 1000px) { .hub { grid-template-columns: 1fr; } .season { max-width: 600px; } }
+    @media (max-width: 640px) { .tiles { grid-template-columns: repeat(3, 1fr); } .play-row { grid-template-columns: 1fr; } .hub-card.play b { font-size: 48px; } }
+    #menu .verse { position: static; margin: 0 3vw 18px; }
+    #menu .version { position: fixed; }
+    /* Ranking screen and the name dialog */
+    .rank-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+    .rank-head b { display: block; font: 400 28px/1 var(--f-title); color: var(--gold2); }
+    .rank-head small { color: var(--dim); }
+    .rank-me { display: flex; gap: 10px; align-items: center; font-size: 16px; }
+    .rank-me b { display: inline; font: 600 18px var(--f-ui); color: var(--ink); }
+    .rank-filters { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+    .rank-filters select { font: 600 16px var(--f-ui); color: var(--ink); background: #1f120d; border: 0; padding: 4px 8px; box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line); }
+    #rank-body { display: grid; gap: 6px; }
+    #rank-body .rk { grid-template-columns: 44px 44px 1fr auto; padding: 5px 10px; }
+    #rank-body .rk img { width: 44px; height: 44px; }
+    #rank-body .rk b { font-size: 18px; }
+    #rank-body .rk .v { font-size: 28px; }
+    #rank-body .gap { text-align: center; color: var(--dim); }
+    #rank-body .off { padding: 14px; text-align: center; color: var(--dim); }
+    .end-online { margin: 8px 0 0; text-align: center; font-size: 15px; color: #8fdc7a; }
+    .rank-prizes { margin: 12px 0 0; font-size: 14px; color: var(--dim); }
+    #rank-claim:not(:empty) { margin-bottom: 10px; }
+    .name-dlg { padding: 16px 20px; border: 0; color: var(--ink); background: #2a1810; box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line); max-width: 360px; }
+    .name-dlg::backdrop { background: rgba(20, 12, 6, .7); }
+    .name-dlg b { font: 400 30px/1 var(--f-title); color: var(--gold2); }
+    .name-dlg p { font-size: 15px; color: var(--dim); }
+    .name-dlg input { width: 100%; box-sizing: border-box; padding: 6px 10px; font: 600 20px var(--f-ui); color: var(--ink); background: #1f120d; border: 0; box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line); }
+    .name-dlg small { display: block; min-height: 1.2em; margin-top: 6px; color: #ff9a8a; }
+    /* "Esc Voltar" on every panel */
+    .panel .btn.back { position: absolute; top: calc(-15 * var(--px)); left: calc(-4 * var(--px)); z-index: 2; gap: 6px; padding: 2px 12px 4px 6px; font-size: 17px; }
+    .panel .btn.back kbd.k { margin: 0; min-width: 0; height: 20px; font-size: 13px; }
+    .frame-molduraCampeao { box-shadow: 0 0 0 3px #fff1b8, 0 0 0 6px #c9a8ff, 0 0 0 8px var(--line) !important; }
+
+    /* ---------- Play: map and hero screens ---------- */
+    .prep-screen, .hero-screen { flex-direction: column; gap: 12px; padding: 14px 2vw 18px; background: rgba(20, 12, 6, .72); }
+    .sel-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .sel-top .btn.back { position: static; gap: 6px; padding: 2px 12px 4px 6px; font-size: 17px; }
+    .tag-title { margin: 0; padding: 6px 22px 8px 16px; font: 400 38px/1 var(--f-title); color: #fff8e6; text-shadow: 0 2px 0 var(--line);
+      background: repeating-linear-gradient(-45deg, #9a2a2f 0 14px, #ae3a3a 14px 28px); box-shadow: 0 0 0 3px var(--line), 0 5px 0 2px rgba(10, 5, 2, .4); transform: skewX(-6deg); }
+    .tag-title small { margin-left: 12px; font: 15px var(--f-ui); color: #fff1d6; }
+    .keys-hint { margin-left: auto; font-size: 15px; color: var(--dim); }
+    .keys-hint kbd.k { min-width: 0; height: 20px; font-size: 13px; }
+    .map-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .map-tab { position: relative; display: flex; gap: 10px; align-items: center; padding: 4px 10px 4px 4px; border: 0; cursor: pointer; text-align: left; color: var(--ink);
+      background: rgba(31, 18, 13, .92); box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line); }
+    .map-tab .art { flex: none; width: 64px; height: 44px; background: center / cover no-repeat; box-shadow: 0 0 0 2px var(--line); }
+    .map-tab b { display: block; font: 400 22px/1 var(--f-title); color: var(--gold2); }
+    .map-tab small { color: var(--dim); font-size: 13px; }
+    .map-tab.sel { background: var(--gold); box-shadow: 0 0 0 2px var(--gold2), 0 0 0 4px var(--line); }
+    .map-tab.sel b, .map-tab.sel small { color: var(--ink-d); }
+    .map-tab.locked .art { filter: grayscale(1) brightness(.4); }
+    .map-tab.locked::after { content: ''; position: absolute; top: 6px; right: 6px; width: 18px; height: 24px; background: url(assets/ui/lock.png) 0 0 / 100% 100%; image-rendering: pixelated; }
+    .prep { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; min-height: 0; }
+    .map-view { position: relative; overflow: hidden; min-height: 420px; box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line); }
+    .map-art { position: absolute; inset: 0; background: center / cover no-repeat; }
+    .map-view::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(rgba(20, 12, 6, .55), transparent 35%, transparent 65%, rgba(20, 12, 6, .7)); }
+    .mv-top { position: absolute; top: 14px; left: 18px; right: 260px; z-index: 1; }
+    .mv-top > small { font-size: 14px; letter-spacing: 2px; text-transform: uppercase; color: #fff1d6; }
+    .mv-top h2 { margin: 0; font: 400 64px/1 var(--f-title); color: #fff8e6; text-shadow: 0 3px 0 var(--line), 0 0 18px rgba(0, 0, 0, .5); }
+    .mv-top .map-info { max-width: 460px; padding: 8px 12px; background: rgba(31, 18, 13, .85); box-shadow: 0 0 0 2px var(--line); }
+    .mv-hero { position: absolute; top: 14px; right: 14px; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border: 0; cursor: pointer;
+      color: var(--ink); background: rgba(31, 18, 13, .92); box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--line); text-align: left; }
+    .mv-hero img { width: 56px; height: 56px; image-rendering: pixelated; background: #f6e8c6; }
+    .mv-hero small { display: block; font-size: 13px; color: var(--dim); }
+    .mv-hero b { display: block; font: 400 26px/1 var(--f-title); color: var(--gold2); }
+    .mv-hero em { font-style: normal; font-size: 13px; color: var(--ink); }
+    .mv-hero i { align-self: flex-start; font-style: normal; font-size: 14px; color: #7fc6ff; text-decoration: underline; }
+    .mv-hero:hover { filter: brightness(1.15); }
+    .mv-marks { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px;
+      background: rgba(31, 18, 13, .9); box-shadow: 0 0 0 2px var(--line); }
+    .mv-marks > small { width: 100%; font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+    .mk { display: grid; justify-items: center; gap: 2px; min-width: 74px; padding: 4px 6px; font-size: 13px; color: var(--ink); background: #2a1810; box-shadow: 0 0 0 2px var(--bronze); }
+    .mk b { font: 400 18px/1 var(--f-title); color: var(--gold2); }
+    .mk.big { background: rgba(242, 193, 78, .2); box-shadow: 0 0 0 2px var(--gold); }
+    .mv-marks i { font-style: normal; color: var(--dim); }
+    .prep-panel { display: flex; flex-direction: column; background: rgba(31, 18, 13, .95); box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line); min-height: 0; }
+    .pp-head { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px; background: repeating-linear-gradient(-45deg, #3e5a2a 0 12px, #4a6a34 12px 24px); box-shadow: 0 3px 0 var(--line); }
+    .pp-head b { font: 400 30px/1 var(--f-title); color: #fff8e6; text-shadow: 0 2px 0 var(--line); }
+    .pp-head small { color: #e8f2d8; }
+    .pp-body { flex: 1; overflow: auto; padding: 4px 14px 10px; }
+    .pp-body h3 { margin: 12px 0 6px; }
+    .modes, .diffs { margin-top: 0; }
+    .my-marks { display: grid; gap: 4px; font-size: 15px; }
+    .my-marks div { padding: 6px 10px; background: #2a1810; box-shadow: 0 0 0 2px var(--line); }
+    .my-marks b { font: 400 22px/1 var(--f-title); color: #e8eef4; }
+    .go-big { margin: 10px 14px 14px; justify-content: center; gap: 12px; font: 400 36px/1 var(--f-title); padding: 10px 16px 12px; }
+    .go-big kbd.k { font-size: 14px; }
+    @media (max-width: 900px) { .prep { grid-template-columns: 1fr; } .map-tabs { grid-template-columns: repeat(2, 1fr); } .mv-top { right: 14px; top: 90px; } .mv-top h2 { font-size: 44px; } }
+    .hero-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+    .hcard { position: relative; display: flex; flex-direction: column; padding: 0; border: 0; cursor: pointer; text-align: left; color: var(--ink-d); background: #f6e8c6;
+      box-shadow: 0 0 0 3px var(--line), 0 6px 0 2px rgba(10, 5, 2, .4); transition: transform .1s steps(2); }
+    .hcard:hover { transform: translateY(-3px); }
+    .hcard.sel { box-shadow: 0 0 0 3px var(--gold2), 0 0 0 6px var(--line), 0 8px 0 3px rgba(10, 5, 2, .45); transform: translateY(-4px); }
+    .hcard .top { position: relative; height: 170px; display: grid; place-items: center; overflow: hidden;
+      background: radial-gradient(circle at 50% 70%, rgba(255, 255, 255, .45), transparent 60%), repeating-conic-gradient(from 0deg at 50% 70%, rgba(255, 255, 255, .12) 0 10deg, transparent 10deg 20deg), var(--hc); }
+    .hcard .top img { width: 150px; height: 150px; image-rendering: pixelated; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .3)); }
+    .hcard .top .num { position: absolute; top: 4px; right: 8px; font: 400 44px/1 var(--f-title); color: rgba(255, 255, 255, .35); }
+    .hcard .plate { margin: -26px 10px 0; position: relative; padding: 4px 10px 6px; background: #fff8e6; box-shadow: 0 0 0 3px var(--line); transform: skewX(-4deg); }
+    .hcard .plate small { display: block; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #8a5a14; }
+    .hcard .plate b { display: block; font: 400 32px/1 var(--f-title); color: var(--wine); }
+    .hcard .plate em { display: inline-block; margin-top: 2px; padding: 0 6px; font-style: normal; font-size: 12px; color: #fff; background: var(--hc); }
+    .hcard .body { padding: 8px 10px 10px; display: grid; gap: 4px; font-size: 14px; }
+    .hcard .body small { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #8a5a14; }
+    .hcard .body b { font-size: 16px; color: var(--ink-d); }
+    .hcard .atk { display: flex; gap: 6px; align-items: center; padding: 4px 6px; background: rgba(122, 86, 52, .14); }
+    .hcard .atk img { width: 28px; height: 28px; }
+    .hcard.locked .top img { filter: brightness(0) opacity(.45); }
+    .hcard.locked .top::after { content: ''; position: absolute; top: 8px; left: 8px; width: 24px; height: 33px; background: url(assets/ui/lock.png) 0 0 / 100% 100%; image-rendering: pixelated; }
+    .hero-bottom { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: end; }
+    .hero-detail { padding: 10px 14px; background: rgba(31, 18, 13, .95); box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; font-size: 15px; }
+    .hero-detail .full { grid-column: 1 / -1; }
+    @media (max-width: 900px) { .hero-cards { grid-template-columns: repeat(2, 1fr); } .hero-detail { grid-template-columns: 1fr; } .hero-bottom { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -573,27 +758,75 @@
   </div>
 
   <div id="menu" class="screen on">
-    <div class="side">
-      <div class="logo"><h1><img src="assets/ui/logo.png" alt="Bible Rush"></h1><p>Heróis do Antigo Testamento</p></div>
-      <nav class="nav">
-        <button class="btn primary" data-go="setup"><img class="ico" src="assets/ui/sword.png" alt="">Nova jornada</button>
-        <button class="btn" data-go="shop"><img class="ico" src="assets/ui/denario.png" alt="">Mercado</button>
-        <button class="btn" data-go="tasks"><img class="ico" src="assets/ui/scroll.png" alt="">Tarefas<i id="tasks-dot" class="dot" hidden></i></button>
-        <button class="btn" data-go="trophies"><img class="ico" src="assets/ui/trophy-2.png" alt="">Troféus<i id="trophy-dot" class="dot" hidden></i></button>
-        <button class="btn" data-go="bestiary"><img class="ico" src="assets/ui/book.png" alt="">Bestiário</button>
-        <button class="btn" data-go="settings"><img class="ico" src="assets/ui/gear.png" alt="">Configurações</button>
-        <button class="btn" data-go="howto"><img class="ico" src="assets/ui/scroll.png" alt="">Como jogar</button>
-      </nav>
+    <header class="topbar">
+      <div class="tb-side">
+        <button id="fs-btn" class="pill" title="Tela cheia" aria-label="Tela cheia"><img src="assets/ui/burst.png" alt=""></button>
+        <button class="pill shop-pill" data-go="shop"><img src="assets/ui/denario.png" alt="">Mercado</button>
+      </div>
+      <div class="tb-side">
+        <button id="profile-pill" class="pill profile" title="Seu nome no ranking"><img id="pp-face" alt=""><span><b id="pp-name">Convidado</b><small id="pp-title"></small></span></button>
+        <div id="menu-purse" class="pill purse" title="Denários: ganhos ao fim de cada partida, gastos no Mercado"><img src="assets/ui/denario.png" alt=""><b></b></div>
+        <div class="pill" title="Troféus"><img src="assets/ui/trophy-2.png" alt=""><b id="tb-trophies"></b></div>
+        <button class="pill" data-go="settings" title="Configurações" aria-label="Configurações"><img src="assets/ui/gear.png" alt=""></button>
+      </div>
+    </header>
+    <div class="hub">
+      <div class="hub-main nav">
+        <div class="logo"><h1><img src="assets/ui/logo.png" alt="Bible Rush"></h1><span class="ver">Heróis do Antigo Testamento</span></div>
+        <div class="play-row">
+          <button class="btn hub-card play" data-go="setup"><span class="hc-face"><img id="play-face" alt=""></span><span class="hc-txt"><b>Jogar</b><small id="play-sub"></small></span><kbd class="k">Enter</kbd></button>
+          <div class="mode-col">
+            <button class="btn hub-card surv" id="surv-card"><b>Sobrevivência</b><small id="surv-sub">Sem fim · guardiões</small></button>
+            <button class="btn hub-card event" id="event-card"><b>Desafio do dia</b><small id="event-sub"></small></button>
+          </div>
+        </div>
+        <button class="btn hub-card tasks" data-go="tasks"><img src="assets/ui/scroll.png" alt=""><span class="hc-txt"><b>Tarefas</b><small id="tasks-sub"></small></span><span id="tasks-pips" class="pips3"></span><i id="tasks-dot" class="dot" hidden></i></button>
+        <div class="tiles">
+          <button class="btn tile" data-go="bestiary"><img src="assets/ui/book.png" alt=""><b>Bestiário</b><small id="tile-beast"></small></button>
+          <button class="btn tile" data-go="shop"><img src="assets/ui/denario.png" alt=""><b>Mercado</b><small id="tile-shop"></small></button>
+          <button class="btn tile" data-go="trophies"><img src="assets/ui/trophy-2.png" alt=""><b>Troféus</b><small id="tile-tro"></small><i id="trophy-dot" class="dot" hidden></i></button>
+          <button class="btn tile" data-go="ranking"><img src="assets/ui/star.png" alt=""><b>Ranking</b><small id="tile-rank"></small></button>
+          <button class="btn tile" data-go="howto"><img src="assets/ui/scroll.png" alt=""><b>Como jogar</b><small>controles</small></button>
+        </div>
+      </div>
+      <aside id="season" class="season">
+        <div class="season-head"><img src="assets/ui/trophy-2.png" alt=""><div><b id="season-name"></b><small id="season-left"></small></div></div>
+        <div id="season-tabs" class="mini-tabs"></div>
+        <div id="season-list" class="season-list"></div>
+        <button class="btn season-more" data-go="ranking">Ver classificação completa</button>
+      </aside>
     </div>
     <div class="verse">“Seja forte e corajoso! Não tenha medo nem desanime, pois o Senhor, o seu Deus, estará com você por onde você andar.”<cite>Josué 1:9</cite></div>
     <div class="version">Bible Rush · protótipo</div>
-    <div id="menu-purse" class="purse glass" title="Denários: ganhos ao fim de cada partida, gastos no Mercado"><img class="ico" src="assets/ui/denario.png" alt=""><b></b><small>denários</small></div>
   </div>
+
+  <div id="ranking" class="screen center dim">
+    <div class="panel frame" style="max-width:860px">
+      <h2 class="ribbon">Ranking</h2>
+      <button class="btn back" data-go="menu"><kbd class="k">Esc</kbd>Voltar</button>
+      <div class="rank-head"><div><b id="rank-season"></b><small id="rank-left"></small></div>
+        <div class="rank-me"><span>Seu nome: <b id="rank-name"></b></span><button id="rank-rename" class="btn">Mudar</button></div></div>
+      <div class="rank-filters"><div id="rank-tabs" class="tabs"></div><select id="rank-map" aria-label="Cenário"></select></div>
+      <div id="rank-claim"></div>
+      <div id="rank-body"></div>
+      <p class="rank-prizes">Prêmios da temporada: 1º lugar 1.000 denários · 2º e 3º 600 · 4º a 10º 300 · 11º a 50º 150, e a Moldura de campeão. Resgate no começo da temporada seguinte, aqui.</p>
+    </div>
+  </div>
+
+  <dialog id="name-dlg" class="name-dlg">
+    <form method="dialog">
+      <b>Seu nome no ranking</b>
+      <p>De 2 a 16 letras, números, espaço, ponto, hífen ou sublinhado. Aparece para todos.</p>
+      <input id="name-in" maxlength="16" autocomplete="off" spellcheck="false" aria-label="Nome">
+      <small id="name-msg"></small>
+      <div class="row-btns mid"><button value="cancel" class="btn">Cancelar</button><button id="name-ok" value="ok" class="btn primary">Salvar</button></div>
+    </form>
+  </dialog>
 
   <div id="shop" class="screen center dim">
     <div class="panel frame shop">
       <h2 class="ribbon">Mercado</h2>
-      <button class="btn round back" data-go="menu" aria-label="Voltar">←</button>
+      <button class="btn back" data-go="menu"><kbd class="k">Esc</kbd>Voltar</button>
       <div class="shop-head">
         <div id="shop-tabs" class="tabs" role="tablist"></div>
         <div id="shop-purse" class="purse"><img class="ico" src="assets/ui/denario.png" alt=""><b></b><small>denários</small></div>
@@ -603,27 +836,45 @@
     </div>
   </div>
 
-  <div id="setup" class="screen">
-    <div class="panel frame">
-      <h2 class="ribbon">Nova jornada</h2>
-      <button class="btn round back" data-go="menu" aria-label="Voltar">←</button>
-      <h3>Herói</h3>
-      <div id="heroes" class="pick"></div>
-      <div id="hero-info"></div>
-      <h3>Alforje <small id="pack-count"></small></h3>
-      <div id="pack" class="pack"></div>
-      <h3>Cenário</h3>
-      <div id="biomes" class="pick maps"></div>
-      <div id="map-info" class="map-info"></div>
-      <div id="lock-hint" class="lock-hint"></div>
-      <div class="row-btns nav"><button id="go" class="btn primary">Começar jornada</button></div>
+  <div id="setup" class="screen prep-screen">
+    <div class="sel-top"><button class="btn back" data-go="menu"><kbd class="k">Esc</kbd>Voltar</button><h2 class="tag-title">Escolha o cenário<small id="prep-sub"></small></h2>
+      <span class="keys-hint"><kbd class="k">←</kbd><kbd class="k">→</kbd> cenário · <kbd class="k">Enter</kbd> começar</span></div>
+    <div id="biomes" class="map-tabs"></div>
+    <div class="prep">
+      <div class="map-view">
+        <div id="map-art" class="map-art art"></div>
+        <div class="mv-top"><small>Cenário</small><h2 id="mv-name"></h2><div id="map-info" class="map-info"></div></div>
+        <button id="mv-hero" class="mv-hero"><img id="mv-face" alt=""><span><small>Seu herói</small><b id="mv-hero-name"></b><em id="mv-stage"></em></span><i>Trocar</i></button>
+        <div id="mv-marks" class="mv-marks"></div>
+      </div>
+      <div class="prep-panel">
+        <div class="pp-head"><b>Preparar partida</b><small id="pp-map"></small></div>
+        <div class="pp-body">
+          <h3>Modo</h3><div id="modes" class="modes"></div>
+          <h3>Dificuldade</h3><div id="diffs" class="diffs"></div><small id="diff-note" class="diff-note"></small>
+          <h3>Alforje <small id="pack-count"></small></h3><div id="pack" class="pack"></div>
+          <h3>Suas marcas</h3><div id="my-marks" class="my-marks"></div>
+          <div id="lock-hint" class="lock-hint"></div>
+        </div>
+        <button id="go" class="btn primary go-big">Começar!<kbd class="k">Enter</kbd></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hero-pick" class="screen hero-screen">
+    <div class="sel-top"><button class="btn back" data-go="setup"><kbd class="k">Esc</kbd>Voltar</button><h2 class="tag-title">Escolha seu herói<small id="hp-sub"></small></h2>
+      <span class="keys-hint"><kbd class="k">←</kbd><kbd class="k">→</kbd> escolher · <kbd class="k">Enter</kbd> confirmar</span></div>
+    <div id="hero-cards" class="hero-cards"></div>
+    <div class="hero-bottom">
+      <div id="hero-info" class="hero-detail"></div>
+      <button id="hero-ok" class="btn primary go-big"></button>
     </div>
   </div>
 
   <div id="trophies" class="screen center dim">
     <div class="panel frame" style="max-width:780px">
       <h2 class="ribbon">Troféus</h2>
-      <button class="btn round back" data-go="menu" aria-label="Voltar">←</button>
+      <button class="btn back" data-go="menu"><kbd class="k">Esc</kbd>Voltar</button>
       <div id="trophy-count" class="tcount"></div>
       <div class="title-pick"><label for="title-sel">Título</label><select id="title-sel"></select></div>
       <div id="trophy-tabs" class="tabs"></div>
@@ -635,7 +886,7 @@
   <div id="tasks" class="screen center dim">
     <div class="panel frame" style="max-width:980px">
       <h2 class="ribbon">Tarefas</h2>
-      <button class="btn round back" data-go="menu" aria-label="Voltar">←</button>
+      <button class="btn back" data-go="menu"><kbd class="k">Esc</kbd>Voltar</button>
       <div class="task-cols">
         <div class="task-col day"><div class="task-head"><b>Hoje</b><small id="task-day-left"></small><i id="task-streak"></i></div><div id="task-day"></div><div id="task-day-bonus" class="task-bonus"></div></div>
         <div class="task-col week"><div class="task-head"><b>Esta semana</b><small id="task-week-left"></small></div><div id="task-week"></div><div id="task-week-bonus" class="task-bonus"></div></div>
@@ -646,7 +897,7 @@
   <div id="bestiary" class="screen center dim">
     <div class="panel frame" style="max-width:980px">
       <h2 class="ribbon">Bestiário</h2>
-      <button class="btn round back" data-go="menu" aria-label="Voltar">←</button>
+      <button class="btn back" data-go="menu"><kbd class="k">Esc</kbd>Voltar</button>
       <div id="beast-tabs" class="tabs"></div>
       <p id="beast-hint" class="shop-hint"></p>
       <div id="beast-body"></div>
@@ -656,7 +907,7 @@
   <div id="settings" class="screen center dim">
     <div class="panel frame" style="max-width:560px">
       <h2 class="ribbon">Configurações</h2>
-      <button class="btn round back" data-back aria-label="Voltar">←</button>
+      <button class="btn back" data-back><kbd class="k">Esc</kbd>Voltar</button>
       <h3>Visual</h3>
       <div class="settings">
         <label>Estilo</label>
@@ -689,7 +940,7 @@
   <div id="howto" class="screen center dim">
     <div class="panel parch scroll" style="max-width:620px">
       <h2 class="ribbon">Como jogar</h2>
-      <button class="btn round back" data-back aria-label="Voltar">←</button>
+      <button class="btn back" data-back><kbd class="k">Esc</kbd>Voltar</button>
       <h3>Objetivo</h3>
       <p>Siga as colunas de luz e erga as <b>3 Pedras do Memorial</b>. Então o chefe aparece. Se você demorar, ele chega furioso aos 10:00.</p>
       <h3>Controles</h3>
@@ -773,6 +1024,7 @@
       <div id="end-evo" class="end-evo"></div>
       <div id="end-den" class="end-den"></div>
       <div id="end-report" class="build"></div>
+      <p id="end-online" class="end-online"></p>
       <div id="end-trophies" class="end-tro"></div>
       <div class="row-btns mid nav">
         <button id="again" class="btn primary">Jogar de novo</button>
