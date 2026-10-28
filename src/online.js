@@ -15,6 +15,7 @@ async function rpc(name, body) {
     method: 'POST',
     headers: { apikey: cfg.key, Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    keepalive: true,
   });
   const data = await r.json().catch(() => null);
   if (!r.ok) throw new Error(data?.message || `erro ${r.status}`);
@@ -31,9 +32,13 @@ export const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 _.-]{2,16}$/; // the same rul
 
 // One finished run. Sent when the run ends; kept in profile.pending and sent later if the network fails.
 export async function submitRun(profile, run) {
-  if (!onlineOn() || !profile.name) return 'offline';
-  const body = { p_player: profile.pid, p_name: profile.name, p_title: run.title || '', p_frame: run.frame || '', p_map: run.map, p_mode: run.mode,
+  if (!onlineOn()) return 'offline';
+  const body = { p_player: profile.pid, p_name: profile.name || '', p_title: run.title || '', p_frame: run.frame || '', p_map: run.map, p_mode: run.mode,
     p_diff: run.diff, p_hero: run.hero, p_kills: run.kills, p_seconds: run.seconds, p_won: run.won };
+  if (!profile.name) {
+    (profile.pending ??= []).push(body);
+    return 'sem_nome';
+  }
   try {
     await rpc('submit_run', body);
     return 'sent';
@@ -43,9 +48,11 @@ export async function submitRun(profile, run) {
   }
 }
 export async function flushPending(profile) {
-  if (!onlineOn() || !profile.pending?.length) return;
+  if (!onlineOn() || !profile.name || !profile.pending?.length) return;
   const left = [];
   for (const body of profile.pending.splice(0, 10)) {
+    body.p_name = profile.name;
+    body.p_player = profile.pid;
     try { await rpc('submit_run', body); } catch (e) { if (/Failed to fetch|NetworkError|erro 5/.test(e.message)) left.push(body); }
   }
   profile.pending.push(...left);

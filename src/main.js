@@ -1030,7 +1030,7 @@ const MENU_GUIDE = [
   ['#menu-purse', 'Denários', 'A moeda do Mercado. Você ganha ao fim de cada partida (mais quanto mais longe chegar), ao erguer as pedras, vencer chefes e ganhar troféus.'],
   ['[data-go="shop"]', 'Mercado', 'Gaste denários em melhorias permanentes, ferramentas para as cartas, armas novas e itens para levar no alforje.'],
   ['#menu [data-go="trophies"]', 'Troféus', 'Conquistas abrem heróis, cenários e relíquias, e cada uma paga denários.'],
-  ['#season', 'Temporada', 'O ranking online do mês: abates, vitórias mais rápidas e Sobrevivência. Escolha seu nome clicando no seu perfil, lá em cima.'],
+  ['#season', 'Temporada', 'O ranking online do mês: abates e Sobrevivência. Escolha seu nome clicando no seu perfil, lá em cima.'],
   ['#menu [data-go="setup"]', 'Jogar', 'Escolha o cenário, o modo, a dificuldade e o herói. Boa jornada!'],
 ];
 const SHOP_GUIDE = [
@@ -1083,7 +1083,20 @@ addEventListener('resize', () => { if (coachOn) showGuide(); });
 const BACK = { setup: 'menu', 'hero-pick': 'setup', shop: 'menu', trophies: 'menu', tasks: 'menu', bestiary: 'menu', ranking: 'menu', settings: 'prev', howto: 'prev' };
 // Today's challenge: one open map pays 50% more denários all day (the same map for everyone).
 const EVENT_MAP = (() => { const open = Object.keys(BIOMES).filter((id) => isOpen('map', id)); return open[hashStr(`evento${dayKey()}`) % open.length]; })();
-profile.pid ??= crypto.randomUUID?.() ?? `${Date.now().toString(16)}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`;
+const makeUUID = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try { return crypto.randomUUID(); } catch {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+};
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+if (!profile.pid || !UUID_RE.test(profile.pid)) {
+  profile.pid = makeUUID();
+  saveProfile();
+}
 const timeLeft = (to) => { const m = Math.max(0, Math.round((to - Date.now()) / 60000)); return m >= 1440 ? `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h` : `${Math.floor(m / 60)} h ${m % 60} min`; };
 function renderMenu() {
   $('pp-face').src = ICON.face[selHero];
@@ -1113,8 +1126,10 @@ $('event-card').onclick = () => (EVENT_MAP === BIOME_ID ? go('setup') : reload({
 $('fs-btn').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
 $('profile-pill').onclick = () => askName();
 
-// ---------- Rankings ----------
-const BOARDS = { abates: ['Abates', 'abates'], relogio: ['Contra o relógio', 'vitória mais rápida'], sobrevivencia: ['Sobrevivência', 'mais tempo de pé'] };
+const BOARDS = {
+  abates: ['Abates', 'abates acumulados em qualquer modo'],
+  sobrevivencia: ['Sobrevivência', 'maior tempo de pé no Sobrevivência'],
+};
 const boardValue = (board, v) => (board === 'abates' ? Number(v).toLocaleString('pt-BR') : fmt(v));
 function rankRow(r, board) {
   const tier = r.pos <= 3 ? ` p${r.pos}` : '';
@@ -1124,6 +1139,7 @@ function rankRow(r, board) {
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 let seasonTab = 'abates';
 async function renderSeason() {
+  if (!BOARDS[seasonTab]) seasonTab = 'abates';
   $('season-name').textContent = `Temporada de ${seasonName(seasonKey())}`;
   $('season-left').textContent = `Termina em ${timeLeft(seasonEnd())}`;
   $('season-tabs').replaceChildren(...Object.entries(BOARDS).map(([k, [name]]) => {
@@ -1148,6 +1164,7 @@ async function renderSeason() {
 let rankTab = 'abates';
 let rankMap = '';
 async function renderRanking() {
+  if (!BOARDS[rankTab]) rankTab = 'abates';
   $('rank-season').textContent = `Temporada de ${seasonName(seasonKey())}`;
   $('rank-left').textContent = `Termina em ${timeLeft(seasonEnd())} · ${BOARDS[rankTab][1]}`;
   $('rank-name').textContent = profile.name || 'sem nome (não aparece no ranking)';
@@ -1211,6 +1228,12 @@ $('name-ok').onclick = (e) => {
   profile.name = v;
   saveProfile();
   clearBoards();
+  flushPending(profile).then(() => {
+    clearBoards();
+    if (state === 'menu') renderSeason();
+    if (state === 'ranking') renderRanking();
+    saveProfile();
+  });
   if (state === 'menu') renderMenu();
   if (state === 'ranking') renderRanking();
 };
@@ -3584,13 +3607,34 @@ function endScreen(title, text, verse, won = false) {
   // The season's ranking: this run goes online (or waits for the network).
   const online = $('end-online');
   if (!onlineOn()) online.textContent = '';
-  else if (!profile.name) online.innerHTML = 'Escolha um nome no Ranking para suas partidas contarem na temporada.';
   else {
-    online.textContent = 'Enviando ao ranking…';
     const lookF = heroRec(P.hero).look.frame;
-    submitRun(profile, { map: BIOME_ID, mode: SURV ? 'surv' : 'classic', diff: DIFF_ID, hero: P.hero, kills: P.kills, seconds: Math.floor(time), won,
-      title: titleOf(), frame: lookF && hasCosmetic(lookF) ? lookF : '' })
-      .then((r) => { online.textContent = r === 'sent' ? `Partida registrada na temporada de ${seasonName(seasonKey())}.` : `Ranking: ${r}`; clearBoards(); saveProfile(); });
+    const runData = { map: BIOME_ID, mode: SURV ? 'surv' : 'classic', diff: DIFF_ID, hero: P.hero, kills: P.kills, seconds: Math.floor(time), won,
+      title: titleOf(), frame: lookF && hasCosmetic(lookF) ? lookF : '' };
+    if (!profile.name) {
+      online.innerHTML = '<button id="end-pick-name" style="color:var(--gold);text-decoration:underline;cursor:pointer;background:none;border:none;font:inherit;font-weight:bold">Escolha um nome</button> para esta partida contar na temporada!';
+      $('end-pick-name').onclick = () => {
+        askName();
+        const baseOk = $('name-ok').onclick;
+        $('name-ok').onclick = (e) => {
+          baseOk(e);
+          if (profile.name) {
+            online.textContent = 'Enviando ao ranking…';
+            submitRun(profile, runData).then((r) => {
+              online.textContent = r === 'sent' ? `Partida registrada na temporada de ${seasonName(seasonKey())}.` : `Ranking: ${r}`;
+              clearBoards();
+              saveProfile();
+            });
+          }
+        };
+      };
+      submitRun(profile, runData); // queues in profile.pending
+      saveProfile();
+    } else {
+      online.textContent = 'Enviando ao ranking…';
+      submitRun(profile, runData)
+        .then((r) => { online.textContent = r === 'sent' ? `Partida registrada na temporada de ${seasonName(seasonKey())}.` : `Ranking: ${r}`; clearBoards(); saveProfile(); });
+    }
   }
   show('end');
 }
