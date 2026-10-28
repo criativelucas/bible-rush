@@ -228,6 +228,68 @@ def mobs():
     out('mobs', m)
     bone_mobs()
     jericho_mobs()
+    new_mobs()
+
+
+def tower_shield(m, h, face, rim, emblem=None):
+    """A tall shield carried in front of the body (not swinging): the shield-bearer's wall."""
+    m.part('box', 0.74 * h, 1.05 * h, 0.07 * h, p=(-0.06 * h, 0.82 * h, 0.3 * h), color=face, bevel=0.03 * h)
+    m.part('box', 0.78 * h, 0.06 * h, 0.09 * h, p=(-0.06 * h, 1.33 * h, 0.3 * h), color=rim)
+    m.part('box', 0.78 * h, 0.06 * h, 0.09 * h, p=(-0.06 * h, 0.31 * h, 0.3 * h), color=rim)
+    for x in (-0.43, 0.31):
+        m.part('box', 0.06 * h, 1.05 * h, 0.09 * h, p=(x * h, 0.82 * h, 0.3 * h), color=rim)
+    if emblem:
+        m.part('ball', 0.1 * h, 1, p=(-0.06 * h, 0.86 * h, 0.35 * h), color=emblem)
+
+
+def new_mobs():
+    # Runners (type 5): small and quick, they come in packs. Shield-bearers (type 6): slow, a wall of bronze.
+    m = humanoid(Model('mob_5_ela', 51), 0.85, dict(skin=SKIN, top=0xb8643a, bottom=CREAM, leg=SKIN, feet=LEATHER, beard=0x4a2a18))
+    m.part('box', 0.26, 0.05, 0.25, p=(0, 1.17, 0), color=RED)
+    for k in range(3):
+        m.part('box', 0.03, 0.14, 0.02, p=(-0.06 + k * 0.06, 1.27, -0.09), r=(0, 0, (k - 1) * 0.3), color=WHITE)
+    for dz in (0.0, 0.06):  # two javelins
+        m.part('cyl', 0.014, 0.014, 1.1, 6, p=(0.29, 0.8, 0.1 + dz), r=(0.15, 0, 0), color=WOOD, **RH(0.85))
+        m.part('cone', 0.035, 0.12, 5, p=(0.29, 1.37, 0.18 + dz), r=(0.15, 0, 0), color=IRON, **RH(0.85))
+    out('mobs', m)
+    m = humanoid(Model('mob_5_mar', 52), 0.85, dict(skin=SKIN3, top=SKIN3, sleeve=SKIN3, bottom=WHITE, leg=SKIN3, feet=LEATHER, belt=BLUE, buckle=GOLD))
+    m.part('box', 0.26, 0.05, 0.25, p=(0, 1.17, 0), color=BLUE)
+    m.part('box', 0.05, 0.3, 0.02, p=(0.29, 0.5, 0.1), color=0xd8dee6, **RH(0.85))
+    m.part('box', 0.1, 0.03, 0.05, p=(0.29, 0.66, 0.1), color=GOLD, **RH(0.85))
+    out('mobs', m)
+    m = skeleton(Model('mob_5_ossos', 53), 0.85, dict(top=RAG, sleeve=RAG))
+    m.part('box', 0.3, 0.2, 0.28, p=(0, 1.17, -0.02), color=RAG, bevel=0.05)
+    m.part('box', 0.05, 0.3, 0.02, p=(0.29, 0.5, 0.1), color=RUST, **RH(0.85))
+    out('mobs', m)
+    m = humanoid(Model('mob_5_jerico', 54), 0.85, dict(skin=SKIN2, top=PURPLE, bottom=CREAM, leg=SKIN2, feet=LEATHER, beard=0x2a1a10))
+    m.part('box', 0.3, 0.22, 0.3, p=(0, 1.18, -0.02), color=PURPLE2, bevel=0.06)  # a spy's hood
+    m.part('box', 0.05, 0.3, 0.02, p=(0.29, 0.5, 0.1), color=0xd8dee6, **RH(0.85))
+    out('mobs', m)
+
+    m = humanoid(Model('mob_6_ela', 61), 1.25, dict(skin=SKIN, top=0x8a5a32, bottom=0x5a3a20, leg=SKIN, feet=LEATHER, beard=0x3a2214, belt=BRONZE))
+    m.part('box', 0.4, 0.12, 0.38, p=(0, 1.85, 0), color=BRONZE, bevel=0.02)
+    feathers(m, 1.25, 2.02)
+    tower_shield(m, 1.25, 0x8a5a32, BRONZE, BRONZE)
+    m.part('cyl', 0.022, 0.022, 1.3, 6, p=(0.4, 1.2, 0.16), color=WOOD, **RH(1.25))
+    m.part('cone', 0.05, 0.16, 6, p=(0.4, 1.92, 0.16), color=IRON, **RH(1.25))
+    out('mobs', m)
+    m = humanoid(Model('mob_6_mar', 62), 1.25, dict(skin=SKIN3, top=GOLD, sleeve=SKIN3, bottom=WHITE, leg=SKIN3, feet=LEATHER, belt=BLUE, buckle=GOLD))
+    nemes(m, 1.25, 1.84)
+    tower_shield(m, 1.25, 0xeae4d8, GOLD, BLUE)
+    m.part('torus', 0.18, 0.035, PI * 1.1, 10, p=(0.4, 0.65, 0.25), r=(0, PI / 2, PI), color=BRONZE, **RH(1.25))
+    out('mobs', m)
+    m = skeleton(Model('mob_6_ossos', 63), 1.25, dict(bottom=0x3a2e24))
+    m.part('box', 0.4, 0.16, 0.38, p=(0, 1.86, 0), color=RUST, bevel=0.04)
+    tower_shield(m, 1.25, 0x5e4c3c, BONE3)
+    for k in range(5):  # a shield of ribs
+        m.part('box', 0.62 * 1.25, 0.035 * 1.25, 0.03, p=(-0.06 * 1.25, (0.5 + k * 0.17) * 1.25, 0.35 * 1.25), color=BONE2)
+    out('mobs', m)
+    m = humanoid(Model('mob_6_jerico', 64), 1.25, dict(skin=SKIN2, top=BRONZE, sleeve=PURPLE, bottom=PURPLE, leg=SKIN2, feet=LEATHER, beard=BLACK, belt=GOLD))
+    m.part('cone', 0.22, 0.38, 8, p=(0, 1.98, 0), color=BRONZE)
+    tower_shield(m, 1.25, PURPLE, BRONZE, GOLD)
+    m.part('cyl', 0.022, 0.022, 1.4, 6, p=(0.4, 1.2, 0.16), color=WOOD, **RH(1.25))
+    m.part('cone', 0.05, 0.18, 6, p=(0.4, 1.97, 0.16), color=IRON, **RH(1.25))
+    out('mobs', m)
 
 
 PURPLE, PURPLE2, BRICK = 0x6a3a6a, 0x8a4a8a, [0xc9a46e, 0xbf9963, 0xd2ad78, 0xb58e5a]  # Jericho

@@ -47,15 +47,19 @@ export async function submitRun(profile, run) {
     return e.message;
   }
 }
+// The oldest waiting run, one per visit (the server refuses runs that overlap in time).
 export async function flushPending(profile) {
   if (!onlineOn() || !profile.name || !profile.pending?.length) return;
-  const left = [];
-  for (const body of profile.pending.splice(0, 10)) {
-    body.p_name = profile.name;
-    body.p_player = profile.pid;
-    try { await rpc('submit_run', body); } catch (e) { if (/Failed to fetch|NetworkError|erro 5/.test(e.message)) left.push(body); }
+  profile.pending = profile.pending.slice(-10);
+  const body = profile.pending[0];
+  body.p_name = profile.name; // runs played before choosing a name count under it
+  body.p_player = profile.pid;
+  try {
+    await rpc('submit_run', body);
+    profile.pending.shift();
+  } catch (e) {
+    if (!/Failed to fetch|NetworkError|erro 5/.test(e.message)) profile.pending.shift(); // refused for good: drop it
   }
-  profile.pending.push(...left);
 }
 
 // board: 'abates' | 'relogio' | 'sobrevivencia'; map: a map id or null for all. Rows: pos, me, name, title,

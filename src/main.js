@@ -4,7 +4,7 @@ import {
   HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL, TROPHIES, TIERS, openSet, migrateProfile, exportCode, importCode, unlockedBy,
   TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
   STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, researchOf, MASTERY, masteryOf,
-  TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES, hashStr,
+  TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES, hashStr, MOB_TYPES, BEAST_TYPE,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
@@ -223,7 +223,8 @@ function instanced(geo, mat, max, colors = false, shadow = false) {
   return m;
 }
 const enemyMat = M.toon(0xffffff, { walk: true, fade: true });
-const enemyMeshes = [0, 1, 2, 3].map((t) => instanced(ASSETS.mobs[`mob_${t}_${BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true));
+const enemyMeshes = []; // by type (sparse: the boss is a rig)
+for (const t of MOB_TYPES) enemyMeshes[t] = instanced(ASSETS.mobs[`mob_${t}_${BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true);
 const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca'];
 const shotMeshes = PROJ.map((k) => instanced(ASSETS.items[`proj_${k}`], M.toon(), MAX_SHOTS, true));
 const eshotMesh = instanced(new THREE.IcosahedronGeometry(0.25, 0), new THREE.MeshBasicMaterial({ color: 0xff3fb4 }), MAX_ESHOTS);
@@ -512,7 +513,7 @@ const ICON = (() => {
     over?.(ctx, size);
     return cv.toDataURL();
   }
-  const out = { hero: {}, face: {}, weapon: {}, relic: {} };
+  const out = { hero: {}, face: {}, card: {}, weapon: {}, relic: {} };
   const item = (name) => M.solid(ASSETS.items[name], M.toon());
   for (const [id, w] of Object.entries(WEAPONS)) { // evolutions: the base weapon with a gold outline and a star
     out.weapon[id] = snap(item(`weapon_${w.from ?? id}`), w.evo
@@ -531,11 +532,13 @@ const ICON = (() => {
   // close-up of the model's head. Done again after evolving or changing clothes.
   out.redoHero = (id) => {
     out.hero[id] = snap(HERO_RIGS[id].group, { yaw: 0.42, pitch: 0.1, size: 32 });
+    const tall = new THREE.Box3().setFromObject(HERO_RIGS[id].group).max.y;
+    out.card[id] = snap(HERO_RIGS[id].group, { yaw: 0.5, pitch: 0.06, size: 128, center: new THREE.Vector3(0, tall * 0.5, 0), r: tall * 0.52 }); // the selection card's picture
     if (SPRITES[id] && !gearIds(id).length) out.face[id] = spriteFace(id);
     else {
       const top = new THREE.Box3().setFromObject(HERO_RIGS[id].group).max.y;
       const head = HERO_RIGS[id].group.getObjectByName('head').getWorldPosition(new THREE.Vector3()).y;
-      out.face[id] = snap(HERO_RIGS[id].group, { yaw: 0.25, pitch: 0.05, size: 32, center: new THREE.Vector3(0, head + 0.17, 0.04), r: 0.3 + (top - head > 0.45 ? 0.06 : 0) });
+      out.face[id] = snap(HERO_RIGS[id].group, { yaw: 0.25, pitch: 0.05, size: 32, center: new THREE.Vector3(0, head + 0.19, 0.05), r: 0.34 + (top - head > 0.55 ? 0.06 : 0) });
     }
   };
   for (const id in HEROES) out.redoHero(id);
@@ -830,7 +833,7 @@ function renderHeroPick() {
     const b = document.createElement('button');
     b.className = `hcard${id === selHero ? ' sel' : ''}${open ? '' : ' locked'}`;
     b.style.setProperty('--hc', `#${h.color.toString(16).padStart(6, '0')}`);
-    b.innerHTML = `<div class="top"><span class="num">#${k + 1}</span><img src="${ICON.hero[id]}" alt=""></div>
+    b.innerHTML = `<div class="top"><span class="num">#${k + 1}</span><img src="${ICON.card[id]}" alt=""></div>
       <div class="plate"><small>${open ? h.role : 'Bloqueado'}</small><b>${h.name}</b><em>${STAGES[id].names[stageOf(id)]}</em></div>
       <div class="body">${open ? `<small>Passiva</small><b>${h.passive[0]}</b><span>${h.passive[1]}</span>
         <div class="atk"><img src="${ICON.weapon[h.weapon]}" alt=""><span><small>Ataque inicial</small><br>${WEAPONS[h.weapon].name}</span></div>`
@@ -1138,6 +1141,8 @@ function rankRow(r, board) {
 }
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 let seasonTab = 'abates';
+let seasonAsk = 0;
+let rankAsk = 0;
 async function renderSeason() {
   if (!BOARDS[seasonTab]) seasonTab = 'abates';
   $('season-name').textContent = `Temporada de ${seasonName(seasonKey())}`;
@@ -1156,8 +1161,10 @@ async function renderSeason() {
     return;
   }
   list.innerHTML = '<div class="off">Carregando…</div>';
+  const ask = ++seasonAsk;
   try {
-    const rows = await leaderboard(seasonTab, seasonKey(), null, profile, 7);
+    const rows = await leaderboard(seasonTab, seasonKey(), null, profile, 12);
+    if (ask !== seasonAsk) return; // a newer tab was picked meanwhile
     list.innerHTML = rows.length ? rows.map((r) => rankRow(r, seasonTab)).join('') : '<div class="off">Ninguém ainda nesta temporada. Seja o primeiro!</div>';
   } catch (e) { list.innerHTML = `<div class="off">Sem conexão com o ranking (${esc(e.message)}).</div>`; }
 }
@@ -1180,8 +1187,10 @@ async function renderRanking() {
   if (!onlineOn()) { body.innerHTML = '<div class="off">O ranking online ainda não foi ligado neste site. Veja como no README do projeto.</div>'; return; }
   body.innerHTML = '<div class="off">Carregando…</div>';
   claimSeasonPrize();
+  const ask = ++rankAsk;
   try {
     const rows = await leaderboard(rankTab, seasonKey(), rankMap || null, profile, 50);
+    if (ask !== rankAsk) return;
     const top = rows.filter((r) => r.pos <= 50);
     const mine = rows.find((r) => r.me && r.pos > 50);
     body.innerHTML = rows.length ? `${top.map((r) => rankRow(r, rankTab)).join('')}${mine ? `<div class="gap">…</div>${rankRow(mine, rankTab)}` : ''}` : '<div class="off">Ninguém ainda nesta temporada. Seja o primeiro!</div>';
@@ -1403,15 +1412,16 @@ function renderBestiary() {
   if (beastTab === 'inimigos') {
     $('beast-hint').textContent = 'Cada inimigo derrotado conta para a pesquisa do seu cenário. Complete as seis e ganhe a moldura do cenário para o retrato do herói.';
     $('beast-body').innerHTML = Object.entries(BIOMES).map(([biome, b]) => {
-      const names = [...BEAST_NAMES[biome], 'Campeão', b.boss];
+      const names = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 4, escudeiro: 5 };
       const done = researchOf(profile, biome);
-      const cells = BEAST_KINDS.map((k, i) => {
+      const cells = BEAST_KINDS.map((k) => {
         const n = kills[`${biome}:${k}`] || 0;
         const goal = RESEARCH[k];
-        const icon = i < 4 ? mobIcon(i, biome) : i === 4 ? mobIcon(3, biome) : 'assets/ui/skull.png';
-        return cell(icon, names[i], `${n} derrotado${n === 1 ? '' : 's'}`, n > 0, n >= goal, `<div class="meter" title="${Math.min(n, goal)} de ${goal}"><i style="width:${Math.min(1, n / goal) * 100}%"></i></div>`);
+        const icon = k === 'chefe' ? 'assets/ui/skull.png' : mobIcon(BEAST_TYPE[k], biome);
+        const label = k === 'chefe' ? b.boss : k === 'elite' ? 'Campeão' : BEAST_NAMES[biome][names[k]];
+        return cell(icon, label, `${n} derrotado${n === 1 ? '' : 's'}`, n > 0, n >= goal, `<div class="meter" title="${Math.min(n, goal)} de ${goal}"><i style="width:${Math.min(1, n / goal) * 100}%"></i></div>`);
       }).join('');
-      return `<div class="beast-map"><h3>${b.name}<small>${done ? 'Pesquisa completa · moldura ganha' : `${BEAST_KINDS.filter((k) => (kills[`${biome}:${k}`] || 0) >= RESEARCH[k]).length} de 6 pesquisados`}</small></h3><div class="beast-grid">${cells}</div></div>`;
+      return `<div class="beast-map"><h3>${b.name}<small>${done ? 'Pesquisa completa · moldura ganha' : `${BEAST_KINDS.filter((k) => (kills[`${biome}:${k}`] || 0) >= RESEARCH[k]).length} de ${BEAST_KINDS.length} pesquisados`}</small></h3><div class="beast-grid">${cells}</div></div>`;
     }).join('');
   } else if (beastTab === 'armas') {
     const used = profile.bestiary.w ?? {};
@@ -1712,18 +1722,33 @@ function updatePlayer(dt) {
 
   // Rock faces: walking up one does nothing (the uphill part of the motion is dropped and the face
   // pushes you off), and you cannot jump from one. Ramps, the Rocks of Horeb or the long way round lead up.
+  // Holding Space against the rock climbs it, slowly: the way up when there is no ramp (enemies cannot follow).
   P.onCliff = false;
-  if (p.y - terrainH(p.x, p.z) < 0.5) {
+  P.climbing = false;
+  P.cliffHint = false;
+  {
     const [gx, gz] = slope(p.x + v.x * dt, p.z + v.z * dt);
     const gl = Math.hypot(gx, gz);
     if (gl > CLIFF) {
       const ux = gx / gl;
       const uz = gz / gl;
-      const up = v.x * ux + v.z * uz;
-      if (up > 0) { v.x -= up * ux; v.z -= up * uz; }
-      v.x -= ux * 10 * dt;
-      v.z -= uz * 10 * dt;
-      P.onCliff = steepAt(p.x, p.z);
+      const feet = p.y - terrainH(p.x, p.z);
+      const onFace = feet < 0.5 || terrainH(p.x + ux * 0.7, p.z + uz * 0.7) - p.y > -0.3; // standing on it, or right against it
+      const pushing = wl > 0 && wx * ux + wz * uz > 0.35;
+      if (onFace && pushing && keys.has('Space')) {
+        P.climbing = true;
+        v.x = ux * 2.4;
+        v.z = uz * 2.4;
+        v.y = 5;
+        if (random() < dt * 8) burst(p.x + ux * 0.4, p.y + 0.3, p.z + uz * 0.4, 0xb8a27a, 1, 1.5, 0.1, 1);
+      } else if (feet < 0.5) {
+        const up = v.x * ux + v.z * uz;
+        if (up > 0) { v.x -= up * ux; v.z -= up * uz; }
+        v.x -= ux * 10 * dt;
+        v.z -= uz * 10 * dt;
+        P.onCliff = steepAt(p.x, p.z);
+        P.cliffHint = pushing;
+      }
     }
   }
   const wantJump = P.jumpBuffer > 0 || keys.has('Space'); // holding Space = auto bunny hop
@@ -1742,7 +1767,7 @@ function updatePlayer(dt) {
 
   const hs2 = Math.hypot(v.x, v.z);
   if (hs2 > MAX_SPEED) { v.x *= MAX_SPEED / hs2; v.z *= MAX_SPEED / hs2; }
-  v.y -= GRAVITY * dt;
+  if (!P.climbing) v.y -= GRAVITY * dt;
   p.addScaledVector(v, dt);
 
   // Collider sides push out; low rock tops are floor.
@@ -2034,6 +2059,7 @@ function damage(i, base, kx = 0, kz = 0, knock = 0, forceCrit = false) {
   const type = ENEMIES[E.type[i]];
   let dmg = base * globalDmg();
   if (P.hero === 'davi' && (type.big || E.elite[i])) dmg *= 1.5;
+  if (type.shield && dmgSrc !== 'miracle') dmg *= 1 - type.shield; // the shield-bearer's wall (miracles go through)
   const crit = forceCrit || random() < P.st.crit;
   if (crit) dmg *= 2 + P.st.critDmg; // Tábuas da Lei
   E.hp[i] -= dmg;
@@ -2203,7 +2229,17 @@ function director(dt) {
   const k = (1 + night * 0.25) * (boss.spawned ? 0.5 : 1) * wave;
   const cap = Math.min(MAX_ENEMIES * 0.5, (14 + time * 0.5) * k);
   spawnAcc += dt * (0.8 + time / 40) * k * P.mods.spawn * (SURV && time > ENDLESS_NIGHT ? 2 : 1);
-  for (; spawnAcc >= 1; spawnAcc--) if (E.n < cap) spawnEnemy(pickWeighted(spawnWeights(time), random));
+  for (; spawnAcc >= 1; spawnAcc--) {
+    if (E.n >= cap) continue;
+    const t = pickWeighted(spawnWeights(time), random);
+    const i = spawnEnemy(t);
+    for (let k = 1; i >= 0 && k < (ENEMIES[t].pack || 1); k++) { // runners arrive as a pack
+      const a = random() * Math.PI * 2;
+      const x = E.x[i] + Math.cos(a) * 1.6;
+      const z = E.z[i] + Math.sin(a) * 1.6;
+      if (walkable(x, z) && !flow.blocked[flow.index(x, z)]) spawnEnemy(t, x, z);
+    }
+  }
   if (elitesSpawned < 2 && time >= 180 * (elitesSpawned + 1)) { elitesSpawned++; spawnElite(); }
   if (!boss.spawned && time >= nextCarrier) { nextCarrier += 150; spawnCarrier(); }
   if (time >= melCarrier) { melCarrier = Infinity; spawnCarrier(); }
@@ -2472,7 +2508,7 @@ function updateEnemyShots(dt) {
   }
 }
 
-const DEATH = B.death;
+const DEATH = [...B.death, 0, B.death[0], B.death[3]]; // the new kinds bleed like their cousins
 function reapEnemies() {
   for (let i = 0; i < E.n; ) {
     if (E.hp[i] > 0) { i++; continue; }
@@ -3083,7 +3119,7 @@ const STONE_DONE = new THREE.Color(0xf2c14e);
 const CLOUD = new THREE.Color(0xffffff);
 const FIRE = new THREE.Color(0xff8a3d);
 function updateWorld(dt) {
-  promptText = '';
+  promptText = P.cliffHint ? 'Paredão: segure Espaço encostado na rocha para escalar' : '';
   const p = P.pos;
   for (const s of stones) {
     if (s.done) continue;
@@ -3618,13 +3654,8 @@ function endScreen(title, text, verse, won = false) {
         const baseOk = $('name-ok').onclick;
         $('name-ok').onclick = (e) => {
           baseOk(e);
-          if (profile.name) {
-            online.textContent = 'Enviando ao ranking…';
-            submitRun(profile, runData).then((r) => {
-              online.textContent = r === 'sent' ? `Partida registrada na temporada de ${seasonName(seasonKey())}.` : `Ranking: ${r}`;
-              clearBoards();
-              saveProfile();
-            });
+          if (profile.name) { // the run is already waiting in profile.pending: the name's handler sends it
+            online.textContent = `Partida enviada à temporada de ${seasonName(seasonKey())} com o nome ${profile.name}.`;
           }
         };
       };
@@ -3653,7 +3684,7 @@ function dmgRows() {
       <div class="meter"><i style="width:${(v / total) * 100}%"></i></div></div>`;
   }).join('');
 }
-const KILL_NAME = { soldado: 'Soldados', fundeiro: 'Atiradores', carro: 'Carros e investidas', gigante: 'Gigantes', elite: 'Campeões e tesoureiros' };
+const KILL_NAME = { soldado: 'Soldados', fundeiro: 'Atiradores', carro: 'Carros e investidas', gigante: 'Gigantes', batedor: 'Batedores', escudeiro: 'Escudeiros', elite: 'Campeões e tesoureiros' };
 function killRows() {
   const rows = Object.entries(P.killsBy).sort((a, b) => b[1] - a[1]);
   return rows.length ? `<div class="kills">${rows.map(([k, n]) => `<span>${KILL_NAME[k] ?? k}</span><b>${n}</b>`).join('')}</div>` : '<small>Nenhum.</small>';
@@ -3960,7 +3991,7 @@ const STUN = new THREE.Color(0.55, 0.55, 0.62);
 const SLOW = new THREE.Color(0.6, 0.85, 1.5);
 const WIND = new THREE.Color(2.2, 1.1, 0.4);
 const FLASH = new THREE.Color(3, 3, 3);
-const counts = [0, 0, 0, 0];
+const counts = ENEMIES.map(() => 0);
 function syncMeshes(dt) {
   if (heroRig) {
     if (runStarted) {

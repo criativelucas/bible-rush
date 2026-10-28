@@ -388,7 +388,10 @@ export const ENEMIES = [
   { id: 'carro', hp: 45, speed: 3.6, speedVar: 0.6, dmg: 18, r: 0.8, h: 1.7, xp: 3, mass: 0.6, charger: true },
   { id: 'gigante', hp: 120, speed: 2, speedVar: 0.4, dmg: 22, r: 0.9, h: 2.7, xp: 6, mass: 0.25, big: true },
   { id: 'chefe', hp: 7000, speed: 2.6, speedVar: 0, dmg: 25, r: 1.4, h: 4.6, xp: 0, mass: 0, big: true, boss: true },
+  { id: 'batedor', hp: 9, speed: 5.4, speedVar: 0.8, dmg: 6, r: 0.36, h: 1.3, xp: 1, mass: 1.2, pack: 4 }, // runners: in packs
+  { id: 'escudeiro', hp: 75, speed: 2.2, speedVar: 0.3, dmg: 14, r: 0.62, h: 1.9, xp: 4, mass: 0.3, shield: 0.4 }, // shield-bearers: take 40% less
 ];
+export const MOB_TYPES = [0, 1, 2, 3, 5, 6]; // every kind but the boss (4), drawn from mobs.glb as mob_<type>_<map>
 
 // ---------- Biomes ----------
 export const smooth = (a, b, x) => {
@@ -410,13 +413,55 @@ export function along(x, z, ax, az, bx, bz, w) {
 }
 const ramps = (x, z, list, w = 4.2) => list.reduce((m, r) => Math.max(m, along(x, z, ...r, w)), 0);
 // A slope you can climb, and the stepped one you cannot: ramps blend back to the smooth slope.
-const stepped = (v, step, x, z, list) => {
+const stepped = (v0, step, x, z, list) => {
+  const v = Math.max(0, v0); // noise must not dig a whole step into the ground
   const t = terrace(v, step);
   return t + (v - t) * ramps(x, z, list);
 };
+// Smooth value noise in [-1, 1], its sums (fbm), sharp-crested ridges in [0, 1], and domain warping: the
+// shapes bend and break up instead of following neat circles and sine waves.
+const hash2 = (i, j) => {
+  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+export function noise(x, z) {
+  const i = Math.floor(x);
+  const j = Math.floor(z);
+  const fx = x - i;
+  const fz = z - j;
+  const u = fx * fx * (3 - 2 * fx);
+  const v = fz * fz * (3 - 2 * fz);
+  const a = hash2(i, j);
+  const b = hash2(i + 1, j);
+  const c = hash2(i, j + 1);
+  const d = hash2(i + 1, j + 1);
+  return (a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v) * 2 - 1;
+}
+export function fbm(x, z, oct = 3) {
+  let s = 0;
+  let a = 0.5;
+  let f = 1;
+  for (let k = 0; k < oct; k++) { s += a * noise(x * f + k * 17.3, z * f - k * 9.1); f *= 2.03; a *= 0.5; }
+  return s;
+}
+export function ridged(x, z, oct = 3) {
+  let s = 0;
+  let a = 0.55;
+  let f = 1;
+  for (let k = 0; k < oct; k++) { const n = 1 - Math.abs(noise(x * f - k * 7.7, z * f + k * 3.1)); s += a * n * n; f *= 2.1; a *= 0.45; }
+  return s;
+}
+const warp = (x, z, scale, amp) => [x + amp * fbm(x * scale, z * scale, 2), z + amp * fbm(x * scale + 31.4, z * scale + 57.2, 2)];
+// Rock pinnacles: [x, z, height]; terraced, they become sheer towers you climb or walk round.
+const pinnacles = (x, z, list) => list.reduce((m, [px, pz, h]) => Math.max(m, h * Math.exp(-((x - px) ** 2 + (z - pz) ** 2) / 16)), 0);
+const ELA_SPIRES = [[-40, 32, 15], [-34, 40, 11], [78, -30, 16], [-96, -14, 13], [24, 52, 12], [104, 30, 14], [-70, -52, 12]];
+const MAR_STACKS = [[96, 64, 11], [-30, 110, 9], [-104, -48, 12], [70, -92, 10], [112, -12, 9], [-84, 74, 10]]; // sea stacks off the cliffs
+const OSSOS_HOODOOS = [[22, 24, 13], [-26, -20, 12], [10, -32, 10], [-30, 14, 11], [40, -6, 14], [-12, 38, 9]]; // round the amphitheatre
+const COAST_RAMPS = [0.4, 1.9, 3.3, 4.6, 5.8].map((a) => [Math.cos(a) * 64, Math.sin(a) * 64, Math.cos(a) * 92, Math.sin(a) * 92]); // paths down to the beach
 const brookZ = (x) => 11 * Math.sin(x * 0.028) + 5;
 const wadi = (z) => 12 * Math.sin(z * 0.032) - 8;
-const CITY = { x: -28, z: -17, r: 17 }; // Jericho: its walls on their mound (a tell)
+const CITY = { x: -40, z: -30, r: 32 }; // Jericho: its walls on their mound (a tell), a real city now
 const OASIS = { x: 34, z: 25 }; // Elisha's spring (2 Rs 2:21)
 const jWadis = (x, z) => Math.max(Math.exp(-((z - 30 * Math.sin(x * 0.02) + 62) ** 2) / 22) * smooth(CITY.r + 10, CITY.r + 20, Math.hypot(x - CITY.x, z - CITY.z)),
   Math.exp(-((x - 18 * Math.sin(z * 0.03) - 84) ** 2) / 22)); // Jericho's two dry riverbeds
@@ -427,7 +472,8 @@ const ELA_RAMPS = [
   [58, -12, 58, -46], [-62, 24, -62, 58], // the two lookouts in the valley
 ];
 const OSSOS_RAMPS = [[-44, -30, -60, -6], [40, 20, 64, 4], [-70, 40, -90, 62], [70, -44, 92, -62], [8, -62, 24, -84], [-20, 70, -6, 92]];
-const JERICO_RAMPS = [[70, -60, 98, -78], [-84, 50, -104, 66], [20, 92, 26, 118], [-40, -88, -48, -114], [88, 40, 112, 46], [52, -36, 66, -48]];
+const JERICO_RAMPS = [[70, -60, 98, -78], [-84, 50, -104, 66], [20, 92, 26, 118], [-40, -88, -48, -114], [88, 40, 112, 46], [52, -36, 66, -48],
+  [CITY.x + CITY.r + 16, CITY.z, CITY.x + CITY.r - 4, CITY.z], [CITY.x - CITY.r - 16, CITY.z, CITY.x - CITY.r + 4, CITY.z]]; // up the tell to the two gates
 const dune = (x, z) => { // windward slope gentle, slip face steep: dunes you climb from one side and slide down the other
   const u = (x * 0.085 + 1.8 * Math.sin(z * 0.03) + 0.5 * Math.sin(z * 0.09 + x * 0.02)) / Math.PI;
   const f = u - Math.floor(u);
@@ -449,10 +495,15 @@ export const BIOMES = {
     water2: { shallow: 0x7fd6bf, deep: 0x3a8f9e },
     terrain(x, z) {
       const side = Math.abs(z - brookZ(x));
-      // The two armies' hills (1 Sm 17:3) rise in steps north and south of the brook, plus two lookouts
-      // in the valley; ramps lead up. The east is a ledge the brook falls from.
-      const v = 21 * smooth(24, 118, side) + 9 * smooth(100, 140, Math.abs(x)) * smooth(6, 16, side)
-        + 9 * Math.exp(-((x - 58) ** 2 + (z + 46) ** 2) / 240) + 9 * Math.exp(-((x + 62) ** 2 + (z - 58) ** 2) / 240);
+      // The two armies' hills (1 Sm 17:3) rise in broken, crooked steps north and south of the brook, with
+      // craggy tops, two lookouts and rock pinnacles in the valley; ramps lead up (or climb the rock).
+      // The east is a ledge the brook falls from.
+      const [wx, wz] = warp(x, z, 0.012, 22);
+      const wside = Math.abs(wz - brookZ(wx));
+      const v = 21 * smooth(24, 116, Math.max(wside, side * 0.8)) + 9 * smooth(100, 140, Math.abs(x)) * smooth(6, 16, side)
+        + 8 * ridged(wx * 0.024, wz * 0.024) * smooth(34, 70, side) + 2.4 * fbm(x * 0.035, z * 0.035) * smooth(10, 24, side)
+        + 9 * Math.exp(-((x - 58) ** 2 + (z + 46) ** 2) / 240) + 9 * Math.exp(-((x + 62) ** 2 + (z - 58) ** 2) / 240)
+        + pinnacles(x, z, ELA_SPIRES);
       return 1.4 * Math.sin(x * 0.035) * Math.cos(z * 0.032) + 0.7 * Math.sin(x * 0.09 + 1.3) * Math.sin(z * 0.08 + 0.7)
         + stepped(v, 5.2, x, z, ELA_RAMPS)
         + 6 * Math.exp(-((x - 30) ** 2 + (z + 24) ** 2) / 300) // slide hill near spawn
@@ -485,11 +536,16 @@ export const BIOMES = {
       // Dunes fill the middle of the island (not the spawn); an Egyptian rock plateau in steps to the west.
       const dunes = 6.5 * dune(x, z) * smooth(16, 30, r) * smooth(80, 56, r);
       const plateau = terrace(11 * smooth(30, 14, Math.hypot(x + 54, z + 34)), 5.2, 0.2);
-      const land = 2.2 + 1.1 * Math.sin(x * 0.045 + z * 0.015) * Math.cos(z * 0.035) + 0.5 * Math.sin(x * 0.12) * Math.sin(z * 0.1)
-        + 6 * Math.exp(-((x - 44) ** 2 + (z + 38) ** 2) / 420) + Math.max(dunes, plateau);
+      // The island stands on sandstone cliffs (paths lead down to the beach); sea stacks rise from the shallows.
+      const [wx, wz] = warp(x, z, 0.016, 12);
+      const rw = Math.hypot(wx, wz);
+      const cliff = terrace(4.6 * smooth(84, 72, rw), 4.6, 0.3);
+      const coast = cliff + (4.6 * smooth(84, 72, rw) - cliff) * ramps(x, z, COAST_RAMPS, 4.5);
+      const land = 1.4 + coast + 1.0 * fbm(x * 0.03, z * 0.03) + 0.4 * Math.sin(x * 0.12) * Math.sin(z * 0.1)
+        + 6 * Math.exp(-((x - 44) ** 2 + (z + 38) ** 2) / 420) * smooth(84, 70, rw) + Math.max(dunes, plateau);
       const shelf = -0.75 + 0.3 * Math.sin(x * 0.21) * Math.cos(z * 0.17); // wide turquoise shallows, ankle deep
-      const t = smooth(78, 94, r);
-      return land * (1 - t) + shelf * t - 7 * smooth(120, 134, r); // then the deep sea
+      const t = smooth(80, 94, r);
+      return land * (1 - t) + shelf * t - 7 * smooth(120, 134, r) + terrace(pinnacles(x, z, MAR_STACKS), 3.5, 0.3);
     },
     ground(h, ny, n, x, z) {
       if (h < -0.1) return 0xc9ab7c;
@@ -516,10 +572,12 @@ export const BIOMES = {
       const r = Math.hypot(x, z);
       // A canyon: long rock ridges in steps with gaps to pass through, a dry riverbed cutting a gorge
       // across them, and an open amphitheatre in the middle where the dead rise.
-      const ridge = Math.max(0, Math.sin(x * 0.085 + 1.2 * Math.sin(z * 0.028) + 0.6)) ** 2
+      const [wx, wz] = warp(x, z, 0.014, 16); // crooked ridges, broken crests, stone towers round the middle
+      const ridge = Math.max(0, Math.sin(wx * 0.085 + 1.2 * Math.sin(wz * 0.028) + 0.6)) ** 2
         * smooth(30, 44, r) * smooth(3, 10, Math.abs(x - wadi(z)))
         * (1 - Math.exp(-((z + 58) ** 2) / 50)) * (1 - Math.exp(-((z - 50) ** 2) / 50));
-      const v = 15 * ridge + 26 * smooth(86, 122, r) + 6 * Math.exp(-((x + 30) ** 2 + (z - 26) ** 2) / 260);
+      const v = 15 * ridge * (0.7 + 0.6 * ridged(wx * 0.03, wz * 0.03)) + 26 * smooth(86, 122, r + 9 * fbm(x * 0.02, z * 0.02))
+        + 6 * Math.exp(-((x + 30) ** 2 + (z - 26) ** 2) / 260) + pinnacles(x, z, OSSOS_HOODOOS);
       return 1.1 * Math.sin(x * 0.045 + 0.4) * Math.cos(z * 0.035) + 0.6 * Math.sin(x * 0.11) * Math.sin(z * 0.09 + 1.1)
         + stepped(v, 5.5, x, z, OSSOS_RAMPS)
         - 1.6 * Math.exp(-((x - wadi(z)) ** 2) / 14); // a dry riverbed winding through
@@ -550,10 +608,10 @@ export const BIOMES = {
       const dc = Math.hypot(x - CITY.x, z - CITY.z);
       // Limestone hills in steps all round, one more inside the plain; two dry riverbeds (wadis) cut the plain.
       const a = Math.atan2(z, x);
-      const v = 18 * smooth(84, 124, r + 9 * Math.sin(3 * a + 1) + 5 * Math.sin(7 * a)) + 10 * Math.exp(-((x - 60) ** 2 + (z + 52) ** 2) / 300);
+      const v = 18 * smooth(84, 124, r + 9 * Math.sin(3 * a + 1) + 5 * Math.sin(7 * a) + 8 * fbm(x * 0.025, z * 0.025)) + 10 * Math.exp(-((x - 60) ** 2 + (z + 52) ** 2) / 300)
+        + 7 * ridged(x * 0.03, z * 0.03) * smooth(96, 116, r);
       return 2.3 + 0.9 * Math.sin(x * 0.035 + 0.3) * Math.cos(z * 0.042) + 0.4 * Math.sin(x * 0.1) * Math.sin(z * 0.085)
-        + 3.6 * smooth(CITY.r + 8, CITY.r - 1, dc) // the tell under the city
-        + stepped(v, 4.6, x, z, JERICO_RAMPS)
+        + stepped(v + 5 * smooth(CITY.r + 7, CITY.r + 2, dc) + 1.6 * fbm(x * 0.03, z * 0.03) * smooth(CITY.r, CITY.r + 14, dc), 4.6, x, z, JERICO_RAMPS) // the tell: a walled hill
         - 1.3 * jWadis(x, z) // two dry wadis cut the plain
         - 4.6 * Math.exp(-((x - OASIS.x) ** 2 + (z - OASIS.z) ** 2) / 60); // the spring's pool
     },
@@ -631,8 +689,8 @@ export function openSet(profile) {
 export const unlockedBy = (key) => Object.keys(TROPHIES).find((id) => TROPHIES[id].unlock === key);
 
 // Which enemy types join the horde as the minutes pass.
-export function spawnWeights(t) {
-  return [1, t > 60 ? 0.12 : 0, t > 120 ? 0.15 : 0, t > 180 ? 0.1 : 0]; // slingers survive longer, so keep them rare
+export function spawnWeights(t) { // by type; slingers survive longer, so keep them rare; runner packs count four
+  return [1, t > 60 ? 0.12 : 0, t > 120 ? 0.15 : 0, t > 180 ? 0.1 : 0, 0, t > 45 ? 0.09 : 0, t > 150 ? 0.08 : 0];
 }
 
 // ---------- Save ----------
@@ -783,8 +841,9 @@ export const COSMETICS = {
 export const SLOT_NAME = { head: 'Cabeça', back: 'Costas', trail: 'Rastro', frame: 'Moldura' };
 
 // ---------- Bestiary: kills by map and kind; enough of each completes the map's research (a frame) ----------
-export const BEAST_KINDS = ['soldado', 'fundeiro', 'carro', 'gigante', 'elite', 'chefe'];
-export const RESEARCH = { soldado: 100, fundeiro: 50, carro: 40, gigante: 25, elite: 2, chefe: 1 };
+export const BEAST_KINDS = ['soldado', 'fundeiro', 'carro', 'gigante', 'batedor', 'escudeiro', 'elite', 'chefe'];
+export const BEAST_TYPE = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 5, escudeiro: 6, elite: 3 }; // the model each kind shows
+export const RESEARCH = { soldado: 100, fundeiro: 50, carro: 40, gigante: 25, batedor: 80, escudeiro: 30, elite: 2, chefe: 1 };
 export const researchOf = (profile, biome) => BEAST_KINDS.every((k) => (profile.bestiary?.kills?.[`${biome}:${k}`] || 0) >= RESEARCH[k]);
 
 // ---------- Difficulty: opens map by map, one win at a time ----------
@@ -865,8 +924,8 @@ export function addRunToTasks(list, run) {
 
 // ---------- Bestiary names, by map and kind ----------
 export const BEAST_NAMES = {
-  ela: ['Soldado filisteu', 'Fundeiro filisteu', 'Carro filisteu', 'Gigante anaquim'],
-  mar: ['Soldado egípcio', 'Arqueiro egípcio', 'Carro do Faraó', 'Colosso de pedra'],
-  ossos: ['Esqueleto', 'Esqueleto atirador', 'Carro de ossos', 'Gigante de ossos'],
-  jerico: ['Guarda de Jericó', 'Fundeiro cananeu', 'Carro cananeu', 'Guardião da muralha'],
+  ela: ['Soldado filisteu', 'Fundeiro filisteu', 'Carro filisteu', 'Gigante anaquim', 'Batedor filisteu', 'Escudeiro filisteu'],
+  mar: ['Soldado egípcio', 'Arqueiro egípcio', 'Carro do Faraó', 'Colosso de pedra', 'Corredor egípcio', 'Guarda do Faraó'],
+  ossos: ['Esqueleto', 'Esqueleto atirador', 'Carro de ossos', 'Gigante de ossos', 'Esqueleto ligeiro', 'Muralha de ossos'],
+  jerico: ['Guarda de Jericó', 'Fundeiro cananeu', 'Carro cananeu', 'Guardião da muralha', 'Espião cananeu', 'Porta-escudo de Jericó'],
 };

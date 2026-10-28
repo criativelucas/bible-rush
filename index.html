@@ -526,7 +526,7 @@
     /* ---------- Title hub ---------- */
     #menu { display: none; flex-direction: column; align-items: stretch; padding: 0; }
     #menu.on { display: flex; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 18px; flex-wrap: wrap; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 3vw 10px; flex-wrap: wrap; }
     .tb-side { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .pill { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; border: 0; cursor: pointer;
       font: 600 18px/1 var(--f-ui); color: var(--ink); background: rgba(31, 18, 13, .9); box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line), 0 4px 0 2px rgba(10, 5, 2, .35); }
@@ -539,11 +539,11 @@
     .pill.profile span { display: grid; text-align: left; }
     .pill.profile b { font-size: 22px; color: var(--gold2); }
     .pill.profile small { font-size: 13px; color: var(--dim); }
-    .hub { flex: 1; display: grid; grid-template-columns: minmax(0, 600px) minmax(300px, 380px); justify-content: space-between; gap: 24px; padding: 0 3vw 70px; align-items: start; }
+    .hub { flex: 1; display: grid; grid-template-columns: minmax(0, 640px) minmax(380px, 560px); justify-content: space-between; gap: 32px; padding: 0 3vw 16px; align-items: stretch; }
     .hub-main { display: grid; gap: 14px; }
-    .hub .logo { display: grid; justify-items: start; }
-    .hub .logo img { width: min(420px, 80vw); }
-    .hub .logo .ver { margin: -4px 0 0 8px; padding: 0 8px 2px; font-size: 15px; color: var(--ink-d); background: var(--gold); box-shadow: 0 0 0 2px var(--line); }
+    .hub .logo { display: grid; justify-items: center; }
+    .hub .logo img { width: min(400px, 80vw); }
+    .hub .logo .ver { margin: -4px 0 0; padding: 0 8px 2px; font-size: 15px; color: var(--ink-d); background: var(--gold); box-shadow: 0 0 0 2px var(--line); }
     .hub .btn.cur::before { display: none; }
     .hub .btn.cur, .hub .btn:focus-visible { outline: 3px solid var(--gold2); outline-offset: 3px; }
     .hub-card { display: flex; align-items: center; gap: 12px; padding: 10px 14px; text-align: left; border: 0; border-image: none; color: #fff8e6;
@@ -576,7 +576,7 @@
     .tile b { font: 400 22px/1 var(--f-title); color: var(--gold2); }
     .tile small { font-size: 14px; color: var(--dim); min-height: 1.2em; }
     .tile:nth-child(1) { --bar: #8fdc7a; } .tile:nth-child(2) { --bar: #7fc6ff; } .tile:nth-child(3) { --bar: #f2c14e; } .tile:nth-child(4) { --bar: #c9a8ff; } .tile:nth-child(5) { --bar: #ff9a8a; }
-    .season { display: grid; gap: 8px; padding: 0 0 10px; background: rgba(31, 18, 13, .94); box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line), 0 8px 0 4px rgba(10, 5, 2, .35);
+    .season { display: flex; flex-direction: column; gap: 8px; padding: 0 0 10px; min-height: 0; background: rgba(31, 18, 13, .94); box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line), 0 8px 0 4px rgba(10, 5, 2, .35);
  }
     .season-head { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: repeating-linear-gradient(-45deg, #a8701c 0 12px, #b8802a 12px 24px); box-shadow: 0 3px 0 var(--line); }
     .season-head img { width: 36px; height: 40px; }
@@ -585,9 +585,9 @@
     .mini-tabs { display: flex; gap: 4px; padding: 0 10px; }
     .mini-tabs button { flex: 1; padding: 3px 4px 5px; border: 0; cursor: pointer; font: 600 14px/1.1 var(--f-ui); color: var(--dim); background: #2a1810; box-shadow: 0 0 0 2px var(--line); }
     .mini-tabs button.on { color: var(--ink-d); background: var(--gold); }
-    .season-list { display: grid; gap: 4px; padding: 0 10px; min-height: 120px; }
+    .season-list { flex: 1; display: grid; align-content: start; gap: 4px; padding: 0 10px; min-height: 120px; overflow: auto; }
     .season-list .off { padding: 10px 4px; font-size: 15px; color: var(--dim); }
-    .rk { display: grid; grid-template-columns: 30px 34px 1fr auto; gap: 8px; align-items: center; padding: 3px 6px; background: #2a1810; box-shadow: 0 0 0 2px var(--line); font-size: 15px; }
+    .rk { display: grid; grid-template-columns: 34px 34px 1fr auto; gap: 10px; align-items: center; padding: 3px 10px; background: #2a1810; box-shadow: 0 0 0 2px var(--line); font-size: 15px; }
     .rk .n { font: 400 22px/1 var(--f-title); text-align: center; color: var(--dim); }
     .rk img { width: 34px; height: 34px; image-rendering: pixelated; background: #f6e8c6; }
     .rk b { display: block; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -599,9 +599,9 @@
     .rk.p1 .n { color: var(--gold2); } .rk.p2 .n { color: #dfe7ee; } .rk.p3 .n { color: #e09a55; }
     .rk.me { box-shadow: 0 0 0 2px #8fdc7a, 0 0 0 4px var(--line); }
     .season-more { margin: 2px 10px 0; }
-    @media (max-width: 1000px) { .hub { grid-template-columns: 1fr; } .season { max-width: 600px; } }
+    @media (max-width: 1080px) { .hub { grid-template-columns: 1fr; } .season { max-width: 640px; width: 100%; justify-self: center; } .hub-main { justify-self: center; width: 100%; max-width: 640px; } }
     @media (max-width: 640px) { .tiles { grid-template-columns: repeat(3, 1fr); } .play-row { grid-template-columns: 1fr; } .hub-card.play b { font-size: 48px; } }
-    #menu .verse { position: static; margin: 0 3vw 18px; }
+    #menu .verse { position: static; max-width: 640px; margin: 0 3vw 16px; }
     #menu .version { position: fixed; }
     /* Ranking screen and the name dialog */
     .rank-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
@@ -693,9 +693,9 @@
       box-shadow: 0 0 0 3px var(--line), 0 6px 0 2px rgba(10, 5, 2, .4); transition: transform .1s steps(2); }
     .hcard:hover { transform: translateY(-3px); }
     .hcard.sel { box-shadow: 0 0 0 3px var(--gold2), 0 0 0 6px var(--line), 0 8px 0 3px rgba(10, 5, 2, .45); transform: translateY(-4px); }
-    .hcard .top { position: relative; height: 170px; display: grid; place-items: center; overflow: hidden;
+    .hcard .top { position: relative; height: 210px; display: grid; place-items: end center; overflow: hidden;
       background: radial-gradient(circle at 50% 70%, rgba(255, 255, 255, .45), transparent 60%), repeating-conic-gradient(from 0deg at 50% 70%, rgba(255, 255, 255, .12) 0 10deg, transparent 10deg 20deg), var(--hc); }
-    .hcard .top img { width: 150px; height: 150px; image-rendering: pixelated; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .3)); }
+    .hcard .top img { width: 208px; height: 208px; margin-bottom: 30px; image-rendering: pixelated; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .3)); }
     .hcard .top .num { position: absolute; top: 4px; right: 8px; font: 400 44px/1 var(--f-title); color: rgba(255, 255, 255, .35); }
     .hcard .plate { margin: -26px 10px 0; position: relative; padding: 4px 10px 6px; background: #fff8e6; box-shadow: 0 0 0 3px var(--line); transform: skewX(-4deg); }
     .hcard .plate small { display: block; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #8a5a14; }
@@ -965,7 +965,7 @@
       </div>
       <h3>Pelo caminho</h3>
       <div class="keys">
-        <span>Paredões</span><span>Não dá para subir andando: use as rampas ou a Rocha de Horebe, uma fonte que lança você para o degrau de cima.</span>
+        <span>Paredões</span><span>Não dá para subir andando: segure Espaço encostado na rocha para escalar (os inimigos não conseguem), ou use as rampas e a Rocha de Horebe, uma fonte que lança você para o degrau de cima.</span>
         <span>Veio de prata</span><span>Fique perto um instante para minerar siclos.</span>
         <span>Árvore com frutos</span><span>Recupera 25% da vida; os frutos crescem de novo em um minuto.</span>
         <span>Jarro de Gideão</span><span>Encoste para quebrar: a luz atordoa os inimigos em volta.</span>

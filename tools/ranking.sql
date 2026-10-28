@@ -5,8 +5,9 @@
 --   submit_run   after each run, to record it
 --   leaderboard  to read a ranking
 -- The tables stay closed to that key (row level security on, no policies), and submit_run checks every
--- value before it counts: names, maps and heroes that exist, numbers a real run could reach, at most one
--- run every 20 seconds per player. Seasons are calendar months (UTC), decided by the server.
+-- value before it counts: names, maps and heroes that exist, no more kills than the horde could have
+-- brought in that time, and runs that cannot overlap (a 10-minute run needs 10 minutes since the last one).
+-- Seasons are calendar months (UTC), decided by the server. Safe to run again after changes.
 
 create table if not exists public.players (
   id uuid primary key,
@@ -48,12 +49,14 @@ begin
      or p_hero not in ('davi', 'sansao', 'moises', 'josue', 'debora') then
     raise exception 'dados inválidos';
   end if;
-  if p_seconds not between 0 and 21600 or p_kills not between 0 and 200000 or p_kills > p_seconds * 30 + 100 then
+  -- The horde grows with time (about 1 + t/40 enemies a second): no run kills more than could have come.
+  if p_seconds not between 0 and 21600 or p_kills < 0 or p_kills > p_seconds + p_seconds * p_seconds / 70 + 300 then
     raise exception 'números impossíveis';
   end if;
-  if p_won and (p_mode <> 'classic' or p_seconds < 120) then raise exception 'vitória impossível'; end if;
-  if exists (select 1 from players where id = p_player and last_run > now() - interval '20 seconds') then
-    raise exception 'espere um pouco';
+  if p_won and (p_mode <> 'classic' or p_seconds < 120 or p_seconds > 1500) then raise exception 'vitória impossível'; end if;
+  if exists (select 1 from players where id = p_player
+             and last_run > now() - make_interval(secs => greatest(20, p_seconds * 0.8))) then
+    raise exception 'partidas sobrepostas';
   end if;
   insert into players (id, name, title, frame, last_run)
   values (p_player, v_name, left(coalesce(p_title, ''), 40), left(coalesce(p_frame, ''), 24), now())

@@ -184,7 +184,8 @@ export function buildWorld(scene, id, random, PROPS) {
     const a = (k / n) * Math.PI * 2;
     return { a, x: C.x + Math.cos(a) * (C.r + extra), z: C.z + Math.sin(a) * (C.r + extra) };
   };
-  if (C) for (let k = 0; k < 20; k++) placed.push(wallAt(k, 20));
+  const CITY_N = C ? Math.round((2 * Math.PI * C.r) / 5.4) : 0; // wall pieces round the city, 5.4 m each
+  if (C) for (let k = 0; k < CITY_N; k++) placed.push(wallAt(k, CITY_N));
   const stones = [];
   const pileGeo = geo('memorial');
   const a0 = random() * Math.PI * 2;
@@ -578,28 +579,38 @@ export function buildWorld(scene, id, random, PROPS) {
   } else if (C) {
     // Jericho (Js 6): the walled city on its mound, two gates, fallen stretches you can climb, houses inside,
     // Rahab's house built into the wall; palms by the spring (Dt 34:3, "the city of palms"); Israel's camp.
-    const n = 20;
+    // Gates east and west (ramps climb the tell to them), towers along the wall, three breaches.
+    const n = CITY_N;
+    const breach = [Math.round(n * 0.2), Math.round(n * 0.7), Math.round(n * 0.85)];
+    const rahabK = Math.round(n * 0.35);
     for (let k = 0; k < n; k++) {
       const w = wallAt(k, n);
       const rot = -w.a - Math.PI / 2; // along the ring
-      if (k === 0 || k === 10) {
+      if (k === 0 || k === n / 2 || k === Math.round(n / 2)) {
         build('gate', geo('prop_gate'), w.x, w.z, rot, [[-2.6, 0, 1.25, 6], [2.6, 0, 1.25, 6]]);
         gates.push({ x: C.x + Math.cos(w.a) * (C.r + 4), z: C.z + Math.sin(w.a) * (C.r + 4) });
-      } else if (k === 4 || k === 14 || k === 17) {
+      } else if (breach.includes(k)) {
         build('rubble', geo('prop_wallRubble'), w.x, w.z, rot, [[-2, 0, 0.9, 0.8], [0, 0, 0.9, 1.0], [2, 0, 0.9, 0.8]]);
+      } else if (k % 6 === 3 && k !== rahabK) {
+        build('tower', geo('prop_tower'), w.x, w.z, rot, [[0, 0, 1.2, 5]], 1.15);
       } else build('cityWall', geo('prop_cityWall'), w.x, w.z, rot, [[-2.2, 0, 1.0, 4.6], [0, 0, 1.0, 4.6], [2.2, 0, 1.0, 4.6]]);
-      if (k === 7) { // Rahab's house against the outside of the wall, its window toward the plain
+      if (k === rahabK) { // Rahab's house against the outside of the wall, its window toward the plain
         const h = wallAt(k, n, 2.4);
         build('rahab', geo('prop_rahab'), h.x, h.z, Math.atan2(Math.cos(w.a), Math.sin(w.a)), [[0, 0, 1.5, 2.4]]);
         rahab = { x: C.x + Math.cos(w.a) * (C.r + 4.4), z: C.z + Math.sin(w.a) * (C.r + 4.4), used: false };
       }
     }
-    for (let k = 0; k < 13; k++) { // houses inside, in two rings round a small square, streets between them
-      const ring = k < 5 ? 0 : 1;
-      const a = ring ? ((k - 5) / 8) * Math.PI * 2 + 0.2 : (k / 5) * Math.PI * 2 + 0.6;
-      const r = ring ? 11.5 : 6;
-      build('house', geo('prop_house'), C.x + Math.cos(a) * r, C.z + Math.sin(a) * r, -a, [[0, 0, 1.7, 2.6]]);
+    // Houses in four rings round a square with the king's house; the main street runs gate to gate.
+    for (const [r, count] of [[8, 6], [14, 10], [20, 14], [26, 18]]) {
+      for (let k = 0; k < count; k++) {
+        const a = (k / count) * Math.PI * 2 + r * 0.05;
+        if (Math.abs(Math.sin(a)) < 0.2) continue; // the street from gate to gate
+        const sc = 0.95 + random() * 0.35;
+        build('house', geo('prop_house'), C.x + Math.cos(a) * r, C.z + Math.sin(a) * r, -a + (random() - 0.5) * 0.3, [[0, 0, 1.7, 2.6]], sc);
+      }
     }
+    build('tower', geo('prop_tower'), C.x, C.z + 3, 0, [[0, 0, 1.4, 6]], 1.5); // the king of Jericho's house
+    for (let k = 0; k < 4; k++) build('cart', geo('prop_cart'), C.x - 4 + k * 2.6, C.z - 4, random() * 6, [[0, 0, 1.2, 1.0]]); // market stalls
     placed.push({ x: C.x, z: C.z });
     const O = B.oasis;
     for (let k = 0; k < 12; k++) { // palms round the spring

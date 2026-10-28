@@ -17,6 +17,17 @@ from lib import ROOT, actions, export_glb, lin, make_armature, prim, reset, skin
 
 PI = math.pi
 V = lambda *a: Vector(a)
+# Stylised proportions, like the reference art: a bigger head (scaled about the neck), big hands and feet.
+HEAD, HAND, FOOT = 1.3, 1.38, 1.3
+NECK = V(0, 0.83, 0)
+PIX = 44  # pixel cells per unit of height for the painted mosaic (about 4 cm on a hero)
+
+
+def phash(x, y, z):
+    """0..1 from a cell: the same everywhere on a part, so the mosaic stays put when the hero moves."""
+    h = (int(x) * 73856093) ^ (int(y) * 19349663) ^ (int(z) * 83492791)
+    h = (h ^ (h >> 13)) * 1274126177
+    return ((h ^ (h >> 16)) & 0xffff) / 65535.0
 
 
 def ss(a, b, x):
@@ -107,26 +118,34 @@ class Sculpt:
         self.name, self.h = name, h
         self.V, self.F, self.FC, self.W, self.SM = [], [], [], [], []
 
-    def add(self, shape, color, bone, smooth=True, shade=0.2, inner=None):
-        """bone: name, or a function of the unit-space position -> {bone: weight}. Each part gets a
-        soft gradient, darker at its bottom; a shell's inner surface is darker still."""
+    def add(self, shape, color, bone, smooth=True, shade=0.28, inner=None):
+        """bone: name, or a function of the unit-space position -> {bone: weight}. Painted like pixel art:
+        each face gets one flat colour, the part's light in three bands (darker at its bottom), and a
+        fixed mosaic of slightly lighter and darker cells; a shell's inner surface is darker still.
+        Head and hair parts are scaled up about the neck (stylised proportions)."""
         bm, inner = shape if isinstance(shape, tuple) else (shape, inner or set())
+        if bone == 'head' or bone is locks:
+            bmesh.ops.transform(bm, matrix=Matrix.Translation(NECK) @ Matrix.Scale(HEAD, 4) @ Matrix.Translation(-NECK), verts=bm.verts)
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
         bm.verts.index_update()
         ys = [v.co.y for v in bm.verts]
         y0, y1 = min(ys), max(ys)
         c = lin(color)
         base = len(self.V)
-        vcol = []
         for v in bm.verts:
-            t = (v.co.y - y0) / (y1 - y0) if y1 > y0 else 1.0
-            k = (1 - shade + shade * t) * (0.62 if v.index in inner else 1.0)
-            vcol.append((c[0] * k, c[1] * k, c[2] * k, 1.0))
             self.V.append(to_blender(v.co * self.h))
             self.W.append(bone(v.co) if callable(bone) else {bone: 1.0})
         for f in bm.faces:
+            ctr = f.calc_center_median()
+            t = (ctr.y - y0) / (y1 - y0) if y1 > y0 else 1.0
+            band = min(2, int(t * 3)) / 2  # 0, 0.5, 1: hard light bands
+            cell = phash(math.floor(ctr.x * PIX), math.floor(ctr.y * PIX), math.floor(ctr.z * PIX))
+            mosaic = 0.82 if cell < 0.24 else 1.12 if cell > 0.8 else 1.0
+            inside = 0.62 if any(v.index in inner for v in f.verts) else 1.0
+            k = (1 - shade + shade * band) * mosaic * inside
+            col = (min(1, c[0] * k), min(1, c[1] * k), min(1, c[2] * k), 1.0)
             self.F.append([base + v.index for v in f.verts])
-            self.FC.append([vcol[v.index] for v in f.verts])
+            self.FC.append([col] * len(f.verts))
             self.SM.append(smooth)
         bm.free()
 
@@ -200,9 +219,9 @@ def arms(s, c, sx, upper=(0.034, 0.03), fore=(0.03, 0.024), bent_right=None):
         s.add(capsule(sh, el, *upper), c.get('arm', c['skin']), f'upperarm.{side}')
         s.add(capsule(el, wr, *fore), c.get('fore', c['skin']), f'forearm.{side}')
         d = (wr - el).normalized()
-        hand = wr + d * 0.032
-        s.add(ellipsoid(hand, (0.021, 0.033, 0.026), rot=(0, 0, 0)), c['skin'], f'forearm.{side}')
-        s.add(ellipsoid(hand + V(-0.012 * x, 0.012, 0.018), (0.009, 0.016, 0.009)), c['skin'], f'forearm.{side}')
+        hand = wr + d * 0.036
+        s.add(ellipsoid(hand, (0.021 * HAND, 0.033 * HAND, 0.026 * HAND), rot=(0, 0, 0)), c['skin'], f'forearm.{side}')
+        s.add(ellipsoid(hand + V(-0.015 * x, 0.014, 0.022), (0.009 * HAND, 0.016 * HAND, 0.009 * HAND)), c['skin'], f'forearm.{side}')
     return {'sh': sx}
 
 
@@ -212,7 +231,9 @@ def legs(s, c, lx, thigh=(0.05, 0.04), shin=(0.038, 0.028)):
         hip, knee, ank = V(lx * x, 0.49, 0), V(lx * x, 0.27, 0.006), V(lx * x, 0.055, 0)
         s.add(capsule(hip, knee, *thigh), c['thigh'], f'thigh.{side}')
         s.add(capsule(knee, ank, *shin), c['shin'], f'shin.{side}')
-        s.add(ellipsoid((lx * x, 0.026, 0.028), (0.031, 0.022, 0.058)), c['foot'], f'shin.{side}')
+        s.add(ellipsoid((lx * x, 0.028, 0.034), (0.031 * FOOT, 0.022 * FOOT, 0.058 * FOOT)), c['foot'], f'shin.{side}')
+        for k in range(3):  # toes, as on the reference art
+            s.add(ellipsoid((lx * x + (k - 1) * 0.016, 0.016, 0.098), (0.009, 0.009, 0.011), seg=8, rings=5), c['foot'], f'shin.{side}', shade=0.3)
 
 
 # ---------- The three heroes ----------
@@ -232,11 +253,13 @@ def davi():
             x = math.sin(az) * math.cos(el) * 0.068
             z = -math.cos(az) * math.cos(el) * 0.072 - 0.012
             y = 0.94 + math.sin(el) * 0.06
-            s.add(ellipsoid((x, y, z), (0.027, 0.025, 0.027), seg=10, rings=7), hair if k % 2 else hair2, 'head')
+            s.add(ellipsoid((x, y, z), (0.031, 0.029, 0.031), seg=10, rings=7), hair if k % 2 else hair2, 'head')
             k += 1
     for x in (-1, 1):
         s.add(ellipsoid((0.058 * x, 0.9, -0.025), (0.022, 0.045, 0.034)), hair, 'head')
-    s.add(ellipsoid((0, 0.866, 0.034), (0.054, 0.03, 0.04)), 0x5e3320, 'head')  # short beard
+    s.add(ellipsoid((0, 0.862, 0.032), (0.058, 0.036, 0.044)), 0x5e3320, 'head')  # short full beard
+    for x in (-1, 1):
+        s.add(ellipsoid((0.045 * x, 0.88, 0.03), (0.02, 0.03, 0.03)), 0x5e3320, 'head')  # sideburns into the beard
     s.add(ellipsoid((0, 0.887, 0.068), (0.026, 0.007, 0.01)), 0x5e3320, 'head', shade=0)
     # Tunic, belt, sleeves, neckline.
     s.add(loft([(0.38, 0, 0.004, 0.122, 0.097), (0.46, 0, 0, 0.11, 0.082), (0.53, 0, 0, 0.1, 0.073), (0.62, 0, 0, 0.101, 0.071),
@@ -250,9 +273,20 @@ def davi():
     legs(s, dict(thigh=khaki, shin=skin_, foot=skin_), 0.058, thigh=(0.052, 0.042), shin=(0.03, 0.024))
     for x in (-1, 1):  # three-quarter trousers over the shins
         s.add(capsule((0.058 * x, 0.29, 0.004), (0.058 * x, 0.15, 0.003), 0.042, 0.038), khaki, f'shin.{"L" if x > 0 else "R"}')
-    # Red cloak, open at the front, hanging from the shoulders.
-    s.add(shell([(0.14, 0, -0.05, 0.162, 0.122), (0.35, 0, -0.04, 0.156, 0.112), (0.55, 0, -0.03, 0.15, 0.1),
-                  (0.7, 0, -0.02, 0.15, 0.094), (0.78, 0, -0.014, 0.156, 0.09), (0.812, 0, -0.01, 0.128, 0.074)], gap=0.78, thick=0.012, folds=0.07), red, cape)
+    # V neck of the tunic.
+    for x in (-1, 1):
+        s.add(capsule((0.028 * x, 0.805, 0.064), (0, 0.745, 0.082), 0.005, 0.004, seg=6), 0x8a6a3e, 'chest')
+    # Long sleeveless coat, red-orange, open at the front down to the knees, a dark trim on its edges.
+    rings = [(0.3, 0, -0.008, 0.152, 0.118), (0.42, 0, -0.008, 0.142, 0.106), (0.55, 0, -0.006, 0.13, 0.094),
+             (0.66, 0, -0.004, 0.13, 0.09), (0.75, 0, -0.004, 0.142, 0.088), (0.8, 0, -0.006, 0.142, 0.08), (0.822, 0, -0.008, 0.11, 0.07)]
+    gap = 0.55
+    s.add(shell(rings, gap=gap, thick=0.012, folds=0.05), red, cape)
+    for j, a in enumerate((PI / 2 + gap, PI / 2 + 2 * PI - gap)):
+        for r0, r1 in zip(rings, rings[1:]):
+            e0 = (r0[1] + r0[3] * math.cos(a), r0[0], r0[2] + r0[4] * math.sin(a))
+            e1 = (r1[1] + r1[3] * math.cos(a), r1[0], r1[2] + r1[4] * math.sin(a))
+            s.add(capsule(e0, e1, 0.007, 0.007, seg=6), 0x6b1f1a, cape)
+    s.add(shell([(0.3, 0, -0.008, 0.154, 0.12), (0.318, 0, -0.008, 0.153, 0.119)], gap=gap, thick=0.014), 0x8e2a1e, cape)  # hem
     # Sling in the right hand, shepherd's bag on the left hip.
     for dx in (-0.006, 0.006):
         s.add(capsule((-0.155 + dx, 0.44, 0.02), (-0.15 + dx, 0.3, 0.03), 0.0045, 0.0045, seg=6), leather, 'forearm.R')
@@ -267,11 +301,16 @@ def sansao():
     skin_, hair, wrap, cream, leather = 0xc98a5a, 0x1f1a1c, 0x6b4426, 0xece4c8, 0x5a3a22
     head(s, dict(skin=skin_, eye=0x2a1a12, brow=hair, hair=hair, brow_h=0.006, neck=0.042))
     s.add(ellipsoid((0, 0.885, -0.05), (0.08, 0.1, 0.06)), hair, locks)
-    for k in range(9):  # long locks down the back and over the shoulders
-        a = -PI * 0.8 + 1.6 * PI * k / 8
-        x0, z0 = math.sin(a) * 0.06, -math.cos(a) * 0.055 - 0.02
-        x1, z1 = math.sin(a) * 0.1, -math.cos(a) * 0.075 - 0.03 + (0.04 if abs(math.sin(a)) > 0.9 else 0)
-        s.add(capsule((x0, 0.9, z0), (x1, 0.64 + 0.04 * (k % 3), z1), 0.024, 0.012, seg=8), hair, locks)
+    s.add(ellipsoid((0, 0.955, -0.01), (0.078, 0.06, 0.08)), hair, 'head')  # volume on top
+    for k in range(13):  # long wavy locks down the back and over the shoulders, curling at the ends
+        a = -PI * 0.85 + 1.7 * PI * k / 12
+        x0, z0 = math.sin(a) * 0.064, -math.cos(a) * 0.058 - 0.02
+        xm, zm = math.sin(a) * 0.1, -math.cos(a) * 0.082 - 0.035
+        x1, z1 = math.sin(a) * 0.11, -math.cos(a) * 0.08 - 0.03 + (0.04 if abs(math.sin(a)) > 0.9 else 0)
+        y1 = 0.62 + 0.04 * (k % 3)
+        s.add(capsule((x0, 0.93, z0), (xm, 0.78, zm), 0.028, 0.022, seg=8), hair if k % 2 else 0x2a2226, locks)
+        s.add(capsule((xm, 0.78, zm), (x1, y1, z1), 0.022, 0.013, seg=8), hair if k % 2 else 0x2a2226, locks)
+        s.add(ellipsoid((x1 + 0.012 * math.sin(a), y1 - 0.01, z1), (0.016, 0.014, 0.016), seg=8, rings=5), hair, locks)
     s.add(ellipsoid((0, 0.862, 0.04), (0.058, 0.046, 0.045)), hair, 'head')  # full beard
     s.add(ellipsoid((0, 0.888, 0.068), (0.03, 0.008, 0.01)), hair, 'head', shade=0)
     # Bare, broad torso: chest, pecs, abs, shoulders.
@@ -293,7 +332,8 @@ def sansao():
     s.add(belt(0.522, 0.12, 0.085, 0.01), wrap, 'spine')
     s.add(loft([(0.3, 0, 0.012, 0.152, 0.113), (0.34, 0, 0.01, 0.15, 0.11), (0.42, 0, 0.005, 0.14, 0.1), (0.5, 0, 0, 0.125, 0.09), (0.56, 0, 0, 0.115, 0.08)],
                folds=0.06, nf=9), cream, skirt)
-    s.add(ellipsoid((0.03, 0.38, 0.11), (0.04, 0.1, 0.01)), 0xd6caa6, skirt)
+    s.add(ellipsoid((0.0, 0.43, 0.105), (0.038, 0.1, 0.012)), 0x6b4426, skirt)  # the sash's hanging flap
+    s.add(ellipsoid((0.0, 0.33, 0.112), (0.034, 0.03, 0.01)), 0x5a3a22, skirt)
     legs(s, dict(thigh=skin_, shin=wrap, foot=skin_), 0.07, thigh=(0.06, 0.047), shin=(0.045, 0.034))
     for x in (-1, 1):
         side = 'L' if x > 0 else 'R'
@@ -301,8 +341,9 @@ def sansao():
             s.add(belt(y, 0.042 - (0.22 - y) * 0.06, 0.042 - (0.22 - y) * 0.06, 0.006, cz=0.004, cx=0.07 * x), leather, f'shin.{side}')
         s.add(prim('box', 0.07, 0.014, 0.13, p=(0.07 * x, 0.007, 0.03), bevel=0.006), leather, f'shin.{side}', smooth=False)
     # The jawbone of a donkey (Jz 15:15), held in the right hand.
-    s.add(capsule((-0.19, 0.47, 0.035), (-0.17, 0.3, 0.2), 0.024, 0.02), 0xefe6c8, 'forearm.R')
-    s.add(capsule((-0.19, 0.47, 0.035), (-0.205, 0.56, -0.02), 0.02, 0.026), 0xefe6c8, 'forearm.R')
+    s.add(capsule((-0.19, 0.47, 0.035), (-0.17, 0.3, 0.2), 0.03, 0.026), 0xefe6c8, 'forearm.R')
+    s.add(capsule((-0.19, 0.47, 0.035), (-0.205, 0.56, -0.02), 0.026, 0.034), 0xefe6c8, 'forearm.R')
+    s.add(ellipsoid((-0.172, 0.31, 0.19), (0.036, 0.03, 0.04)), 0xe2d6b0, 'forearm.R')  # the jaw's heavy end
     for k in range(5):
         t = 0.25 + k * 0.15
         s.add(ellipsoid((-0.19 + 0.02 * t + 0.012, 0.47 - 0.17 * t, 0.035 + 0.165 * t + 0.01), (0.009, 0.012, 0.009), seg=8, rings=5), 0xfffaf0, 'forearm.R')
@@ -333,7 +374,7 @@ def moises():
     bent = ((-0.163, 0.64, 0.01), (-0.172, 0.632, 0.128))
     arms(s, dict(skin=skin_, arm=robe, fore=robe), 0.14, upper=(0.042, 0.045), fore=(0.046, 0.054), bent_right=bent)
     for x in (-1, 1):
-        s.add(ellipsoid((0.06 * x, 0.024, 0.05), (0.03, 0.02, 0.05)), skin_, f'shin.{"L" if x > 0 else "R"}')
+        s.add(ellipsoid((0.06 * x, 0.026, 0.056), (0.03 * FOOT, 0.02 * FOOT, 0.05 * FOOT)), skin_, f'shin.{"L" if x > 0 else "R"}')
     # Staff with a carved knob, vertical through the right hand.
     s.add(capsule((-0.175, 0.0, 0.163), (-0.175, 1.0, 0.163), 0.013, 0.012, seg=8), wood, 'forearm.R')
     for k, (dx, dy, dz, r) in enumerate(((0, 1.03, 0, 0.034), (0.02, 1.05, 0.01, 0.024), (-0.018, 1.055, -0.006, 0.022), (0, 1.07, 0.012, 0.02))):
@@ -393,7 +434,7 @@ def debora():
     s.add(capsule((-0.04, 0.55, 0.075), (-0.06, 0.4, 0.09), 0.012, 0.009), gold, 'spine')  # sash end
     arms(s, dict(skin=skin_, arm=purple), 0.13, upper=(0.036, 0.034), fore=(0.028, 0.022))
     for x in (-1, 1):
-        s.add(ellipsoid((0.056 * x, 0.024, 0.045), (0.028, 0.018, 0.048)), 0x8a5a32, f'shin.{"L" if x > 0 else "R"}')
+        s.add(ellipsoid((0.056 * x, 0.026, 0.05), (0.028 * FOOT, 0.018 * FOOT, 0.048 * FOOT)), 0x8a5a32, f'shin.{"L" if x > 0 else "R"}')
     # Bow in the left hand: an arc bulging forward and its string.
     c = (0.172, 0.47, -0.04)
     R, span = 0.26, 0.62 * PI  # a shallow arc, centred forward

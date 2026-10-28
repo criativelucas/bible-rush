@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import * as M from './models.js';
 
 const T = THREE;
+const HEAD = 1.3; // tools/blender/heroes.py scales the head about the neck by this much
 const box = (w, h, d) => new T.BoxGeometry(w, h, d);
 const ball = (r, d = 1) => new T.IcosahedronGeometry(r, d);
 const ring = (R, r, arc = Math.PI * 2) => new T.TorusGeometry(R, r, 5, 14, arc);
@@ -128,7 +129,15 @@ export function buildGear(rig) {
   for (const [id, [boneName, slot, build]] of Object.entries(PIECES)) {
     const made = build(h, sx, toon, glow);
     const list = Array.isArray(made) ? made : [[boneName, made]];
-    const objs = list.map(([bn, obj]) => {
+    const objs = list.map(([bn, piece]) => {
+      let obj = piece;
+      if (bn === 'head') { // sized for the plain head: grow it like the head, about the neck
+        obj = new T.Group();
+        obj.position.y = 0.83 * h;
+        obj.scale.setScalar(HEAD);
+        piece.position.y -= 0.83 * h;
+        obj.add(piece);
+      }
       const bone = root.getObjectByName(bn) ?? root.getObjectByName('chest');
       obj.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       root.add(obj);
