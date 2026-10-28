@@ -476,6 +476,8 @@ def goliath():
         'stomp': [(0, {}, {}), (26, {'leg.R': -70, 'hips': -12, 'arm.L': -30, 'arm.R': -30}, {'hips': (0, 0.2, 0)}),
                   (36, {'leg.R': 5, 'hips': 12}, {'hips': (0, -0.15, 0)}), (48, {}, {})],
         'summon': [(0, {}, {}), (10, {'arm.L': -165, 'arm.R': -165, 'head': -15}, {}), (24, {'arm.L': -165, 'arm.R': -165, 'head': -15}, {}), (32, {}, {})],
+        # Held poses (the game turns the body for the swing): the spear levelled, the shield raised.
+        'sweep': [(0, {}, {}), (8, {'arm.R': -95, 'arm.L': -30, 'hips': 6}, {}), (40, {'arm.R': -95, 'arm.L': -30, 'hips': 6}, {})],
     }
     rigged('golias', m, bones, clips, S)
 
@@ -638,6 +640,7 @@ def gogue():
         'stomp': [(0, {}, {}), (24, {'arm.R': -160, 'arm.L': -40, 'hips': -10}, {'hips': (0, 0.25, 0)}),
                   (34, {'arm.R': -20, 'hips': 18}, {'hips': (0, -0.2, 0)}), (48, {}, {})],
         'summon': [(0, {}, {}), (10, {'arm.L': -150, 'arm.R': -170, 'head': -18}, {}), (24, {'arm.L': -150, 'arm.R': -170, 'head': -18}, {}), (32, {}, {})],
+        'spin': [(0, {}, {}), (8, {'arm.R': -100, 'arm.L': -65, 'hips': 6, 'head': -6}, {}), (40, {'arm.R': -100, 'arm.L': -65, 'hips': 6, 'head': -6}, {})],
     }
     rigged('gogue', m, bones, clips, S)
 
@@ -707,6 +710,7 @@ def rei():
         'stomp': [(0, {}, {}), (26, {'leg.R': -70, 'hips': -12, 'arm.L': -30, 'arm.R': -30}, {'hips': (0, 0.2, 0)}),
                   (36, {'leg.R': 5, 'hips': 12}, {'hips': (0, -0.15, 0)}), (48, {}, {})],
         'summon': [(0, {}, {}), (10, {'arm.L': -150, 'arm.R': -165, 'head': -15}, {}), (24, {'arm.L': -150, 'arm.R': -165, 'head': -15}, {}), (32, {}, {})],
+        'shield': [(0, {}, {}), (8, {'arm.L': -95, 'arm.R': -160, 'head': -10}, {}), (40, {'arm.L': -95, 'arm.R': -160, 'head': -10}, {})],
     }
     rigged('rei', m, bones, clips, S)
 

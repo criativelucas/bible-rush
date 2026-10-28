@@ -351,14 +351,29 @@ function groundMesh(geo, mat) {
 const auraDisk = groundMesh(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), glow(0xff8a3d, 0.2));
 const harpMesh = groundMesh(new THREE.RingGeometry(0.92, 1, 48).rotateX(-Math.PI / 2), glow(0xf2c14e, 0.55, { side: THREE.DoubleSide }));
 const tele = { depthTest: false };
-const teleLine = mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), glow(0xff3b30, 0.35, tele));
+// Boss warnings on the ground: lines (a throw or a charge), a circle round the boss, a cone in front of it.
+const teleLines = [0, 1, 2].map(() => mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), glow(0xff3b30, 0.35, tele)));
 const teleCircle = mesh(new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2), glow(0xff3b30, 0.35, tele));
-const spearMesh = M.solid(ASSETS.items.proj_spear, M.toon());
-for (const m of [auraDisk, harpMesh, teleLine, teleCircle, spearMesh]) {
+const SWEEP_ARC = 2.6; // Goliath's sweep: about 150 degrees
+const teleSector = mesh(new THREE.RingGeometry(0.15, 1, 24, 1, -SWEEP_ARC / 2, SWEEP_ARC).rotateX(-Math.PI / 2), glow(0xff3b30, 0.35, tele));
+const teleMeshes = [...teleLines, teleCircle, teleSector];
+const spearMeshes = [0, 1, 2].map(() => M.solid(ASSETS.items.proj_spear, M.toon()));
+for (const m of [auraDisk, harpMesh, ...teleMeshes, ...spearMeshes]) {
   m.visible = false;
   m.renderOrder = 5;
   scene.add(m);
 }
+// Boss hazards: marked spots that strike after a delay (the mark fills up as the blow comes).
+const MAX_HAZ = 96;
+const hazRing = instanced(new THREE.RingGeometry(0.86, 1, 32).rotateX(-Math.PI / 2), glow(0xffffff, 0.6, tele), MAX_HAZ, true);
+const hazFill = instanced(new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2), glow(0xffffff, 0.3, tele), MAX_HAZ, true);
+const hazBolt = instanced(ASSETS.items.proj_fire, flameMatOf(), MAX_HAZ); // brimstone falling
+const hazArrow = instanced(ASSETS.items.proj_arrow, M.toon(), MAX_HAZ); // arrows falling
+hazRing.renderOrder = hazFill.renderOrder = 5;
+const HAZ_COL = { quake: new THREE.Color(0xff3b30), arrow: new THREE.Color(0xff3b30), fire: new THREE.Color(0xff5a1e), spike: new THREE.Color(0xff3b30), rise: new THREE.Color(0xd8ccb0) };
+const POOL_COL = new THREE.Color(0xff8a3d);
+const spikeGeo = new THREE.ConeGeometry(0.45, 2.4, 5).translate(0, 1.2, 0); // bone spikes from Gog's fissure
+const spikeMat = M.toon(0xe6dcc2, { vc: false });
 
 // Short-lived effects: rings, arcs, the relic rising from a chest.
 const fxList = [];
@@ -435,19 +450,23 @@ const bossRig = makeRig(ASSETS.boss);
 bossRig.group.visible = false;
 scene.add(bossRig.group);
 
-// Boss clip follows its state; attacks play once and hold their last pose.
+// Boss clip follows its move; attacks play once and hold their last pose (a new key restarts them).
 function bossAnim(dt) {
-  const want = boss.st === 'walk' ? (boss.moving ? 'walk' : 'idle') : boss.st === 'rest' ? 'idle' : boss.st;
-  if (bossRig.current !== want && bossRig.act[want]) {
+  let want = boss.st === 'walk' || boss.st === 'rest' ? (boss.moving ? 'walk' : 'idle') : boss.anim;
+  if (!bossRig.act[want]) want = 'idle';
+  const key = `${want}|${boss.st === 'walk' || boss.st === 'rest' ? 0 : boss.key}`;
+  if (bossRig.key !== key) {
     const next = bossRig.act[want];
-    const once = want === 'spear' || want === 'stomp' || want === 'summon';
+    const loop = want === 'walk' || want === 'idle';
+    if (bossRig.current !== want) bossRig.act[bossRig.current]?.fadeOut(0.15);
     next.reset();
-    next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
-    next.clampWhenFinished = once;
+    next.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+    next.clampWhenFinished = !loop;
     next.fadeIn(0.15).play();
-    bossRig.act[bossRig.current]?.fadeOut(0.15);
     bossRig.current = want;
+    bossRig.key = key;
   }
+  bossRig.act[want].timeScale = boss.st === 'walk' || boss.st === 'rest' ? 1 : boss.clip;
   bossRig.mixer.update(dt);
 }
 
@@ -706,8 +725,13 @@ let glintsGot = 0;
 let promptText = '';
 let orbitCount = 0;
 let auraRadius = 0;
-const boss = { spawned: false, enraged: false, idx: -1, st: 'walk', t: 0, n: 0, dx: 0, dz: 1, moving: false };
-const spear = { on: false, x: 0, y: 0, z: 0, dx: 0, dz: 0, life: 0, dmg: 0 };
+// st: the move; t: time left in it (or in its step); anim/clip/key: the clip, its speed, a counter that restarts it;
+// chain: repeats done; hd: heading (the chariot turns, it does not spin on the spot); lift: height in a leap;
+// guard: seconds behind the shield; side: which way it circles.
+const boss = { spawned: false, enraged: false, idx: -1, st: 'walk', t: 0, n: 0, dx: 0, dz: 1, moving: false,
+  phase: 1, anim: 'idle', clip: 1, key: 0, step: 0, chain: 0, hd: 0, lift: 0, guard: 0, side: 1, sx: 0, sz: 0, tx: 0, tz: 0, fx: 0, last: '' };
+const spears = [0, 1, 2].map(() => ({ on: false, x: 0, y: 0, z: 0, dx: 0, dz: 0, life: 0, dmg: 0 }));
+const hazards = [];
 const miracles = [];
 
 // ---------- Camera & input ----------
@@ -2169,6 +2193,10 @@ function damage(i, base, kx = 0, kz = 0, knock = 0, forceCrit = false) {
   let dmg = base * globalDmg();
   if (P.hero === 'davi' && (type.big || E.elite[i])) dmg *= 1.5;
   if (type.shield && dmgSrc !== 'miracle') dmg *= 1 - type.shield; // the shield-bearer's wall (miracles go through)
+  if (type.boss && boss.guard > 0 && dmgSrc !== 'miracle') { // the king behind his golden shield
+    dmg *= 0.25;
+    if (random() < 0.3) burst(E.x[i], E.y[i] + 2.5, E.z[i], 0xf2c14e, 3, 3, 0.1, 2);
+  }
   const crit = forceCrit || random() < P.st.crit;
   if (crit) dmg *= 2 + P.st.critDmg; // Tábuas da Lei
   E.hp[i] -= dmg;
@@ -2258,17 +2286,6 @@ function spawnCarrier() {
 function mapEvent() {
   toast(B.event, '#ff9a8a');
   beep(98, 0.9, 'sawtooth', 0.07, 0, 147);
-  const a = random() * Math.PI * 2;
-  const fx = Math.cos(a);
-  const fz = Math.sin(a);
-  const cx = P.pos.x + fx * 30;
-  const cz = P.pos.z + fz * 30;
-  const at = (k, n, gap) => {
-    const off = (k - (n - 1) / 2) * gap;
-    const x = cx - fz * off;
-    const z = cz + fx * off;
-    return walkable(x, z) && !flow.blocked[flow.index(x, z)] ? [x, z] : null;
-  };
   if (BIOME_ID === 'jerico') { // guards pour out of both gates
     for (const g of world.gates) {
       for (let k = 0; k < 13; k++) {
@@ -2279,21 +2296,9 @@ function mapEvent() {
       burst(g.x, terrainH(g.x, g.z) + 1, g.z, 0xcbb89a, 20, 5, 0.2, 4);
     }
   } else if (BIOME_ID === 'ela') { // the Philistine line advances (1 Sm 17:21)
-    for (let k = 0; k < 30; k++) {
-      const p = at(k, 30, 1.8);
-      if (p) spawnEnemy(k % 5 === 2 ? 1 : 0, ...p);
-    }
+    lineAcross(30, 1.8, (x, z, fx, fz, k) => spawnEnemy(k % 5 === 2 ? 1 : 0, x, z));
   } else if (BIOME_ID === 'mar') { // a row of chariots charging across the island
-    for (let k = 0; k < 9; k++) {
-      const p = at(k, 9, 3.5);
-      if (!p) continue;
-      const i = spawnEnemy(2, ...p);
-      if (i < 0) continue;
-      E.st[i] = 2;
-      E.t[i] = 2.6;
-      E.dx[i] = -fx;
-      E.dz[i] = -fz;
-    }
+    chariotRow(9);
   } else { // the wind blows and the nearest heaps of bones stand up (Ez 37:9-10)
     dustT = 16;
     const piles = [...world.bonePiles].sort((p, q) => Math.hypot(p.x - P.pos.x, p.z - P.pos.z) - Math.hypot(q.x - P.pos.x, q.z - P.pos.z)).slice(0, 5);
@@ -2309,7 +2314,8 @@ function mapEvent() {
 }
 
 function spawnBoss(enraged, guardian = false) {
-  Object.assign(boss, { spawned: true, enraged, st: 'walk', t: 2.5, n: 0 });
+  Object.assign(boss, { spawned: true, enraged, st: 'walk', t: 2.5, n: 0, phase: 1, step: 0, chain: 0, lift: 0, guard: 0, last: '', side: random() < 0.5 ? 1 : -1 });
+  clearBossFx();
   let x = 0;
   let z = 0;
   for (let t = 0; t < 40; t++) {
@@ -2319,6 +2325,7 @@ function spawnBoss(enraged, guardian = false) {
     if (walkable(x, z) && !flow.blocked[flow.index(x, z)]) break;
   }
   const i = spawnEnemy(BOSS, x, z);
+  boss.hd = Math.atan2(P.pos.x - x, P.pos.z - z);
   if (enraged) E.hp[i] = E.maxhp[i] *= 1.3;
   if (guardian) E.hp[i] = E.maxhp[i] *= 0.35 + 0.2 * P.guardians; // survival: each guardian tougher than the last
   bossRig.group.visible = true;
@@ -2357,14 +2364,14 @@ function director(dt) {
   if (SURV && !boss.spawned && time >= nextGuardian) spawnBoss(false, true);
 }
 
-function enemyShot(x, y, z, dx, dz, dmg) {
+function enemyShot(x, y, z, dx, dz, dmg, speed = 13) {
   if (EP.n >= MAX_ESHOTS) return;
   const i = EP.n++;
   EP.x[i] = x;
   EP.y[i] = y;
   EP.z[i] = z;
-  EP.vx[i] = dx * 13;
-  EP.vz[i] = dz * 13;
+  EP.vx[i] = dx * speed;
+  EP.vz[i] = dz * speed;
   EP.life[i] = 3;
   EP.graze[i] = 0;
   EP.dmg[i] = dmg;
@@ -2498,100 +2505,563 @@ function updateEnemies(dt) {
   }
 }
 
-// Boss: walk, then spear throw (line), stomp (circle, jump to dodge) or call soldiers.
+// ---------- Bosses ----------
+// Each boss has its own walk, its own moves and a second phase at half health. Every blow is marked on
+// the ground before it lands (a line, a cone, a circle that fills up as it comes) and each has a way out:
+// jump the spear and the quakes, step out of the cone or the line, outrun the spin, keep moving in the rain.
+const MOVES = { // name shown under the boss bar, wind-up time, clip, clip speed
+  spear: ['Arremesso da lança', 1.1, 'spear'], sweep: ['Varrida da lança', 0.9, 'sweep'], stomp: ['Pisão do gigante', 1.2, 'stomp'],
+  leap: ['Salto do gigante', 0.55, 'summon', 0.8], challenge: ['Escolhei um homem!', 0.9, 'summon'],
+  charge: ['Investida dos carros', 1, 'stomp'], volley: ['Flechas do Egito', 0.7, 'summon'], javelins: ['Dardos do Faraó', 0.8, 'spear'],
+  chariots: ['Carros do Egito', 0.9, 'summon'],
+  spin: ['Redemoinho do machado', 0.7, 'spin'], fissure: ['O machado racha o chão', 0.95, 'stomp', 1.2], brimstone: ['Fogo e enxofre', 0.8, 'summon'],
+  bones: ['Ossos, levantai-vos!', 0.8, 'summon'],
+  arrows: ['Arqueiros da muralha', 0.6, 'summon'], thrust: ['Estocada real', 0.7, 'spear', 1.4], gates: ['Portas fechadas', 0.5, 'shield'],
+};
+const BOSS_KITS = {
+  golias: { // slow and heavy: leaps in from afar, throws the spear at mid range, sweeps and stomps up close
+    speed: 2.6, rage: 'Golias ruge: "Vem a mim, e darei a tua carne às aves!"', rageMove: 'challenge', // 1 Sm 17:44
+    pick: (d, n, p2) => (n % 5 === 4 ? 'challenge' : d > 15 ? 'leap' : d > 7.5 ? (p2 && n % 2 ? 'leap' : 'spear') : n % 2 ? 'stomp' : 'sweep'),
+  },
+  farao: { // a chariot: circles the hero and charges through; arrows and javelins in between
+    speed: 5, orbit: 11, rage: 'O Senhor endureceu o coração do Faraó!', rageMove: 'chariots', // Êx 14:8
+    pick: (d, n) => ['charge', 'volley', 'charge', 'javelins', 'chariots'][n % 5],
+  },
+  gogue: { // relentless: walks the hero down, spins the axe, splits the ground, rains fire
+    speed: 3, rage: 'Gogue sobe como uma tempestade!', rageMove: 'bones', // Ez 38:9
+    pick: (d, n) => ['spin', 'fissure', 'brimstone', 'spin', 'bones'][n % 5],
+  },
+  rei: { // keeps his distance behind his archers and guards, and lunges when cornered
+    speed: 2.6, keep: [9, 16], rage: 'O rei fecha as portas de Jericó!', rageMove: 'gates', // Js 6:1
+    pick: (d, n) => (d < 5 ? 'thrust' : ['arrows', 'thrust', 'arrows', 'gates'][n % 4]),
+  },
+};
+const KIT = BOSS_KITS[B.bossModel];
+
+let moveName = '';
+function setMoveName(t) {
+  if (t === moveName) return;
+  moveName = t;
+  $('boss-move').textContent = t;
+}
+function bossMove(name) {
+  const [label, t, anim, clip = 1] = MOVES[name];
+  Object.assign(boss, { st: name, t, anim, clip, step: 0, chain: 0, key: boss.key + 1, last: name });
+  setMoveName(label);
+}
+function bossPose(anim, clip = 1) { Object.assign(boss, { anim, clip, key: boss.key + 1 }); }
+function bossRest(t, label = '') {
+  Object.assign(boss, { st: 'rest', t, step: 0, lift: 0 });
+  setMoveName(label);
+}
+function clearBossFx() {
+  for (const m of teleMeshes) m.visible = false;
+  for (const s of spears) s.on = false;
+  hazards.length = 0;
+  boss.guard = boss.lift = 0;
+  setMoveName('');
+}
+function showLine(s, x, y, z, fx, fz, len, w) {
+  const m = teleLines[s];
+  m.visible = true;
+  m.position.set(x + (fx * len) / 2, y + 0.3, z + (fz * len) / 2);
+  m.rotation.y = Math.atan2(fx, fz);
+  m.scale.set(w, 1, len);
+}
+// A spot that strikes after `delay` s. quake: jump over it; fire: leaves the ground burning `linger` s;
+// rise: the dead stand up there (type `spawn`), no damage.
+function hazard(x, z, r, delay, dmg, kind, linger = 0, spawn = 0) {
+  if (hazards.length < MAX_HAZ && walkable(x, z)) hazards.push({ x, z, r, t: delay, max: delay, dmg, kind, linger, spawn });
+}
+// Spots round (x, z): the first right there, the rest scattered between r0 and r1 from it.
+function scatter(x, z, n, r0, r1, fn) {
+  for (let j = 0; j < n; j++) {
+    const a = random() * Math.PI * 2;
+    const r = j ? r0 + random() * (r1 - r0) : 0;
+    fn(x + Math.cos(a) * r, z + Math.sin(a) * r, j);
+  }
+}
+function updateHazards(dt) {
+  for (let i = hazards.length - 1; i >= 0; i--) {
+    const h = hazards[i];
+    const y = terrainH(h.x, h.z);
+    const d = Math.hypot(P.pos.x - h.x, P.pos.z - h.z);
+    if (h.t > 0) {
+      if ((h.t -= dt) > 0) continue;
+      const airborne = P.pos.y - P.ground > 0.5;
+      if (h.dmg && d < h.r + 0.3 && P.pos.y - y < 3 && !(h.kind === 'quake' && airborne)) hurt(h.dmg, h.x, h.z);
+      if (h.kind === 'quake') {
+        addFx(ringGeo, 0xd9483b, h.x, 0.3, h.z, 1, 0.5, { grow: h.r, ground: true });
+        for (let s = 0; s < 10; s++) burst(h.x + Math.cos(s * 0.63) * h.r * 0.7, y + 0.2, h.z + Math.sin(s * 0.63) * h.r * 0.7, 0xcbb89a, 5, 6, 0.22, 5);
+        shake = 1;
+        flash(h.x, y, h.z, 0xffc080, 50, 0.3);
+        beep(50, 0.5, 'sawtooth', 0.09, 0, 30);
+      } else if (h.kind === 'arrow') {
+        burst(h.x, y + 0.3, h.z, 0x8a5a2b, 6, 4, 0.12, 3);
+        beep(700 + random() * 300, 0.04, 'square', 0.02);
+      } else if (h.kind === 'fire') {
+        burst(h.x, y + 0.4, h.z, 0xffb347, 14, 6, 0.18, 6);
+        ember(h.x, y + 0.2, h.z, 0xff8a3d, 6, h.r);
+        flash(h.x, y, h.z, 0xff6a2a, 60, 0.4);
+        beep(90, 0.3, 'sawtooth', 0.05, 0, 40);
+        shake = Math.max(shake, 0.25);
+      } else if (h.kind === 'spike') {
+        const m = new THREE.Mesh(spikeGeo, spikeMat);
+        m.position.set(h.x, y - 0.2, h.z);
+        m.rotation.set((random() - 0.5) * 0.5, random() * 6, (random() - 0.5) * 0.5);
+        addObjFx(m, 0.7, (o, k) => o.scale.set(1, k < 0.15 ? k / 0.15 : 1 - (k - 0.15) / 0.85, 1));
+        burst(h.x, y + 0.3, h.z, 0x9a7258, 5, 3, 0.18, 3);
+        beep(160 + random() * 40, 0.06, 'square', 0.03);
+      } else if (h.kind === 'rise') {
+        spawnEnemy(h.spawn, h.x, h.z);
+        burst(h.x, y + 0.5, h.z, 0xe6dcc2, 10, 3, 0.16, 4);
+      }
+      if (!h.linger) hazards.splice(i, 1);
+    } else if ((h.linger -= dt) <= 0) hazards.splice(i, 1);
+    else { // burning ground
+      if (d < h.r * 0.85 && P.pos.y - y < 1) hurt(9, h.x, h.z);
+      if (random() < dt * 5) ember(h.x + (random() - 0.5) * h.r, y + 0.1, h.z + (random() - 0.5) * h.r, 0xff8a3d, 1, 0.3);
+    }
+  }
+}
+function throwSpear(x, y, z, dx, dz, dmg) {
+  const s = spears.find((p) => !p.on);
+  if (s) Object.assign(s, { on: true, x, y, z, dx, dz, life: 1, dmg });
+}
+function updateSpears(dt) {
+  spears.forEach((s, k) => {
+    const m = spearMeshes[k];
+    m.visible = s.on;
+    if (!s.on) return;
+    s.x += s.dx * 40 * dt;
+    s.z += s.dz * 40 * dt;
+    s.y = terrainH(s.x, s.z) + 1; // hugs the ground: jump over it
+    s.life -= dt;
+    if (Math.hypot(P.pos.x - s.x, P.pos.z - s.z) < 1.4 && Math.abs(P.pos.y + 0.9 - s.y) < 1.4) hurt(s.dmg, s.x - s.dx, s.z - s.dz);
+    if (s.life <= 0) s.on = false;
+    m.position.set(s.x, s.y, s.z);
+    m.rotation.y = Math.atan2(s.dx, s.dz);
+  });
+}
+// n spots in a row across the hero's path, 30 units off to one side: fn(x, z, fx, fz, k) for each open one.
+function lineAcross(n, gap, fn) {
+  const a = random() * Math.PI * 2;
+  const fx = Math.cos(a);
+  const fz = Math.sin(a);
+  for (let k = 0; k < n; k++) {
+    const off = (k - (n - 1) / 2) * gap;
+    const x = P.pos.x + fx * 30 - fz * off;
+    const z = P.pos.z + fz * 30 + fx * off;
+    if (walkable(x, z) && !flow.blocked[flow.index(x, z)]) fn(x, z, fx, fz, k);
+  }
+}
+function chariotRow(n) { // a row of chariots charging across, through the hero's spot
+  lineAcross(n, 3.5, (x, z, fx, fz) => {
+    const i = spawnEnemy(2, x, z);
+    if (i < 0) return;
+    E.st[i] = 2;
+    E.t[i] = 2.6;
+    E.dx[i] = -fx;
+    E.dz[i] = -fz;
+  });
+}
+const openSpot = (x, z) => walkable(x, z) && !flow.blocked[flow.index(x, z)];
+const turnTo = (a, b, max) => a + clamp(Math.atan2(Math.sin(b - a), Math.cos(b - a)), -max, max);
+
 function updateBoss(i, dt) {
+  if (state !== 'play') { // the hero fell: the boss stands and watches
+    boss.moving = false;
+    return;
+  }
   const k = boss.enraged ? 1.4 : 1;
   const x0 = E.x[i];
   const z0 = E.z[i];
+  const y0 = E.y[i] - boss.lift;
   const dx = P.pos.x - x0;
   const dz = P.pos.z - z0;
   const dist = Math.hypot(dx, dz) || 1e-3;
+  const ux = dx / dist;
+  const uz = dz / dist;
+  const toHero = Math.atan2(ux, uz);
+  let p2 = boss.phase === 2;
   boss.t -= dt * k;
-  let move = 0;
-  teleLine.visible = teleCircle.visible = false;
-  if (boss.st === 'walk') {
-    move = dist > 2.5 ? ENEMIES[BOSS].speed * k : 0;
-    E.face[i] = Math.atan2(dx, dz);
-    if (boss.t <= 0) {
-      boss.n++;
-      if (boss.n % 3 === 0) { boss.st = 'summon'; boss.t = 0.8; }
-      else if (dist > 9) { boss.st = 'spear'; boss.t = 1.1; }
-      else { boss.st = 'stomp'; boss.t = 1.2; }
-    }
-  } else if (boss.st === 'spear') {
-    if (boss.t > 0.45) { // track the player, then lock the line
-      boss.dx = dx / dist;
-      boss.dz = dz / dist;
-      E.face[i] = Math.atan2(dx, dz);
-    }
-    teleLine.visible = true;
-    teleLine.position.set(x0 + boss.dx * 16, E.y[i] + 0.3, z0 + boss.dz * 16);
-    teleLine.rotation.y = Math.atan2(boss.dx, boss.dz);
-    teleLine.scale.set(1.8, 1, 32);
-    if (boss.t <= 0) {
-      Object.assign(spear, { on: true, x: x0, z: z0, dx: boss.dx, dz: boss.dz, life: 1, dmg: 35 * k });
-      boss.st = 'rest';
-      boss.t = 1;
-      beep(200, 0.3, 'triangle', 0.05, 0, 80);
-    }
-  } else if (boss.st === 'stomp') {
-    teleCircle.visible = true;
-    teleCircle.position.set(x0, E.y[i] + 0.3, z0);
-    teleCircle.scale.setScalar(7);
-    if (boss.t <= 0) {
-      if (dist < 7 && P.pos.y - P.ground < 0.5) hurt(30 * k, x0, z0);
-      addFx(ringGeo, 0xd9483b, x0, 0.3, z0, 1, 0.4, { grow: 6, ground: true });
-      for (let s = 0; s < 6; s++) burst(x0 + Math.cos(s) * 4, E.y[i] + 0.2, z0 + Math.sin(s) * 4, 0xcbb89a, 6, 6, 0.2, 4);
-      shake = 0.7;
-      beep(60, 0.4, 'sawtooth', 0.08);
-      boss.st = 'rest';
-      boss.t = 1.1;
-    }
-  } else if (boss.st === 'summon') {
-    if (boss.t <= 0) {
-      for (let s = 0; s < 8; s++) {
-        const a = (s / 8) * Math.PI * 2;
-        spawnEnemy(B.summonChariots && s % 2 ? 2 : 0, x0 + Math.cos(a) * 3.5, z0 + Math.sin(a) * 3.5);
+  boss.guard -= dt;
+  for (const m of teleMeshes) m.visible = false;
+  let vx = 0; // this frame's velocity
+  let vz = 0;
+  let contact = 25; // damage on touch
+  let free = false; // in the air: no ground or rocks in the way
+  let crashy = false; // charging: a rock or the water stops it hard
+
+  if (!p2 && E.hp[i] < E.maxhp[i] * 0.5 && (boss.st === 'walk' || boss.st === 'rest')) { // the second phase
+    boss.phase = 2;
+    p2 = true;
+    toast(KIT.rage, '#ff9a8a');
+    shake = 0.8;
+    flash(x0, y0 + 2, z0, 0xff5a3a, 90, 0.6);
+    beep(70, 0.9, 'sawtooth', 0.09, 0, 40);
+    burst(x0, y0 + 3, z0, 0xff5a3a, 30, 7, 0.22, 6);
+    bossMove(KIT.rageMove);
+  }
+
+  switch (boss.st) {
+    case 'walk': {
+      const sp = KIT.speed * (p2 ? 1.2 : 1) * k;
+      if (KIT.orbit) { // the chariot circles at a distance, turning like a chariot
+        const c = clamp((dist - KIT.orbit) / 5, -1, 1);
+        boss.hd = turnTo(boss.hd, Math.atan2(-uz * boss.side + ux * c, ux * boss.side + uz * c), 2.4 * dt);
+        vx = Math.sin(boss.hd) * sp;
+        vz = Math.cos(boss.hd) * sp;
+        E.face[i] = boss.hd;
+      } else if (KIT.keep) { // backs off, closes in, or walks round the hero, always facing him
+        const [near, far] = KIT.keep;
+        const m = dist < near ? -1 : dist > far ? 1 : 0;
+        if (random() < dt * 0.25) boss.side = -boss.side;
+        vx = (m ? ux * m : -uz * boss.side * 0.6) * sp;
+        vz = (m ? uz * m : ux * boss.side * 0.6) * sp;
+        E.face[i] = toHero;
+      } else {
+        if (dist > 2.5) { vx = ux * sp; vz = uz * sp; }
+        E.face[i] = toHero;
       }
-      toast(B.summon, '#ff9a8a');
-      boss.st = 'rest';
-      boss.t = 0.6;
+      if (boss.t <= 0) {
+        let m = KIT.pick(dist, boss.n++, p2);
+        if (m === boss.last) m = KIT.pick(dist, boss.n++, p2); // never the same blow twice in a row
+        bossMove(m);
+      }
+      break;
     }
-  } else if (boss.t <= 0) {
-    boss.st = 'walk';
-    boss.t = 2.2;
+    case 'rest':
+      if (KIT.orbit) E.face[i] = boss.hd;
+      if (boss.t <= 0) {
+        Object.assign(boss, { st: 'walk', t: p2 ? 1.4 : 2.1 });
+        setMoveName('');
+      }
+      break;
+
+    // ----- Goliath -----
+    case 'spear': { // a throw along a line (three in the second phase): jump over it
+      if (boss.t > 0.45) { boss.dx = ux; boss.dz = uz; E.face[i] = toHero; }
+      const n = p2 ? 3 : 1;
+      const a0 = Math.atan2(boss.dx, boss.dz);
+      for (let s = 0; s < n; s++) {
+        const a = a0 + (s - (n - 1) / 2) * 0.32;
+        showLine(s, x0, y0, z0, Math.sin(a), Math.cos(a), 32, 1.8);
+        if (boss.t <= 0) throwSpear(x0, y0 + 1, z0, Math.sin(a), Math.cos(a), 35 * k);
+      }
+      if (boss.t <= 0) {
+        beep(200, 0.3, 'triangle', 0.05, 0, 80);
+        bossRest(1);
+      }
+      break;
+    }
+    case 'sweep': { // the spear swung round in front: step out of the cone (twice in a row in the second phase)
+      if (boss.step === 0) {
+        if (boss.t > 0.35) boss.fx = toHero;
+        E.face[i] = boss.fx + (boss.t < 0.35 ? 0.8 * (1 - boss.t / 0.35) : 0) * (boss.chain % 2 ? -1 : 1); // winds back
+        teleSector.visible = true;
+        teleSector.position.set(x0, y0 + 0.3, z0);
+        teleSector.rotation.y = Math.atan2(-Math.cos(boss.fx), Math.sin(boss.fx));
+        teleSector.scale.setScalar(7.5);
+        if (boss.t <= 0) {
+          const ax = Math.sin(boss.fx);
+          const az = Math.cos(boss.fx);
+          if (dist < 8 && (dx * ax + dz * az) / dist > Math.cos(SWEEP_ARC / 2) && P.pos.y - y0 < 4) hurt(30 * k, x0, z0);
+          addFx(sectorGeo(SWEEP_ARC), 0xfff4dc, x0, y0 + 1.2, z0, 7.5, 0.25, { rotY: Math.atan2(-az, ax) });
+          for (let s = -3; s <= 3; s++) {
+            const a = boss.fx + s * 0.38;
+            burst(x0 + Math.sin(a) * 6, y0 + 0.4, z0 + Math.cos(a) * 6, 0xcbb89a, 3, 4, 0.18, 3);
+          }
+          beep(150, 0.2, 'sawtooth', 0.06, 0, 60);
+          shake = Math.max(shake, 0.4);
+          boss.step = 1;
+          boss.t = 0.3;
+        }
+      } else {
+        E.face[i] = boss.fx + 0.8 * (boss.chain % 2 ? -1 : 1) * (2 * (boss.t / 0.3) - 1); // the swing
+        if (boss.t <= 0) {
+          if (p2 && boss.chain++ < 1) {
+            Object.assign(boss, { step: 0, t: 0.55 });
+            bossPose('sweep');
+          } else bossRest(0.9);
+        }
+      }
+      break;
+    }
+    case 'stomp': // a quake round him: jump
+      teleCircle.visible = true;
+      teleCircle.position.set(x0, y0 + 0.3, z0);
+      teleCircle.scale.setScalar(7);
+      if (boss.t <= 0) {
+        if (dist < 7 && P.pos.y - P.ground < 0.5) hurt(30 * k, x0, z0);
+        addFx(ringGeo, 0xd9483b, x0, 0.3, z0, 1, 0.4, { grow: 6, ground: true });
+        for (let s = 0; s < 6; s++) burst(x0 + Math.cos(s) * 4, y0 + 0.2, z0 + Math.sin(s) * 4, 0xcbb89a, 6, 6, 0.2, 4);
+        shake = 0.7;
+        beep(60, 0.4, 'sawtooth', 0.08);
+        bossRest(1.1);
+      }
+      break;
+    case 'leap': // up, over and down where the hero is heading: the landing quakes (jump)
+      if (boss.step === 0) {
+        E.face[i] = toHero;
+        if (boss.t <= 0) {
+          let tx = P.pos.x + P.vel.x * 0.5;
+          let tz = P.pos.z + P.vel.z * 0.5;
+          const far = Math.hypot(tx - x0, tz - z0);
+          if (far > 24) { tx = x0 + ((tx - x0) / far) * 24; tz = z0 + ((tz - z0) / far) * 24; }
+          if (!walkable(tx, tz)) { tx = P.pos.x; tz = P.pos.z; }
+          Object.assign(boss, { step: 1, t: 1, sx: x0, sz: z0, tx, tz });
+          hazard(tx, tz, 6, 1 / k, 35 * k, 'quake');
+          burst(x0, y0 + 0.3, z0, 0xcbb89a, 16, 5, 0.22, 5);
+          beep(90, 0.4, 'sawtooth', 0.06, 0, 300);
+        }
+      } else {
+        const s = clamp(1 - boss.t, 0, 1);
+        free = true;
+        contact = 0;
+        vx = ((boss.tx - boss.sx) * k);
+        vz = ((boss.tz - boss.sz) * k);
+        boss.lift = 28 * s * (1 - s); // 7 units at the top
+        E.face[i] = Math.atan2(boss.tx - boss.sx, boss.tz - boss.sz);
+        if (boss.t <= 0) {
+          E.x[i] = boss.tx;
+          E.z[i] = boss.tz;
+          E.y[i] = terrainH(boss.tx, boss.tz);
+          bossRest(1.3);
+          return;
+        }
+      }
+      break;
+    case 'challenge': // "Choose a man": a wall of shield-bearers in front, runners on the flanks (1 Sm 17:8)
+      if (boss.t <= 0) {
+        for (let s = 0; s < 6; s++) {
+          const off = (s - 2.5) * 1.7;
+          const x = x0 + ux * 4 - uz * off;
+          const z = z0 + uz * 4 + ux * off;
+          if (openSpot(x, z)) spawnEnemy(6, x, z);
+        }
+        scatter(P.pos.x, P.pos.z, 4, 12, 15, (x, z, j) => j && openSpot(x, z) && spawnEnemy(5, x, z));
+        toast(B.summon, '#ff9a8a');
+        bossRest(0.6);
+      }
+      break;
+
+    // ----- Pharaoh -----
+    case 'charge': // rears, then runs the line at full gallop (three times in the second phase); a rock or the sea overturns him
+      if (boss.step === 0) {
+        if (boss.t > 0.3) boss.hd = turnTo(boss.hd, toHero, 3 * dt);
+        E.face[i] = boss.hd;
+        showLine(0, x0, y0, z0, Math.sin(boss.hd), Math.cos(boss.hd), 30, 2.8);
+        if (boss.t <= 0) {
+          Object.assign(boss, { step: 1, t: 1.3 });
+          bossPose('walk', 2.6);
+          beep(110, 0.5, 'sawtooth', 0.06, 0, 70);
+        }
+      } else {
+        crashy = true;
+        contact = 0;
+        vx = Math.sin(boss.hd) * 24;
+        vz = Math.cos(boss.hd) * 24;
+        E.face[i] = boss.hd;
+        if (dist < 2.6 && P.pos.y - y0 < 2.5) hurt(34 * k, x0, z0);
+        if (random() < 0.6) burst(x0 - vx * 0.06, y0 + 0.3, z0 - vz * 0.06, 0xcbb89a, 2, 2, 0.2, 2);
+        if (boss.t <= 0) {
+          if (++boss.chain < (p2 ? 3 : 1)) {
+            Object.assign(boss, { step: 0, t: 0.6 });
+            bossPose('stomp');
+          } else bossRest(0.6);
+        }
+      }
+      break;
+    case 'volley': // arrows rain on marked spots round the hero (two waves in the second phase)
+      E.face[i] = toHero;
+      if (boss.t <= 0) {
+        scatter(P.pos.x + P.vel.x * 0.9, P.pos.z + P.vel.z * 0.9, p2 ? 11 : 8, 2, 10, (x, z, j) => hazard(x, z, 2.3, 1 + j * 0.06, 18 * k, 'arrow'));
+        beep(520, 0.2, 'triangle', 0.04, 0, 900);
+        if (p2 && boss.chain++ < 1) boss.t = 0.9;
+        else bossRest(0.7);
+      }
+      break;
+    case 'javelins': // a fan of javelins: slip through the gaps
+      E.face[i] = toHero;
+      showLine(0, x0, y0, z0, ux, uz, 14, 0.6);
+      if (boss.t <= 0) {
+        for (let s = 0; s < 5; s++) {
+          const a = toHero + (s - 2 + (boss.chain % 2) * 0.5) * 0.2;
+          enemyShot(x0, y0 + 2.6, z0, Math.sin(a), Math.cos(a), 16 * k, 15);
+        }
+        beep(300, 0.15, 'triangle', 0.04, 0, 120);
+        if (p2 && boss.chain++ < 1) boss.t = 0.35;
+        else bossRest(0.6);
+      }
+      break;
+    case 'chariots':
+      if (KIT.orbit) E.face[i] = boss.hd;
+      if (boss.t <= 0) {
+        chariotRow(7);
+        toast(B.summon, '#ff9a8a');
+        bossRest(0.6);
+      }
+      break;
+
+    // ----- Gog -----
+    case 'spin': // the axe whirls and he comes on, turning slowly: get out of the way, then hit him while he reels
+      teleCircle.visible = true;
+      teleCircle.position.set(x0, y0 + 0.3, z0);
+      teleCircle.scale.setScalar(3.8);
+      if (boss.step === 0) {
+        E.face[i] = boss.hd = toHero;
+        if (boss.t <= 0) Object.assign(boss, { step: 1, t: p2 ? 3.6 : 2.8, sx: 0 });
+      } else {
+        boss.hd = turnTo(boss.hd, toHero, 1.5 * dt);
+        const sp = (p2 ? 5.4 : 4.4) * k;
+        vx = Math.sin(boss.hd) * sp;
+        vz = Math.cos(boss.hd) * sp;
+        E.face[i] += dt * 15;
+        contact = 0;
+        if (dist < 3.8 && P.pos.y - y0 < 3) hurt(20 * k, x0, z0);
+        if ((boss.sx -= dt) <= 0) {
+          boss.sx = 0.22;
+          beep(240, 0.12, 'sawtooth', 0.025, 0, 120);
+          for (let s = 0; s < 4; s++) {
+            const a = E.face[i] + s * 1.57;
+            burst(x0 + Math.sin(a) * 3.2, y0 + 0.4, z0 + Math.cos(a) * 3.2, 0xcbb89a, 2, 3, 0.18, 2);
+          }
+        }
+        if (boss.t <= 0) {
+          bossRest(1.5, 'Tonto');
+          burst(x0, y0 + E.h[i], z0, 0xffe08f, 10, 2, 0.12, 2);
+        }
+      }
+      break;
+    case 'fissure': // the axe splits the ground: bone spikes burst along the line (three lines in the second phase)
+      if (boss.t > 0.4) boss.fx = toHero;
+      E.face[i] = boss.fx;
+      for (let s = 0, n = p2 ? 3 : 1; s < n; s++) {
+        const a = boss.fx + (s - (n - 1) / 2) * 0.4;
+        const ax = Math.sin(a);
+        const az = Math.cos(a);
+        showLine(s, x0, y0, z0, ax, az, 27, 3);
+        if (boss.t <= 0) for (let j = 0; j < 12; j++) hazard(x0 + ax * (2.5 + j * 2.1), z0 + az * (2.5 + j * 2.1), 1.6, 0.12 + j * 0.07, 26 * k, 'spike');
+      }
+      if (boss.t <= 0) {
+        burst(x0 + Math.sin(boss.fx) * 2.5, y0 + 0.3, z0 + Math.cos(boss.fx) * 2.5, 0xcbb89a, 18, 6, 0.24, 5);
+        shake = 0.6;
+        beep(55, 0.5, 'sawtooth', 0.08, 0, 35);
+        bossRest(1);
+      }
+      break;
+    case 'brimstone': // fire and brimstone fall round the hero and the ground burns a while (Ez 38:22)
+      E.face[i] = toHero;
+      if (boss.t <= 0) {
+        scatter(P.pos.x + P.vel.x * 0.8, P.pos.z + P.vel.z * 0.8, p2 ? 12 : 8, 3, 12, (x, z, j) => hazard(x, z, 2.6, 0.9 + j * 0.15, 22 * k, 'fire', 4));
+        beep(80, 1, 'sawtooth', 0.06, 0, 160);
+        bossRest(0.8);
+      }
+      break;
+    case 'bones': // the dead rise in a ring round the hero (Ez 37:10)
+      E.face[i] = toHero;
+      if (boss.t <= 0) {
+        const n = p2 ? 10 : 8;
+        for (let s = 0; s < n; s++) {
+          const a = (s / n) * Math.PI * 2;
+          hazard(P.pos.x + Math.cos(a) * 6.5, P.pos.z + Math.sin(a) * 6.5, 1.2, 1.1, 0, 'rise', 0, s % 3 === 2 ? 1 : 0);
+        }
+        toast(B.summon, '#ff9a8a');
+        bossRest(0.6);
+      }
+      break;
+
+    // ----- The king of Jericho -----
+    case 'arrows': // archers loose fans from the walls, wave after wave; a ring of arrows in the second phase
+      E.face[i] = toHero;
+      if (boss.t <= 0) {
+        const n = p2 ? 9 : 7;
+        for (let s = 0; s < n; s++) {
+          const a = toHero + (s - (n - 1) / 2 + (boss.chain % 2) * 0.5) * 0.17;
+          enemyShot(x0, y0 + 2.4, z0, Math.sin(a), Math.cos(a), 14 * k, 14);
+        }
+        beep(640, 0.08, 'triangle', 0.03, 0, 400);
+        if (++boss.chain < (p2 ? 4 : 3)) boss.t = 0.45;
+        else {
+          if (p2) for (let s = 0; s < 18; s++) enemyShot(x0, y0 + 2.4, z0, Math.sin(s * 0.349), Math.cos(s * 0.349), 14 * k, 10);
+          bossRest(0.7);
+        }
+      }
+      break;
+    case 'thrust': // a lunge with the spear down the line
+      if (boss.step === 0) {
+        if (boss.t > 0.25) boss.fx = toHero;
+        E.face[i] = boss.fx;
+        showLine(0, x0, y0, z0, Math.sin(boss.fx), Math.cos(boss.fx), 13, 2);
+        if (boss.t <= 0) Object.assign(boss, { step: 1, t: 0.42 });
+      } else {
+        crashy = true;
+        contact = 0;
+        vx = Math.sin(boss.fx) * 30;
+        vz = Math.cos(boss.fx) * 30;
+        if (dist < 2.3 && P.pos.y - y0 < 3) hurt(28 * k, x0, z0);
+        if (random() < 0.5) burst(x0, y0 + 0.3, z0, 0xcbb89a, 2, 2, 0.18, 2);
+        if (boss.t <= 0) bossRest(0.7);
+      }
+      break;
+    case 'gates': // behind the golden shield (a quarter of the damage gets through) while guards close in
+      E.face[i] = toHero;
+      if (boss.step === 0) {
+        if (boss.t <= 0) {
+          const n = p2 ? 12 : 9;
+          for (let s = 0; s < n; s++) {
+            const a = (s / n) * Math.PI * 2;
+            const x = P.pos.x + Math.cos(a) * 10;
+            const z = P.pos.z + Math.sin(a) * 10;
+            if (openSpot(x, z)) spawnEnemy(6, x, z);
+          }
+          toast(B.summon, '#ff9a8a');
+          beep(330, 0.6, 'square', 0.04, 0, 220);
+          Object.assign(boss, { step: 1, t: 3.2, guard: 3.2 / k, sx: 0 });
+        }
+      } else {
+        if ((boss.sx -= dt) <= 0) {
+          boss.sx = 0.4;
+          addFx(ringGeo, 0xf2c14e, x0, 0.3, z0, 2.2, 0.5, { grow: 0.6, ground: true });
+        }
+        if (boss.t <= 0) bossRest(0.4);
+      }
+      break;
   }
-  if (teleLine.visible || teleCircle.visible) {
-    teleLine.material.opacity = teleCircle.material.opacity = 0.25 + 0.2 * Math.sin(time * 20);
+
+  if (teleMeshes.some((m) => m.visible)) {
+    const o = 0.25 + 0.2 * Math.sin(time * 20);
+    for (const m of teleMeshes) m.material.opacity = o;
   }
-  boss.moving = move > 0;
-  let x = x0 + (dx / dist) * move * dt;
-  let z = z0 + (dz / dist) * move * dt;
-  for (const o of obstacles) {
-    const ox = x - o.x;
-    const oz = z - o.z;
-    const d = Math.hypot(ox, oz) || 1e-3;
-    if (d < o.r + 1.4) { x = o.x + (ox / d) * (o.r + 1.4); z = o.z + (oz / d) * (o.r + 1.4); }
+  boss.moving = vx * vx + vz * vz > 0.01;
+  let x = x0 + vx * dt;
+  let z = z0 + vz * dt;
+  if (!free) {
+    if (!walkable(x, z) || (crashy && obstacleAt(x, z, 1) && !obstacleAt(x0, z0, 1))) { // runs into a rock (not one it starts against)
+      x = x0;
+      z = z0;
+      boss.side = -boss.side; // circling: turn the other way
+      boss.hd = toHero;
+      if (crashy && boss.st === 'charge') { // overturned: a moment to strike back
+        bossRest(1.8, 'Tombou!');
+        burst(x0, y0 + 1.5, z0, 0xcbb89a, 24, 6, 0.24, 5);
+        burst(x0, y0 + 3, z0, 0xffe08f, 10, 2, 0.12, 2);
+        shake = Math.max(shake, 0.5);
+        beep(80, 0.4, 'square', 0.07, 0, 40);
+      } else if (crashy) bossRest(0.7);
+    }
+    for (const o of obstacles) {
+      const ox = x - o.x;
+      const oz = z - o.z;
+      const d = Math.hypot(ox, oz) || 1e-3;
+      if (d < o.r + 1.4) { x = o.x + (ox / d) * (o.r + 1.4); z = o.z + (oz / d) * (o.r + 1.4); }
+    }
   }
   E.x[i] = x;
   E.z[i] = z;
-  E.y[i] = terrainH(x, z);
-  if (dist < 1.9 && P.pos.y - E.y[i] < E.h[i]) hurt(25 * k, x, z);
-}
-
-function updateSpear(dt) {
-  spearMesh.visible = spear.on;
-  if (!spear.on) return;
-  spear.x += spear.dx * 40 * dt;
-  spear.z += spear.dz * 40 * dt;
-  spear.y = terrainH(spear.x, spear.z) + 1; // hugs the ground: jump over it
-  spear.life -= dt;
-  if (Math.hypot(P.pos.x - spear.x, P.pos.z - spear.z) < 1.4 && Math.abs(P.pos.y + 0.9 - spear.y) < 1.4) {
-    hurt(spear.dmg, spear.x - spear.dx, spear.z - spear.dz);
-  }
-  if (spear.life <= 0) spear.on = false;
-  spearMesh.position.set(spear.x, spear.y, spear.z);
-  spearMesh.rotation.y = Math.atan2(spear.dx, spear.dz);
+  E.y[i] = terrainH(x, z) + boss.lift;
+  if (contact && boss.lift < 0.5 && dist < 1.9 && P.pos.y - y0 < E.h[i]) hurt(contact * k, x, z);
 }
 
 function updateEnemyShots(dt) {
@@ -3855,6 +4325,7 @@ let outro = null;
 let camZoom = 1;
 function startDeath() {
   state = 'dying';
+  clearBossFx();
   for (const g of Object.values(heroRig.gear)) if (g.slot === 'fx') for (const o of g.objs) o.visible = false; // glows do not crumble
   outro = { t: 0 };
   P.vel.set(0, 0, 0);
@@ -3871,9 +4342,8 @@ function startDeath() {
 function guardianDown(x, y, z) {
   P.guardians++;
   boss.spawned = false;
-  spear.on = false;
+  clearBossFx();
   bossRig.group.visible = false;
-  teleLine.visible = teleCircle.visible = false;
   $('bossbar').hidden = true;
   nextGuardian = (Math.floor(time / GUARDIAN_EVERY) + 1) * GUARDIAN_EVERY;
   burst(x, y + 2, z, 0xffe08f, 50, 9, 0.28, 9);
@@ -3959,7 +4429,7 @@ function startVictory(x, y, z) {
   outro = { t: 0, win: true, x, y, z, next: 0.5 };
   for (let i = 0; i < E.n; i++) burst(E.x[i], E.y[i] + 1, E.z[i], 0xfff1b8, 3, 4, 0.16, 5);
   E.n = EP.n = 0;
-  teleLine.visible = teleCircle.visible = false;
+  clearBossFx();
   $('bossbar').hidden = true;
   P.vel.set(0, 0, 0);
   P.faceX = Math.sin(yaw); // turn to the camera
@@ -4029,7 +4499,7 @@ function die() {
 }
 function win() {
   bossRig.group.visible = false;
-  teleLine.visible = teleCircle.visible = false;
+  clearBossFx();
   $('bossbar').hidden = true;
   profile.wins[P.hero] = { ...profile.wins[P.hero], [BIOME_ID]: true };
   saveProfile();
@@ -4077,7 +4547,8 @@ function step(dt) {
   updateShots(dt);
   updateStrikes(dt);
   updateEnemyShots(dt);
-  updateSpear(dt);
+  updateSpears(dt);
+  updateHazards(dt);
   updateMiracles(dt);
   updateAllies(dt);
   reapEnemies();
@@ -4168,7 +4639,10 @@ function syncMeshes(dt) {
       boss.idx = i;
       bossRig.group.position.set(E.x[i], E.y[i], E.z[i]);
       bossRig.group.rotation.y = E.face[i];
-      bossRig.mat.emissive.setScalar(E.flash[i] > 0 ? 0.5 : 0);
+      if (E.flash[i] > 0) bossRig.mat.emissive.setScalar(boss.guard > 0 ? 0.25 : 0.5);
+      else if (boss.guard > 0) bossRig.mat.emissive.setRGB(0.35, 0.26, 0.04); // behind the golden shield
+      else if (boss.phase === 2) bossRig.mat.emissive.setRGB(0.16 + 0.08 * Math.sin(time * 6), 0.02, 0); // enraged
+      else bossRig.mat.emissive.setScalar(0);
       continue;
     }
     const bob = E.stun[i] > 0 ? 0 : Math.abs(Math.sin(time * 9 + i)) * 0.06;
@@ -4281,6 +4755,43 @@ function syncMeshes(dt) {
     millMesh.setMatrixAt(i, dummy.matrix);
   }
   strikeMesh.count = hailMesh.count = fireBolt.count = starMesh.count = millMesh.count = K.n;
+  let nf = 0; // boss hazards: the ring, the fill that grows as the blow comes, what falls
+  let na = 0;
+  hazards.forEach((h, n) => {
+    const y = terrainH(h.x, h.z) + 0.15;
+    const warn = h.t > 0;
+    const p = warn ? 1 - h.t / h.max : 1;
+    dummy.position.set(h.x, y, h.z);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.setScalar(h.r);
+    dummy.updateMatrix();
+    hazRing.setMatrixAt(n, dummy.matrix);
+    if (warn) tmpColor.copy(HAZ_COL[h.kind]);
+    else tmpColor.copy(POOL_COL).multiplyScalar(Math.min(1, h.linger) * (0.8 + 0.2 * Math.sin(time * 9 + n)));
+    hazRing.setColorAt(n, tmpColor);
+    hazFill.setColorAt(n, tmpColor);
+    dummy.scale.setScalar(h.r * (warn ? p : 0.9));
+    dummy.updateMatrix();
+    hazFill.setMatrixAt(n, dummy.matrix);
+    if (warn && h.kind === 'fire') {
+      dummy.position.y = y + (1 - p) * 18;
+      dummy.rotation.set(0, time * 3, 0);
+      dummy.scale.set(0.6, 1, 0.6);
+      dummy.updateMatrix();
+      hazBolt.setMatrixAt(nf++, dummy.matrix);
+    } else if (warn && h.kind === 'arrow' && p > 0.45) {
+      dummy.position.y = y + 0.8 + (1 - p) * 26;
+      dummy.rotation.set(Math.PI / 2, 0, 0); // point first
+      dummy.scale.setScalar(0.6);
+      dummy.updateMatrix();
+      hazArrow.setMatrixAt(na++, dummy.matrix);
+    }
+  });
+  hazRing.count = hazFill.count = hazards.length;
+  hazBolt.count = nf;
+  hazArrow.count = na;
+  for (const m of [hazRing, hazFill, hazBolt, hazArrow]) m.instanceMatrix.needsUpdate = true;
+  if (hazards.length) hazRing.instanceColor.needsUpdate = hazFill.instanceColor.needsUpdate = true;
   millMesh.instanceMatrix.needsUpdate = true;
   strikeMesh.instanceMatrix.needsUpdate = hailMesh.instanceMatrix.needsUpdate = fireBolt.instanceMatrix.needsUpdate = starMesh.instanceMatrix.needsUpdate = true;
 
@@ -4731,7 +5242,7 @@ window.arm = (ids, level = 1) => {
 };
 // Debug: poke at the run from the console, e.g. dev.look(Math.PI) or dev.spawnBoss().
 window.dev = {
-  P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, cfg, scene, ASSETS, profile, saveProfile, world,
+  P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, bossMove, hazards, cfg, scene, ASSETS, profile, saveProfile, world,
   look: (y, p = pitch) => { yaw = y; pitch = p; },
   warp: (t) => { time = t; return time; }, // jump the run's clock (tests: guardians, the endless night)
   tick: (n = 1, dt = 1 / 30) => { // run frames by hand, as the loop would (works in a background tab)

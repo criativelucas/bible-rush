@@ -110,6 +110,7 @@
     #bossbar[hidden] { display: none; }
     #boss-name { font: 400 20px/1.2 var(--f-title); letter-spacing: 1px; color: #ffb4a8; text-shadow: 0 2px 0 var(--line); }
     #bossbar .bar { margin-top: 2px; height: 22px; --c1: #f07a6a; --c2: #b52a24; --c3: #6d1418; }
+    #boss-move { min-height: 18px; margin-top: 3px; font: 400 16px/18px var(--f-ui); letter-spacing: 1px; color: #ffd8a8; text-shadow: var(--outline); }
     #stats { top: 12px; right: 12px; display: flex; gap: 14px; padding: 4px 12px; }
     #minimap { top: 56px; right: 12px; width: 150px; height: 150px; border-radius: 50%; image-rendering: pixelated;
       box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line), 0 4px 0 6px rgba(10, 5, 2, .35); }
@@ -730,7 +731,7 @@
         <div id="clock" class="glass"><i id="phase-dot"></i><span id="timer">0:00</span></div>
         <div id="objective" class="glass"></div>
       </div>
-      <div id="bossbar" class="glass" hidden><div id="boss-name"></div><div class="bar"><i id="boss-hp"></i></div></div>
+      <div id="bossbar" class="glass" hidden><div id="boss-name"></div><div class="bar"><i id="boss-hp"></i></div><div id="boss-move"></div></div>
     </div>
     <div id="stats" class="hud glass">
       <div title="Nível"><img class="ico" src="assets/ui/star.png" alt="Nível"><b id="level">1</b></div>
@@ -944,6 +945,7 @@
       <button class="btn back" data-back><kbd class="k">Esc</kbd>Voltar</button>
       <h3>Objetivo</h3>
       <p>Siga as colunas de luz e erga as <b>3 Pedras do Memorial</b>. Então o chefe aparece. Se você demorar, ele chega furioso aos 10:00.</p>
+      <p>Cada chefe luta do seu jeito, e todo golpe aparece no chão antes de cair: uma linha, um cone ou um círculo que se enche. Pule a lança e os tremores, saia do cone e das marcas, e ataque quando ele ficar tonto ou tombar. Com metade da vida ele se enfurece e ganha golpes novos.</p>
       <h3>Controles</h3>
       <div class="keys">
         <span><kbd class="k">W</kbd><kbd class="k">A</kbd><kbd class="k">S</kbd><kbd class="k">D</kbd></span><span>Mover (as armas atacam sozinhas)</span>
