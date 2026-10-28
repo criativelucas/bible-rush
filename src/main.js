@@ -953,6 +953,7 @@ document.addEventListener('pointerlockchange', () => {
 // ---------- Screens ----------
 function show(id) {
   for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id);
+  syncMapVideo(); // the map videos only while the setup screen is up (never over a run)
   const first = id && document.querySelector(`#${id} .nav .btn`);
   if (first) setCur(first);
 }
@@ -988,7 +989,6 @@ function go(id) {
   if (id === 'ranking') renderRanking();
   state = id;
   show(id);
-  syncMapVideo();
   if (id === 'menu') guide('menu', MENU_GUIDE);
   if (id === 'shop') guide('shop', SHOP_GUIDE);
   beep(660, 0.05, 'triangle', 0.03);
@@ -1032,14 +1032,15 @@ function pickMapTo(id) {
   syncMapVideo();
 }
 function syncMapVideo() {
-  if (state === 'setup' && !mapVideos.ela) { // first visit: load them all, so switching is instant
+  const setup = $('setup').classList.contains('on');
+  if (setup && !mapVideos.ela) { // first visit: load them all, so switching is instant
     for (const id in BIOMES) {
       const v = Object.assign(document.createElement('video'), { muted: true, loop: true, playsInline: true, preload: 'auto', poster: `assets/ui/${id}.jpg`, src: `assets/maps/${id}.mp4` });
       $('map-videos').append(mapVideos[id] = v);
     }
   }
   for (const [id, v] of Object.entries(mapVideos)) {
-    const on = state === 'setup' && id === pickMap;
+    const on = setup && id === pickMap;
     v.classList.toggle('on', on);
     if (on) v.play().catch(() => {});
     else v.pause();
