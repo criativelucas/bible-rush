@@ -36,7 +36,7 @@ let DIFF_ID = Math.min(2, Math.max(0, Number(params.get('diff')) || 0));
 if (!diffOpen(profile, BIOME_ID, DIFF_ID)) DIFF_ID = 0;
 let DIFF = DIFFS[DIFF_ID];
 let SURV = params.get('mode') === 'surv';
-const DEFAULTS = { style: 'crisp', shadows: true, bloom: true, lights: true, dmgNumbers: true, fps: false, sens: 1, camDist: 8.5, invertY: false, autoCam: true, lockMouse: true, volume: 0.7 };
+const DEFAULTS = { style: 'crisp', shadows: true, bloom: true, lights: true, cinema: true, dmgNumbers: true, fps: false, sens: 1, camDist: 8.5, invertY: false, autoCam: true, lockMouse: true, volume: 0.7 };
 const cfg = { ...DEFAULTS };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('otr-cfg') || '{}')); } catch {}
 const saveCfg = () => { try { localStorage.setItem('otr-cfg', JSON.stringify(cfg)); } catch {} };
@@ -69,7 +69,7 @@ const hdr = (m, k) => { m.color.multiplyScalar(k); return m; };
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(1);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.domElement.id = 'view';
 document.body.prepend(renderer.domElement);
 const canvas = renderer.domElement;
@@ -86,6 +86,9 @@ const target = new THREE.WebGLRenderTarget(1, 1, {
 // Bloom: only what shines past white (fire, beams, sparks, mana: their colours are pushed above 1 in
 // the HDR target) is cut out, blurred at half size and added back, so it glows without fogging the scene.
 const bloomRT = [0, 1].map(() => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }));
+// Depth of field (the tilt-shift look of HD-2D games): the scene again at half size, blurred; the post pass
+// mixes it in by distance from the hero, so the far field and the near foreground go soft.
+const dofRT = [0, 1].map(() => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }));
 const FS_VERT = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 const brightMat = new THREE.ShaderMaterial({
   uniforms: { tColor: { value: target.texture } }, vertexShader: FS_VERT, depthTest: false, depthWrite: false,
@@ -110,11 +113,13 @@ const blurMat = new THREE.ShaderMaterial({
 });
 const postMat = new THREE.ShaderMaterial({
   uniforms: { tColor: { value: target.texture }, tDepth: { value: target.depthTexture }, texel: { value: new THREE.Vector2() }, near: { value: camera.near }, far: { value: camera.far },
-    tBloom: { value: bloomRT[0].texture }, bloomOn: { value: 1 } },
+    tBloom: { value: bloomRT[0].texture }, bloomOn: { value: 1 }, tBlur: { value: dofRT[1].texture }, dofOn: { value: 1 }, focus: { value: 10 },
+    sunUv: { value: new THREE.Vector2(0.5, 1.4) }, sunCol: { value: new THREE.Color(0) }, aspect: { value: 1 } },
   vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
   fragmentShader: `
     uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 texel; uniform float near; uniform float far;
-    uniform sampler2D tBloom; uniform float bloomOn;
+    uniform sampler2D tBloom; uniform float bloomOn; uniform sampler2D tBlur; uniform float dofOn; uniform float focus;
+    uniform vec2 sunUv; uniform vec3 sunCol; uniform float aspect;
     varying vec2 vUv;
     float dist(vec2 uv) { float z = texture2D(tDepth, uv).x; return near * far / (far - z * (far - near)); }
     void main() {
@@ -124,12 +129,22 @@ const postMat = new THREE.ShaderMaterial({
                     max(dist(vUv + vec2(0.0, texel.y)), dist(vUv - vec2(0.0, texel.y))));
       float edge = step(d * 0.06 + 0.15, n - d) * (1.0 - smoothstep(30.0, 80.0, d));
       col = mix(col, col * 0.28, edge);
+      // Depth of field: sharp round the hero, soft far beyond and close in front.
+      float coc = smoothstep(focus * 1.6, focus * 4.2, d) + smoothstep(focus * 0.85, focus * 0.45, d) * 0.9 + smoothstep(0.24, 0.0, vUv.y) * 0.6;
+      col = mix(col, texture2D(tBlur, vUv).rgb, clamp(coc, 0.0, 1.0) * dofOn);
       col += texture2D(tBloom, vUv).rgb * 1.15 * bloomOn; // the glow
+      vec2 sq = (vUv - sunUv) * vec2(aspect, 1.0);
+      col += sunCol * exp(-dot(sq, sq) * 1.4); // haze of light falling in from the sun's side
       col = col / (1.0 + max(max(col.r, max(col.g, col.b)) - 1.0, 0.0) * 0.6); // bright cores roll off instead of clipping flat
       float lum = dot(col, vec3(0.299, 0.587, 0.114));
-      col = mix(vec3(lum), col, 1.08) * vec3(1.02, 1.0, 0.97); // a touch more colour, a touch warmer
+      // Grade: cool blue shadows, warm golden light, a gentle S-curve and richer colour.
+      col *= mix(vec3(1.0), mix(vec3(0.84, 0.93, 1.12), vec3(1.07, 1.0, 0.88), smoothstep(0.05, 0.8, lum)), bloomOn);
+      vec3 cc = clamp(col, 0.0, 1.0);
+      col = mix(col, cc * cc * (3.0 - 2.0 * cc), 0.3 * bloomOn);
+      lum = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(vec3(lum), col, 1.0 + 0.14 * bloomOn);
       vec2 q = vUv - 0.5;
-      col *= 1.0 - 0.28 * smoothstep(0.35, 0.8, length(q * vec2(1.25, 1.0))) * bloomOn; // soft vignette
+      col *= 1.0 - 0.4 * smoothstep(0.3, 0.85, length(q * vec2(1.2, 1.0))) * bloomOn; // vignette
       gl_FragColor = vec4(col, 1.0);
       #include <colorspace_fragment>
     }`,
@@ -150,8 +165,9 @@ function resize() {
   const h = Math.ceil(innerHeight / scale);
   renderer.setSize(w, h, false);
   target.setSize(w, h);
-  for (const rt of bloomRT) rt.setSize(Math.ceil(w / 2), Math.ceil(h / 2));
+  for (const rt of [...bloomRT, ...dofRT]) rt.setSize(Math.ceil(w / 2), Math.ceil(h / 2));
   postMat.uniforms.texel.value.set(1 / w, 1 / h);
+  postMat.uniforms.aspect.value = w / h;
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   canvas.classList.toggle('smooth', !lines);
@@ -180,12 +196,26 @@ function render() {
       fsPass(blurMat, a);
     }
   }
+  postMat.uniforms.dofOn.value = cfg.cinema ? 1 : 0;
+  if (cfg.cinema) { // the scene at half size, blurred twice
+    const [a, b] = dofRT;
+    let src = target.texture;
+    for (const k of [1, 2.4]) {
+      blurMat.uniforms.tSrc.value = src;
+      blurMat.uniforms.dir.value.set(k / a.width, 0);
+      fsPass(blurMat, a);
+      blurMat.uniforms.tSrc.value = a.texture;
+      blurMat.uniforms.dir.value.set(0, k / a.height);
+      fsPass(blurMat, b);
+      src = b.texture;
+    }
+  }
   fsPass(postMat, null);
 }
 
 // Warm sun, cool sky light: shadows come out bluish like in pixel-art landscapes.
-const hemi = new THREE.HemisphereLight(0xc6d6f2, 0x8a7a5a, 1.45);
-const sun = new THREE.DirectionalLight(0xffeccc, 2.5);
+const hemi = new THREE.HemisphereLight(0xb9cff4, 0x8a7458, 1.25);
+const sun = new THREE.DirectionalLight(0xffeccc, 2.8);
 sun.castShadow = cfg.shadows;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, near: 1, far: 180 });
@@ -223,6 +253,105 @@ Object.assign(ASSETS.items, forgeModels()); // the newer weapons' models
 const world = buildWorld(scene, BIOME_ID, random, ASSETS.props);
 const B = world.B;
 const terrainH = world.terrainH;
+
+// ---------- Atmosphere (the HD-2D look): shafts of sunlight, motes in the air, the sun's haze ----------
+const SUN_DIR = new THREE.Vector3(30, 60, 22).normalize(); // the sun stands here (see updateCamera)
+const shaftGeo = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0); // grows up from its foot
+const SHAFT_FRAG = `uniform vec3 uCol; varying vec2 vUv;
+  void main() {
+    float across = sin(vUv.x * 3.14159);
+    float along = smoothstep(0.0, 0.3, vUv.y) * (1.0 - smoothstep(0.5, 1.0, vUv.y));
+    gl_FragColor = vec4(uCol * across * across * along, 1.0);
+  }`;
+const shafts = Array.from({ length: 7 }, () => {
+  const m = new THREE.Mesh(shaftGeo, new THREE.ShaderMaterial({
+    uniforms: { uCol: { value: new THREE.Color() } }, fragmentShader: SHAFT_FRAG, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  }));
+  m.matrixAutoUpdate = false;
+  m.frustumCulled = false;
+  scene.add(m);
+  return { m, x: 0, z: 0, w: 3, t: 0, life: -1 };
+});
+const MOTES = 170;
+const moteGeo = new THREE.BufferGeometry();
+moteGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
+moteGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
+const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ size: 0.15, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+motes.frustumCulled = false;
+scene.add(motes);
+const moteSeed = Array.from({ length: MOTES }, () => [random() * 40, random() * 40, random(), random() * 6.28, 0.4 + random() * 0.6]);
+const moteGround = new Float32Array(MOTES); // the ground under each mote, refreshed a few at a time (terrainH is not cheap)
+let moteNext = 0;
+const MOTE_COL = { ela: [1.5, 1.45, 0.75], mar: [1.7, 1.5, 1.1], ossos: [1.8, 0.95, 0.45], jerico: [1.7, 1.4, 0.65] }; // pollen, sea glitter, embers, gold dust
+const FIREFLY = [1.1, 2.1, 0.7];
+const SHAFT_DAY = new THREE.Color(1, 0.84, 0.58);
+const SHAFT_NIGHT = new THREE.Color(0.55, 0.65, 1);
+const shaftNight = new THREE.Color();
+const v3 = new THREE.Vector3();
+const v3b = new THREE.Vector3();
+const v3c = new THREE.Vector3();
+const v3d = new THREE.Vector3();
+const shaftM = new THREE.Matrix4();
+function updateAtmos(dt, t) {
+  const on = cfg.cinema;
+  motes.visible = on;
+  const fx = focus.x;
+  const fz = focus.z;
+  // Shafts: each fades in and out somewhere round the hero, slanted toward the sun, turned to the camera.
+  for (const s of shafts) {
+    s.m.visible = on;
+    if (!on) continue;
+    s.t += dt;
+    if (s.t > s.life) {
+      // somewhere the camera sees: ahead of the hero and to the sides
+      let ax = fx - camera.position.x;
+      let az = fz - camera.position.z;
+      const al = Math.hypot(ax, az) || 1;
+      ax /= al;
+      az /= al;
+      const ahead = -4 + random() * 26;
+      const across = (random() - 0.5) * 34;
+      Object.assign(s, { x: fx + ax * ahead - az * across, z: fz + az * ahead + ax * across, w: 2.5 + random() * 5, t: 0, life: 7 + random() * 8 });
+    }
+    const fade = Math.sin(Math.PI * clamp(s.t / s.life, 0, 1));
+    s.m.material.uniforms.uCol.value.copy(SHAFT_DAY).multiplyScalar(0.24 * (1 - night) * fade).add(shaftNight.copy(SHAFT_NIGHT).multiplyScalar(0.14 * night * fade));
+    const foot = v3.set(s.x, terrainH(s.x, s.z) - 1, s.z);
+    const side = v3b.subVectors(camera.position, foot).cross(SUN_DIR).normalize();
+    const n = v3c.crossVectors(side, SUN_DIR);
+    shaftM.makeBasis(side.multiplyScalar(s.w), v3d.copy(SUN_DIR).multiplyScalar(36), n).setPosition(foot);
+    s.m.matrix.copy(shaftM);
+    s.m.matrixWorldNeedsUpdate = true;
+  }
+  // Motes drift through a box that follows the hero; they twinkle, and at night they are fireflies.
+  if (on) {
+    const pos = moteGeo.attributes.position.array;
+    const col = moteGeo.attributes.color.array;
+    const base = night > 0.5 && BIOME_ID === 'ela' ? FIREFLY : MOTE_COL[BIOME_ID];
+    const k = night > 0.5 ? 1.2 : 0.75;
+    const refresh = moteNext;
+    moteNext = (moteNext + 17) % MOTES;
+    for (let i = 0; i < MOTES; i++) {
+      const [sx, sz, sy, ph, sp] = moteSeed[i];
+      const x = fx + ((((sx + t * 0.5 * sp - fx) % 40) + 60) % 40) - 20;
+      const z = fz + ((((sz + t * 0.3 * sp - fz) % 40) + 60) % 40) - 20;
+      pos[i * 3] = x + Math.sin(t * 0.6 + ph) * 0.5;
+      if ((i - refresh + MOTES) % MOTES < 17 || !moteGround[i]) moteGround[i] = terrainH(x, z);
+      pos[i * 3 + 1] = moteGround[i] + 0.4 + sy * 6 + Math.sin(t * 0.8 + ph * 2) * 0.4;
+      pos[i * 3 + 2] = z;
+      const tw = (0.5 + 0.5 * Math.sin(t * 2.2 * sp + ph)) ** 2 * k;
+      col[i * 3] = base[0] * tw;
+      col[i * 3 + 1] = base[1] * tw;
+      col[i * 3 + 2] = base[2] * tw;
+    }
+    moteGeo.attributes.position.needsUpdate = moteGeo.attributes.color.needsUpdate = true;
+  }
+  // Post: focus on the hero (or what the camera looks at); the sun's haze where the sun stands on screen.
+  postMat.uniforms.focus.value = Math.max(3, camera.position.distanceTo(focus));
+  v3.copy(camera.position).addScaledVector(SUN_DIR, 200).project(camera);
+  postMat.uniforms.sunUv.value.set(v3.x * 0.5 + 0.5, v3.y * 0.5 + 0.5);
+  postMat.uniforms.sunCol.value.setRGB(1, 0.8, 0.55).multiplyScalar(v3.z < 1 && cfg.bloom ? 0.22 * (1 - night) : 0);
+}
 const { obstacles, stones, altars, chests, jars } = world;
 function slope(x, z) {
   const e = 0.25;
@@ -301,7 +430,7 @@ function instanced(geo, mat, max, colors = false, shadow = false) {
   scene.add(m);
   return m;
 }
-const enemyMat = M.toon(0xffffff, { walk: true, fade: true });
+const enemyMat = M.toon(0xffffff, { walk: true, fade: true, rim: true });
 const enemyMeshes = []; // by type (sparse: the boss is a rig)
 for (const t of MOB_TYPES) enemyMeshes[t] = instanced(ASSETS.mobs[`mob_${t}_${BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true);
 const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca'];
@@ -435,7 +564,7 @@ function makeRig({ scene: root, clips }) {
     map.needsUpdate = true;
   }
   const dissolve = { value: 0 };
-  const mat = map ? M.toon(0xffffff, { vc: false, map, dissolve }) : M.toon(0xffffff, { dissolve });
+  const mat = map ? M.toon(0xffffff, { vc: false, map, dissolve, rim: true }) : M.toon(0xffffff, { dissolve, rim: true });
   root.traverse((o) => {
     if (!o.isMesh) return;
     o.material = mat;
@@ -4535,8 +4664,8 @@ function updateSky() {
     night = Math.max(night, clamp((time - ENDLESS_NIGHT) / 6, 0, 1));
     if (!P.endless) { P.endless = true; toast('A noite sem fim começou. Ninguém resiste para sempre.', '#ff9a8a'); }
   }
-  hemi.intensity = 1.45 - 0.85 * night;
-  sun.intensity = 2.5 - 1.75 * night;
+  hemi.intensity = 1.25 - 0.7 * night;
+  sun.intensity = 2.8 - 2 * night;
   sun.color.lerpColors(SUN, MOON, night);
   const isNight = night > 0.5;
   if (isNight !== wasNight) {
@@ -4897,6 +5026,7 @@ function updateCamera(dt) {
   sun.position.set(focus.x + 30, focus.y + 60, focus.z + 22);
   sun.target.position.copy(focus);
   M.shared.uPlayer.value.set(P.pos.x, P.pos.y + 1, P.pos.z);
+  updateAtmos(dt, t);
 }
 
 // ---------- HUD (only touches the DOM when something changes) ----------

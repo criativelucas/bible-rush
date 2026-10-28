@@ -118,7 +118,7 @@ export function buildWorld(scene, id, random, PROPS) {
       for (let k = 0; k < 3; k++) c.toArray(colors, (t + k) * 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    const ground = new THREE.Mesh(g, M.toon(0xffffff, { ground: B.groundKind }));
+    const ground = new THREE.Mesh(g, M.toon(0xffffff, { ground: B.groundKind, pave: B.city ? [B.city.x, B.city.z, B.city.r - 1] : null }));
     ground.receiveShadow = true;
     scene.add(ground);
   }
