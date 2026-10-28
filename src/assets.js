@@ -34,7 +34,7 @@ async function library(url) {
 
 // Rigged models: the scene (armature + skinned mesh) and its clips by short name. The exporter also
 // writes other rigs' actions into each file, so only clips named "<rig>|<clip>" for this rig are kept.
-async function rigged(url) {
+export async function rigged(url) {
   const gltf = await loader.loadAsync(url);
   let rig = '';
   gltf.scene.traverse((o) => { if (!rig && o.name.endsWith('_rig')) rig = o.name; });

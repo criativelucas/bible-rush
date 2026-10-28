@@ -5,6 +5,7 @@ import {
   TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
   STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, researchOf, MASTERY, masteryOf,
   TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES, hashStr, MOB_TYPES, BEAST_TYPE,
+  SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
@@ -13,7 +14,8 @@ import { forgeModels } from './forge.js';
 import { clone as cloneRig } from 'three/addons/utils/SkeletonUtils.js';
 import { onlineOn, claimName, submitRun, flushPending, leaderboard, clearBoards, seasonKey, prevSeason, seasonEnd, seasonName, NAME_RE } from './online.js';
 import { buildWorld } from './world.js';
-import { loadAll } from './assets.js';
+import { loadAll, rigged as loadRig } from './assets.js';
+import { makeSerpent } from './serpent.js';
 
 // ---------- Profile: trophies won and what they opened, kept in this browser ----------
 const PROFILE_KEY = 'bible-rush-profile';
@@ -408,7 +410,7 @@ function removeAt(p, i) {
   const last = --p.n;
   for (const f of p.fields) p[f][i] = p[f][last];
 }
-const E = pool(MAX_ENEMIES, ['x', 'y', 'z', 'hp', 'maxhp', 'kx', 'kz', 'flash', 'spd', 'face', 'type', 'elite',
+const E = pool(MAX_ENEMIES, ['x', 'y', 'z', 'hp', 'maxhp', 'kx', 'kz', 'flash', 'spd', 'face', 'type', 'elite', 'born',
   'st', 't', 'dx', 'dz', 'slow', 'stun', 'burn', 'cd', 'r', 'h', 'mark', 'sw']); // sw: last sweep that hit it
 // ret: boomerang (s until it turns back, 0 = coming back, -1 = not a boomerang); glow: from an evolved weapon
 const S = pool(MAX_SHOTS, ['x', 'y', 'z', 'vx', 'vy', 'vz', 'life', 'bounce', 'pierce', 'last', 'dmg', 'seek', 'speed', 'size', 'crit', 'kind',
@@ -575,9 +577,18 @@ function makeRig({ scene: root, clips }) {
   const act = Object.fromEntries(Object.entries(clips).map(([n, c]) => [n, mixer.clipAction(c)]));
   return { group: root, mixer, act, mat, dissolve, current: null, w: {} };
 }
-const bossRig = makeRig(ASSETS.boss);
+// Boss rigs by model: the map's boss comes with the map; a hidden boss loads when the run rolls it.
+const bossRigs = { [B.bossModel]: makeRig(ASSETS.boss) };
+let bossRig = bossRigs[B.bossModel];
 bossRig.group.visible = false;
 scene.add(bossRig.group);
+async function loadBossRig(model) {
+  if (bossRigs[model]) return;
+  const rig = model === 'serpente' ? makeSerpent(M, terrainH, () => boss) : makeRig(await loadRig(`assets/models/bosses/${model}.glb`));
+  rig.group.visible = false;
+  scene.add(rig.group);
+  bossRigs[model] = rig;
+}
 
 // Boss clip follows its move; attacks play once and hold their last pose (a new key restarts them).
 function bossAnim(dt) {
@@ -866,6 +877,19 @@ let nextEvent = 120; // the map's own event every 150 s
 let melCarrier = Infinity; // Mel silvestre: one more carrier early on
 let seenHoreb = false;
 let nextGuardian = GUARDIAN_EVERY; // survival: a guardian every 5 minutes
+let bossWait = 0; // classic: the map's boss waits for a hidden boss to fall
+// Hidden bosses: rolled when the run starts (content.js SECRET_BOSSES, SERPENT); paid at the end.
+const SECRET = SECRET_BOSSES[BIOME_ID];
+let secretAt = Infinity;
+let serpentAt = Infinity;
+const hiddenBeaten = [];
+// Survival: the horde answers the hero's strength. When common enemies die much sooner after they show
+// up than HORDE_LIFE seconds, the new ones come with more health (and less when they last longer);
+// every wave also brings more of them, hitting harder.
+const HORDE_LIFE = 6;
+let hordeK = 1;
+let lifeAvg = HORDE_LIFE;
+const hordeWave = () => (SURV ? Math.floor(time / 45) : 0);
 let challenge = null; // the sealed chest being fought for: { c, t, wave }
 let dustT = 0; // wind over the bones: dust closes in
 let glintsGot = 0;
@@ -1794,6 +1818,8 @@ function startRun() {
   P.weapons = [{ id: h.weapon, level: 1, timer: 0 }];
   refreshWeapons();
   if (!heroRig) setHero(selHero);
+  if (random() < SERPENT_ODDS) { serpentAt = (SURV ? 120 + random() * 900 : 90 + random() * 300); loadBossRig('serpente'); }
+  if (random() < SECRET_ODDS) { secretAt = (SURV ? 120 + random() * 600 : 90 + random() * 240); loadBossRig(SECRET.model); }
   P.pos.set(0, terrainH(0, 0), 0);
   yaw = 0;
   pitch = 0.5;
@@ -1804,7 +1830,6 @@ function startRun() {
   $('hero-face').src = ICON.face[P.hero];
   $('hero-face').className = `icon ${frameClass(P.hero)}`;
   $('hero-name').textContent = `${h.name} · ${STAGES[P.hero].names[stageOf(P.hero)]}`;
-  $('boss-name').textContent = B.boss;
   $('skill-e').querySelector('span').textContent = h.move[0];
   $('skill-q').querySelector('span').textContent = h.miracle[0];
   resume();
@@ -2156,7 +2181,7 @@ function hurt(dmg, fromX, fromZ) {
     dmgNumber(P.pos.x, P.pos.y + 2, P.pos.z, 0, false, 'Esquiva');
     return;
   }
-  P.hp -= dmg * DIFF.dmg * (1 - Math.min(0.6, P.st.armor));
+  P.hp -= dmg * DIFF.dmg * (1 + 0.025 * hordeWave()) * Math.sqrt(hordeK) * (1 - Math.min(0.6, P.st.armor)); // survival: a stronger horde hits harder
   P.hits++;
   P.lastHit = time;
   P.iframes = 0.6;
@@ -2449,7 +2474,9 @@ function spawnEnemy(type, x, z) {
   E.type[i] = type;
   E.elite[i] = 0;
   E.hp[i] = E.maxhp[i] = (t.boss ? t.hp : t.hp * (1 + time / 120) * (night > 0.5 ? 1.2 : 1)) * DIFF.hp
-    * (SURV && time > ENDLESS_NIGHT ? 1 + (time - ENDLESS_NIGHT) / 300 : 1); // the endless night keeps getting worse
+    * (SURV && time > ENDLESS_NIGHT ? 1 + (time - ENDLESS_NIGHT) / 300 : 1) // the endless night keeps getting worse
+    * (SURV && !t.boss ? hordeK : 1);
+  E.born[i] = time;
   E.spd[i] = t.speed + random() * t.speedVar;
   E.r[i] = t.r;
   E.h[i] = t.h;
@@ -2509,7 +2536,11 @@ function mapEvent() {
   }
 }
 
-function spawnBoss(enraged, guardian = false) {
+function spawnBoss(enraged, guardian = false, foe = MAP_FOE) {
+  FOE = foe;
+  KIT = BOSS_KITS[foe.model];
+  bossRig.group.visible = false;
+  bossRig = bossRigs[foe.model];
   Object.assign(boss, { spawned: true, enraged, st: 'walk', t: 2.5, n: 0, phase: 1, step: 0, chain: 0, lift: 0, guard: 0, last: '', side: random() < 0.5 ? 1 : -1 });
   clearBossFx();
   let x = 0;
@@ -2523,11 +2554,20 @@ function spawnBoss(enraged, guardian = false) {
   const i = spawnEnemy(BOSS, x, z);
   boss.hd = Math.atan2(P.pos.x - x, P.pos.z - z);
   if (enraged) E.hp[i] = E.maxhp[i] *= 1.3;
-  if (guardian) E.hp[i] = E.maxhp[i] *= 0.35 + 0.2 * P.guardians; // survival: each guardian tougher than the last
+  if (guardian) E.hp[i] = E.maxhp[i] *= 0.35 + 0.35 * P.guardians; // survival: each guardian tougher than the last
+  if (SURV) E.hp[i] = E.maxhp[i] *= hordeK; // and as tough as the horde has grown
+  E.hp[i] = E.maxhp[i] *= foe.hp;
+  if (foe.r) { E.r[i] = foe.r; E.h[i] = foe.h; }
   bossRig.group.visible = true;
   bossRig.dissolve.value = 0;
   $('bossbar').hidden = false;
-  toast(guardian ? `Guardião ${P.guardians + 1}: ${B.boss}!` : enraged ? `O tempo acabou: ${B.boss} vem furioso!` : B.bossIntro, '#ff9a8a');
+  $('boss-name').textContent = foe.name;
+  $('bossbar').classList.toggle('hidden-boss', foe !== MAP_FOE);
+  if (foe !== MAP_FOE) {
+    banner('assets/ui/trophy-2.png', foe === SERPENT ? 'O chefe mais difícil do jogo' : 'Chefe secreto', foe.name, '#ff6a5a', `${foe.intro} (${foe.ref})`);
+    chord([196, 233, 277, 330], 'sawtooth');
+  }
+  toast(foe !== MAP_FOE ? foe.intro : guardian ? `Guardião ${P.guardians + 1}: ${B.boss}!` : enraged ? `O tempo acabou: ${B.boss} vem furioso!` : B.bossIntro, '#ff9a8a');
   burst(x, terrainH(x, z) + 1, z, 0xcbb89a, 30, 8, 0.25, 6);
   shake = 0.8;
   beep(55, 1.2, 'sawtooth', 0.08);
@@ -2539,8 +2579,9 @@ const WAVE = 45;
 function director(dt) {
   const wave = 0.55 + 0.45 * (0.5 - 0.5 * Math.cos((time / WAVE) * Math.PI * 2));
   const k = (1 + night * 0.25) * (boss.spawned ? 0.5 : 1) * wave;
-  const cap = Math.min(MAX_ENEMIES * 0.5, (14 + time * 0.5) * k);
-  spawnAcc += dt * (0.8 + time / 40) * k * P.mods.spawn * (SURV && time > ENDLESS_NIGHT ? 2 : 1);
+  const cap = Math.min(MAX_ENEMIES * 0.5, (14 + time * 0.5) * k * (1 + 0.02 * hordeWave()));
+  spawnAcc += dt * (0.8 + time / 40) * k * P.mods.spawn * (SURV && time > ENDLESS_NIGHT ? 2 : 1) * (1 + 0.035 * hordeWave());
+  if (SURV) hordeK = clamp(hordeK * Math.exp((HORDE_LIFE - lifeAvg) * 0.012 * dt), 1, 400);
   for (; spawnAcc >= 1; spawnAcc--) {
     if (E.n >= cap) continue;
     const t = pickWeighted(spawnWeights(time), random);
@@ -2556,6 +2597,9 @@ function director(dt) {
   if (!boss.spawned && time >= nextCarrier) { nextCarrier += 150; spawnCarrier(); }
   if (time >= melCarrier) { melCarrier = Infinity; spawnCarrier(); }
   if (!boss.spawned && time >= nextEvent) { nextEvent += 150; mapEvent(); }
+  if (!boss.spawned && time >= serpentAt && bossRigs.serpente) { serpentAt = Infinity; spawnBoss(false, false, SERPENT); }
+  if (!boss.spawned && time >= secretAt && bossRigs[SECRET.model]) { secretAt = Infinity; spawnBoss(false, false, SECRET); }
+  if (!SURV && !boss.spawned && stonesDone === 3 && time >= bossWait) spawnBoss(false);
   if (!SURV && !boss.spawned && time >= RUN_TIME) spawnBoss(true);
   if (SURV && !boss.spawned && time >= nextGuardian) spawnBoss(false, true);
 }
@@ -2731,8 +2775,38 @@ const BOSS_KITS = {
     speed: 2.6, keep: [9, 16], rage: 'O rei fecha as portas de Jericó!', rageMove: 'gates', // Js 6:1
     pick: (d, n) => (d < 5 ? 'thrust' : ['arrows', 'thrust', 'arrows', 'gates'][n % 4]),
   },
+  // ----- Hidden bosses (content.js SECRET_BOSSES, SERPENT): old blows, harder mixes, their own names -----
+  isbi: { // Goliath's kin, quicker and never still: leaps, the bronze spear, the sweep and the stomp (2 Sm 21:16)
+    speed: 3.4, rage: 'Isbi-Benobe cinge a espada nova: "Eu matarei Davi!"', rageMove: 'leap',
+    pick: (d, n) => (n % 4 === 3 ? 'challenge' : d > 13 ? 'leap' : d > 7 ? 'spear' : n % 2 ? 'stomp' : 'sweep'),
+    names: { spear: 'Lança de trezentos siclos', challenge: 'Filhos de Rafa!', leap: 'Salto do refaim' },
+  },
+  janes: { // Pharaoh's magician keeps away and works his wonders (Êx 7:11)
+    speed: 3.2, keep: [10, 18], rage: 'Janes e Jambres resistem à verdade!', rageMove: 'bones', // 2 Tm 3:8
+    pick: (d, n) => (d < 5 ? 'stomp' : ['javelins', 'brimstone', 'volley', 'javelins', 'bones'][n % 5]),
+    names: { javelins: 'Raios da vara', brimstone: 'Encantamentos do Egito', volley: 'Pragas imitadas', bones: 'As varas viram serpentes!', stomp: 'A vara fere o chão' },
+  },
+  ogue: { // the last of the giants, with an iron club: spins, splits the ground, leaps, raises the dead
+    speed: 3.2, rage: 'Ogue ergue a sua cama de ferro!', rageMove: 'fissure', // Dt 3:11
+    pick: (d, n) => (d > 15 ? 'leap' : ['spin', 'stomp', 'fissure', 'leap', 'bones'][n % 5]),
+    names: { spin: 'Redemoinho da clava', fissure: 'A clava racha o chão', bones: 'Refains, levantai-vos!', stomp: 'Pisão de Basã', leap: 'Salto do gigante' },
+  },
+  adonizedeque: { // the king of Jerusalem behind his shield, with four kings' armies (Js 10:5)
+    speed: 3, keep: [8, 15], rage: 'Os cinco reis sobem contra Gibeão!', rageMove: 'arrows',
+    pick: (d, n) => (d < 5 ? 'thrust' : ['arrows', 'volley', 'thrust', 'gates', 'challenge'][n % 5]),
+    names: { volley: 'Fundas de Jerusalém', challenge: 'Os cinco reis atacam!', arrows: 'Arqueiros dos amorreus', thrust: 'Estocada do rei', gates: 'Escudo de Jerusalém' },
+  },
+  serpente: { // the ancient serpent: strikes, spits, burns the ground and calls fiery serpents (Nm 21:6)
+    speed: 4.4, rage: 'O dragão se ira contra a descendência da mulher!', rageMove: 'bones', // Ap 12:17
+    pick: (d, n, p2) => (d > 14 ? 'charge' : ['thrust', 'javelins', 'brimstone', 'stomp', 'charge', p2 ? 'bones' : 'sweep'][n % 6]),
+    names: { thrust: 'Bote da serpente', javelins: 'Cuspe de veneno', brimstone: 'Veneno ardente', stomp: 'Golpe da cabeça',
+      charge: 'O dragão avança', bones: 'Serpentes ardentes!', sweep: 'Golpe da cauda' },
+  },
 };
-const KIT = BOSS_KITS[B.bossModel];
+// The boss being fought: the map's own, or a hidden one (FOE.k: quicker, harder blows).
+const MAP_FOE = { model: B.bossModel, name: B.boss, intro: B.bossIntro, summon: B.summon, hp: 1, k: 1, pay: 0 };
+let FOE = MAP_FOE;
+let KIT = BOSS_KITS[FOE.model];
 
 let moveName = '';
 function setMoveName(t) {
@@ -2743,7 +2817,7 @@ function setMoveName(t) {
 function bossMove(name) {
   const [label, t, anim, clip = 1] = MOVES[name];
   Object.assign(boss, { st: name, t, anim, clip, step: 0, chain: 0, key: boss.key + 1, last: name });
-  setMoveName(label);
+  setMoveName(KIT.names?.[name] ?? label);
 }
 function bossPose(anim, clip = 1) { Object.assign(boss, { anim, clip, key: boss.key + 1 }); }
 function bossRest(t, label = '') {
@@ -2869,7 +2943,7 @@ function updateBoss(i, dt) {
     boss.moving = false;
     return;
   }
-  const k = boss.enraged ? 1.4 : 1;
+  const k = (boss.enraged ? 1.4 : 1) * FOE.k;
   const x0 = E.x[i];
   const z0 = E.z[i];
   const y0 = E.y[i] - boss.lift;
@@ -3037,7 +3111,7 @@ function updateBoss(i, dt) {
           if (openSpot(x, z)) spawnEnemy(6, x, z);
         }
         scatter(P.pos.x, P.pos.z, 4, 12, 15, (x, z, j) => j && openSpot(x, z) && spawnEnemy(5, x, z));
-        toast(B.summon, '#ff9a8a');
+        toast(FOE.summon, '#ff9a8a');
         bossRest(0.6);
       }
       break;
@@ -3095,7 +3169,7 @@ function updateBoss(i, dt) {
       if (KIT.orbit) E.face[i] = boss.hd;
       if (boss.t <= 0) {
         chariotRow(7);
-        toast(B.summon, '#ff9a8a');
+        toast(FOE.summon, '#ff9a8a');
         bossRest(0.6);
       }
       break;
@@ -3163,7 +3237,7 @@ function updateBoss(i, dt) {
           const a = (s / n) * Math.PI * 2;
           hazard(P.pos.x + Math.cos(a) * 6.5, P.pos.z + Math.sin(a) * 6.5, 1.2, 1.1, 0, 'rise', 0, s % 3 === 2 ? 1 : 0);
         }
-        toast(B.summon, '#ff9a8a');
+        toast(FOE.summon, '#ff9a8a');
         bossRest(0.6);
       }
       break;
@@ -3212,7 +3286,7 @@ function updateBoss(i, dt) {
             const z = P.pos.z + Math.sin(a) * 10;
             if (openSpot(x, z)) spawnEnemy(6, x, z);
           }
-          toast(B.summon, '#ff9a8a');
+          toast(FOE.summon, '#ff9a8a');
           beep(330, 0.6, 'square', 0.04, 0, 220);
           Object.assign(boss, { step: 1, t: 3.2, guard: 3.2 / k, sx: 0 });
         }
@@ -3294,6 +3368,7 @@ function reapEnemies() {
     if (type.boss) {
       burst(x, y + 2, z, 0xffe08f, 60, 10, 0.3, 10);
       removeAt(E, i);
+      if (FOE !== MAP_FOE) { hiddenDown(x, y, z); continue; }
       if (SURV) { guardianDown(x, y, z); continue; }
       startVictory(x, y, z);
       return;
@@ -3326,6 +3401,7 @@ function reapEnemies() {
     if (random() < 0.004) dropPickup(x, y + 0.5, z);
     P.hp = Math.min(P.st.maxHp, P.hp + P.st.vamp); // Favo de Mel
     P.kills++;
+    if (!E.elite[i]) lifeAvg += (time - E.born[i] - lifeAvg) * 0.02; // how long the horde lasts (survival)
     const kt = E.elite[i] ? 'elite' : type.id;
     P.killsBy[kt] = (P.killsBy[kt] || 0) + 1;
     gainFe(E.elite[i] ? 15 : 0.6);
@@ -4461,6 +4537,7 @@ function endScreen(title, text, verse, won = false) {
   if (P.guardians) { pay.lines.push([`Guardiões vencidos (${P.guardians})`, P.guardians * 40]); pay.total += P.guardians * 40; }
   if (DIFF.pay > 1) { const extra = Math.round(pay.total * (DIFF.pay - 1)); pay.lines.push([`${DIFF.name} ×${DIFF.pay}`, extra]); pay.total += extra; }
   if (BIOME_ID === EVENT_MAP && pay.total) { const extra = Math.round(pay.total * 0.5); pay.lines.push(['Desafio do dia +50%', extra]); pay.total += extra; }
+  for (const f of hiddenBeaten) { pay.lines.push([`${f.name} derrotado`, f.pay]); pay.total += f.pay; }
   const trophyPay = 0;
   profile.denarios += pay.total;
   const rec = (profile.records[BIOME_ID] ??= { best: 0 });
@@ -4595,6 +4672,27 @@ function startDeath() {
   document.body.classList.add('outro');
 }
 // Survival: a guardian falls. Its chest, then an alliance: a power and its price (or none).
+// A hidden boss beaten: a chest, a shower of maná, its denários at the end; the run goes on.
+function hiddenDown(x, y, z) {
+  const foe = FOE;
+  hiddenBeaten.push(foe);
+  boss.spawned = false;
+  clearBossFx();
+  bossRig.group.visible = false;
+  $('bossbar').hidden = true;
+  FOE = MAP_FOE;
+  KIT = BOSS_KITS[FOE.model];
+  bossWait = time + 5;
+  nextGuardian = Math.max(nextGuardian, time + 30);
+  burst(x, y + 2, z, 0xffe08f, 80, 12, 0.3, 12);
+  const sp = world.freeSpot(x, z);
+  world.addChest(sp.x, sp.z, true);
+  indexObstacle(obstacles.length - 1);
+  for (let k = 0; k < 40; k++) dropGem(x + random() * 6 - 3, y + 0.5, z + random() * 6 - 3, 4, k % 3 ? 0 : 1);
+  chord([523, 659, 784, 1046, 1318], 'square');
+  banner('assets/ui/trophy-2.png', `+${foe.pay} denários no fim da jornada`, `${foe.name} caiu!`, '#ffd66b', foe.ref);
+  award(foe === SERPENT ? 'serpente' : 'secreto');
+}
 function guardianDown(x, y, z) {
   P.guardians++;
   boss.spawned = false;
@@ -5401,7 +5499,8 @@ function updateHud() {
   document.body.classList.toggle('sunstop', P.sunT > 0);
   setText(hud.timer, fmt(time));
   hud['phase-dot'].classList.toggle('night', night > 0.5);
-  setHtml(hud.objective, SURV ? (boss.spawned ? `<b>Derrote o guardião ${P.guardians + 1}</b>` : `<span>Sobrevivência</span><span style="opacity:.7">· guardião em ${fmt(Math.max(0, nextGuardian - time))}</span>`)
+  setHtml(hud.objective, boss.spawned && FOE !== MAP_FOE ? `<b>Derrote ${FOE.name}</b>`
+    : SURV ? (boss.spawned ? `<b>Derrote o guardião ${P.guardians + 1}</b>` : `<span>Sobrevivência</span><span style="opacity:.7">· guardião em ${fmt(Math.max(0, nextGuardian - time))}${hordeK > 1.05 ? ` · horda ×${hordeK.toFixed(1)}` : ''}</span>`)
     : boss.spawned ? `<b>Derrote ${B.boss}</b>`
     : `<span>Pedras do Memorial</span><span class="pips">${stones.map((s) => `<i class="${s.done ? 'on' : ''}"></i>`).join('')}</span><span style="opacity:.7">· ${B.boss} em ${fmt(Math.max(0, RUN_TIME - time))}</span>`);
   if (boss.idx >= 0) hud['boss-hp'].style.width = `${clamp(E.hp[boss.idx] / E.maxhp[boss.idx], 0, 1) * 100}%`;
@@ -5547,6 +5646,8 @@ window.dev = {
       path.endsWith('.jpg') ? 'image/jpeg' : 'image/png', 0.88);
   }),
   skip: (s) => { time += s; },
+  hidden: async (serpent = false) => { const f = serpent ? SERPENT : SECRET; await loadBossRig(f.model); spawnBoss(false, false, f); return f.name; },
+  horde: () => ({ hordeK, lifeAvg, wave: hordeWave() }),
   // The setup screen's map preview: a flyover rendered frame by frame (smooth even in a background tab),
   // swinging back and forth so it loops. Frames go to shots/film/<map>/; tools/make_previews.sh encodes them.
   film: async (frames = 336, fps = 24, w = 960, h = 540) => {

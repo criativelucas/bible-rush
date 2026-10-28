@@ -730,7 +730,194 @@ def rigged(name, m, bones, clips, scale):
     skin(mesh, arm, [{b: 1.0} for b in m.BONE])
     actions(arm, clips)
     export_glb(os.path.join(ROOT, 'assets/models/bosses', f'{name}.glb'), [mesh, arm], animations=True, draco=True)
-    arm.location.x = {'golias': 8, 'farao': -8, 'rei': 24}.get(name, 16)
+    arm.location.x = {'golias': 8, 'farao': -8, 'rei': 24, 'isbi': 32, 'janes': 40, 'ogue': 48, 'adonizedeque': 56}.get(name, 16)
+
+
+# ---------- Hidden bosses (main.js BOSS_KITS isbi/janes/ogue/adonizedeque; 10% of runs) ----------
+GIANT_BONES = [
+    ('hips', None, (0, 1.9, 0), (0, 3.7, 0)),
+    ('head', 'hips', (0, 3.85, 0), (0, 5.2, 0)),
+    ('leg.L', 'hips', (-0.42, 1.9, 0), (-0.42, 0.1, 0)),
+    ('leg.R', 'hips', (0.42, 1.9, 0), (0.42, 0.1, 0)),
+    ('arm.L', 'hips', (-1.2, 3.65, 0), (-1.2, 2.0, 0)),
+    ('arm.R', 'hips', (1.2, 3.65, 0), (1.2, 2.0, 0)),
+]
+
+
+def giant_clips(stride=25, lean=4):
+    """Every clip a hidden boss may play: its moves borrow the map bosses' blows."""
+    step = lambda s, up: ({'leg.L': -stride * s, 'leg.R': stride * s, 'arm.L': 11 * s, 'arm.R': -12 * s, 'hips': lean}, {'hips': (0, 0.13 if up else 0, 0)})
+    walk = [(f, *step(sg, up)) for f, sg, up in ((0, 1, 0), (8, 0, 1), (15, -1, 0), (23, 0, 1), (30, 1, 0))]
+    return {
+        'idle': [(0, {}, {}), (30, {'hips': 3, 'head': -4, 'arm.L': 5, 'arm.R': 6}, {'hips': (0, 0.04, 0)}), (60, {}, {})],
+        'walk': walk,
+        'spear': [(0, {}, {}), (14, {'arm.R': -162, 'hips': -9}, {}), (28, {'arm.R': -168, 'hips': -11}, {}), (33, {'arm.R': -38, 'hips': 12}, {}), (40, {}, {})],
+        'stomp': [(0, {}, {}), (24, {'arm.R': -150, 'arm.L': -40, 'leg.R': -45, 'hips': -10}, {'hips': (0, 0.25, 0)}),
+                  (34, {'arm.R': -20, 'leg.R': 5, 'hips': 16}, {'hips': (0, -0.2, 0)}), (48, {}, {})],
+        'summon': [(0, {}, {}), (10, {'arm.L': -160, 'arm.R': -168, 'head': -16}, {}), (24, {'arm.L': -160, 'arm.R': -168, 'head': -16}, {}), (32, {}, {})],
+        'sweep': [(0, {}, {}), (8, {'arm.R': -95, 'arm.L': -30, 'hips': 6}, {}), (40, {'arm.R': -95, 'arm.L': -30, 'hips': 6}, {})],
+        'spin': [(0, {}, {}), (8, {'arm.R': -100, 'arm.L': -65, 'hips': 6, 'head': -6}, {}), (40, {'arm.R': -100, 'arm.L': -65, 'hips': 6, 'head': -6}, {})],
+        'shield': [(0, {}, {}), (8, {'arm.L': -95, 'arm.R': -160, 'head': -10}, {}), (40, {'arm.L': -95, 'arm.R': -160, 'head': -10}, {})],
+    }
+
+
+def giant(m, skin, legs, kilt, torso, trim, plates=None, belt=LEATHER, boots=LEATHER, sleeve=None, beard=BLACK, eyes=WHITE, robe=None):
+    """A big warrior's body on GIANT_BONES; the boss adds its helmet, weapon and shield."""
+    for x, b in ((-0.42, 'leg.L'), (0.42, 'leg.R')):
+        lg = dict(bone=b)
+        m.part('cyl', 0.3, 0.23, 1.75, 12, p=(x, 1.05, 0), color=legs, **lg)
+        m.part('cyl', 0.33, 0.29, 0.9, 12, p=(x, 0.62, 0.02), color=trim, **lg)
+        m.part('box', 0.64, 0.25, 0.98, p=(x, 0.12, 0.12), color=boots, bevel=0.05, **lg)
+    body = dict(bone='hips')
+    if robe:
+        m.part('cyl', 0.85, 1.15, 1.25, 14, p=(0, 1.7, 0), color=robe, bevel=0.03, **body)
+    else:
+        m.part('cyl', 0.8, 1.0, 0.75, 12, p=(0, 1.95, 0), color=kilt, bevel=0.03, **body)
+        for k in range(12):
+            a = k / 12 * 2 * PI
+            m.part('box', 0.3, 0.52, 0.06, p=(math.sin(a) * 0.98, 1.7, math.cos(a) * 0.98), r=(0, a, 0), color=trim if k % 2 else kilt, **body)
+    m.part('lathe', [(0.0, 2.15), (0.84, 2.15), (0.92, 2.4), (1.0, 2.85), (1.03, 3.25), (0.93, 3.6), (0.55, 3.8), (0.0, 3.84)], 16, s=(1, 1, 0.6), color=torso, smooth=True, **body)
+    if plates:
+        for row in range(6):
+            for k in range(7):
+                sx = -0.78 + k * 0.26 + (row % 2) * 0.13
+                m.part('ball', 0.16, 1, s=(1, 0.82, 0.34), p=(sx, 2.3 + row * 0.24, 0.63 * math.sqrt(max(0.0, 1 - (sx / 1.03) ** 2)) + 0.02),
+                       r=(0.2, math.asin(max(-0.9, min(0.9, sx / 1.03))) * 0.8, 0), color=plates[(row + k) % 2], bevel=0.02, **body)
+    m.part('cyl', 0.9, 0.9, 0.24, 16, p=(0, 2.2, 0), s=(1, 1, 0.66), color=belt, **body)
+    m.part('box', 0.3, 0.22, 0.08, p=(0, 2.2, 0.62), color=GOLD, **body)
+    for x in (-1.0, 1.0):
+        m.part('ball', 0.48, 1, p=(x, 3.65, 0), color=trim, **body)
+    hd = dict(bone='head')
+    m.part('cyl', 0.24, 0.27, 0.32, 12, p=(0, 3.95, 0), color=skin, **hd)
+    m.part('box', 0.82, 0.86, 0.8, p=(0, 4.45, 0), color=skin, soft=0.42, **hd)
+    if beard is not None:
+        m.part('box', 0.74, 0.58, 0.3, p=(0, 4.16, 0.38), color=beard, soft=0.7, **hd)
+    for x in (-0.18, 0.18):
+        m.part('box', 0.14, 0.1, 0.04, p=(x, 4.57, 0.41), color=eyes, **hd)
+        if eyes == WHITE:
+            m.part('box', 0.07, 0.08, 0.04, p=(x, 4.57, 0.43), color=DARK, **hd)
+        m.part('box', 0.22, 0.06, 0.05, p=(x, 4.69, 0.41), r=(0, 0, -0.28 if x < 0 else 0.28), color=DARK, **hd)
+    m.part('box', 0.12, 0.16, 0.12, p=(0, 4.42, 0.44), color=skin, bevel=0.03, **hd)
+    for x, b in ((-1.2, 'arm.L'), (1.2, 'arm.R')):
+        a_ = dict(bone=b)
+        m.part('cyl', 0.25, 0.21, 1.5, 12, p=(x, 2.95, 0), color=sleeve or skin, **a_)
+        m.part('cyl', 0.27, 0.25, 0.42, 12, p=(x, 2.55, 0), color=trim, **a_)
+        m.part('ball', 0.25, 1, p=(x, 2.08, 0.02), s=(1, 1.05, 1.1), color=skin, **a_)
+
+
+def isbi():
+    """Ishbi-benob, of the sons of the giant: a bronze spear of 300 shekels and a new sword (2 Sm 21:16)."""
+    m = Model('isbi', 31)
+    DSKIN, KILT, PLUME = 0x9a6a48, 0x9a2a24, 0xd94a3a
+    giant(m, DSKIN, 0x5a3a24, KILT, 0x7a4a26, BRONZE, plates=(0xc89a48, 0x9a6a2e), beard=0x2a1a10)
+    hd = dict(bone='head')
+    m.part('cyl', 0.5, 0.46, 0.34, 14, p=(0, 4.86, 0), color=BRONZE, **hd)  # the Philistine band...
+    for k in range(13):  # ...and its crown of feathers, red and white
+        a = (k - 6) * 0.2
+        m.part('box', 0.1, 0.62, 0.05, p=(math.sin(a) * 0.46, 5.25, math.cos(a) * 0.12 - 0.05), r=(0, a, -a * 0.6), color=PLUME if k % 2 else WHITE, bevel=0.02, **hd)
+    for x in (-0.47, 0.47):
+        m.part('box', 0.08, 0.45, 0.5, p=(x, 4.5, 0.12), color=BRONZE, bevel=0.02, **hd)
+    sp = dict(bone='arm.R')
+    m.part('cyl', 0.14, 0.14, 5.2, 8, p=(1.2, 2.8, 0.3), color=BRONZE, **sp)  # all bronze, heavier than Goliath's
+    for k in range(4):
+        m.part('cyl', 0.17, 0.17, 0.1, 8, p=(1.2, 2.0 + k * 0.45, 0.3), color=0x7a5a2a, **sp)
+    m.part('cone', 0.32, 1.2, 6, p=(1.2, 5.95, 0.3), color=0xe0a85a, bevel=0.02, **sp)
+    sw = dict(bone='arm.L')
+    m.part('box', 0.12, 1.9, 0.32, p=(-1.2, 1.15, 0.45), color=0xd8dee6, bevel=0.02, **sw)  # the new sword
+    m.part('box', 0.6, 0.12, 0.16, p=(-1.2, 2.1, 0.45), color=GOLD, **sw)
+    m.part('cone', 0.17, 0.4, 4, p=(-1.2, 0.05, 0.45), r=(PI, 0, 0), color=0xd8dee6, **sw)
+    rigged('isbi', m, GIANT_BONES, giant_clips(), 1.0)
+
+
+def janes():
+    """Jannes, Pharaoh's magician (2 Tm 3:8): shaven head, linen and leopard skin, a staff become a serpent."""
+    m = Model('janes', 32)
+    LINEN, SPOT, ORB = 0xf0e8d6, 0xd9a440, 0x7af0a0
+    giant(m, SKIN3, SKIN3, LINEN, LINEN, GOLD, belt=BLUE, boots=0xc9a46e, beard=None, robe=LINEN, sleeve=SKIN3)
+    body = dict(bone='hips')
+    m.part('box', 0.5, 1.9, 0.08, p=(0.25, 2.9, 0.6), r=(0, 0, -0.55), color=SPOT, bevel=0.02, **body)  # leopard skin
+    for k in range(8):
+        m.part('ball', 0.07, 1, p=(-0.15 + (k % 3) * 0.2, 2.3 + k * 0.17, 0.66), s=(1, 1, 0.3), color=DARK, **body)
+    m.part('cyl', 1.02, 1.0, 0.2, 18, p=(0, 3.62, 0), s=(1, 1, 0.66), color=GOLD, **body)  # broad collar
+    m.part('cyl', 1.06, 1.02, 0.1, 18, p=(0, 3.5, 0), s=(1, 1, 0.66), color=BLUE, **body)
+    hd = dict(bone='head')
+    m.part('box', 0.1, 0.08, 0.05, p=(-0.19, 4.52, 0.43), color=BLACK, **hd)  # kohl round the eyes
+    m.part('box', 0.1, 0.08, 0.05, p=(0.19, 4.52, 0.43), color=BLACK, **hd)
+    m.part('ball', 0.43, 2, p=(0, 4.62, 0), s=(1, 0.9, 1), color=SKIN3, **hd)  # shaven
+    m.part('cyl', 0.06, 0.04, 0.4, 6, p=(0, 4.05, 0.42), color=BLACK, **hd)  # plaited beard
+    st = dict(bone='arm.R')
+    m.part('cyl', 0.08, 0.08, 4.6, 8, p=(1.2, 2.5, 0.35), color=DARKWOOD, **st)
+    for k in range(9):  # the serpent coiled up the staff
+        a = k * 1.4
+        m.part('ball', 0.13, 1, p=(1.2 + math.sin(a) * 0.14, 2.6 + k * 0.28, 0.35 + math.cos(a) * 0.14), color=0x3c6b34 if k % 2 else 0x2f5e32, **st)
+    m.part('ball', 0.2, 1, p=(1.2, 5.0, 0.48), s=(0.9, 0.7, 1.4), color=0x3c6b34, **st)  # its head, hood spread
+    m.part('box', 0.5, 0.45, 0.06, p=(1.2, 4.9, 0.38), color=0x2f5e32, bevel=0.02, **st)
+    for x in (-0.07, 0.07):
+        m.part('ball', 0.04, 1, p=(1.2 + x, 5.06, 0.72), color=RED, **st)
+    ob = dict(bone='arm.L')
+    m.part('ball', 0.3, 2, p=(-1.2, 1.75, 0.2), color=ORB, **ob)  # a glow of enchantment in the open hand
+    m.part('torus', 0.38, 0.03, 2 * PI, 14, p=(-1.2, 1.75, 0.2), r=(PI / 2, 0, 0), color=GOLD, **ob)
+    rigged('janes', m, GIANT_BONES, giant_clips(20, 2), 0.78)
+
+
+def ogue():
+    """Og, king of Bashan, the last of the Rephaim, whose bed was of iron (Dt 3:11): iron crown and club."""
+    m = Model('ogue', 33)
+    ASH2, IRONK, IRONL, FUR = 0x8a7462, 0x4a4a52, 0x6a6a76, 0x5a4232
+    giant(m, ASH2, 0x3a2e2a, FUR, IRONK, IRONL, plates=(IRONL, 0x55555f), belt=0x2a2220, boots=0x2a2220, beard=0x2a1e18, eyes=0xffb24a)
+    body = dict(bone='hips')
+    for x in (-1.0, 1.0):  # fur over the shoulders
+        m.part('ball', 0.62, 1, p=(x * 0.95, 3.75, -0.1), s=(1, 0.6, 1), color=FUR, **body)
+    m.part('box', 1.9, 2.8, 0.14, p=(0, 2.3, -0.62), r=(-0.08, 0, 0), color=FUR, bevel=0.04, **body)
+    hd = dict(bone='head')
+    m.part('box', 0.86, 0.5, 0.84, p=(0, 4.82, 0), color=0x2a1e18, bevel=0.08, **hd)  # hair
+    m.part('cyl', 0.52, 0.5, 0.28, 10, p=(0, 5.0, 0), color=IRONK, **hd)
+    for k in range(8):  # an iron crown of spikes
+        a = k / 8 * 2 * PI
+        m.part('cone', 0.09, 0.42 if k % 2 else 0.3, 4, p=(math.sin(a) * 0.48, 5.32, math.cos(a) * 0.48), color=IRONL, **hd)
+    for k in range(4):  # the beard to the chest, braided
+        m.part('cyl', 0.08, 0.05, 0.7, 6, p=(-0.27 + k * 0.18, 3.7, 0.5), color=0x2a1e18, **hd)
+    cl = dict(bone='arm.R')
+    m.part('cyl', 0.12, 0.12, 2.0, 8, p=(1.2, 2.2, 0.35), color=DARKWOOD, **cl)
+    m.part('cyl', 0.42, 0.3, 2.2, 10, p=(1.2, 4.2, 0.35), color=IRONK, **cl)  # the iron club
+    for k in range(10):
+        a = k * 2.4
+        m.part('cone', 0.1, 0.36, 4, p=(1.2 + math.sin(a) * 0.4, 3.5 + k * 0.17, 0.35 + math.cos(a) * 0.4), r=(math.cos(a) * 1.5, 0, -math.sin(a) * 1.5), color=IRONL, **cl)
+    sh = dict(bone='arm.L')  # a shield like the iron bedstead: a frame of bars
+    for y in (1.8, 2.6, 3.4):
+        m.part('box', 0.14, 0.12, 1.7, p=(-1.55, y, 0.25), color=IRONL, **sh)
+    for z in (-0.55, 0.25, 1.05):
+        m.part('box', 0.16, 1.9, 0.12, p=(-1.55, 2.6, z), color=IRONK, **sh)
+    rigged('ogue', m, GIANT_BONES, giant_clips(22, 7), 1.0)
+
+
+def adonizedeque():
+    """Adoni-zedek, king of Jerusalem, who called four kings against Gibeon (Js 10:1-5)."""
+    m = Model('adonizedeque', 34)
+    SILVER, ROYAL, GREY = 0xc9d2dc, 0x2e4f8a, 0x9a948c
+    giant(m, SKIN2, 0x3a2e2a, ROYAL, ROYAL, SILVER, belt=GOLD, boots=LEATHER, beard=GREY, robe=ROYAL, sleeve=WHITE)
+    body = dict(bone='hips')
+    m.part('ball', 0.74, 2, p=(0, 3.0, 0.42), s=(1, 0.85, 0.32), color=SILVER, **body)  # silver breastplate
+    m.part('torus', 0.26, 0.05, 2 * PI, 16, p=(0, 3.05, 0.66), color=GOLD, **body)  # a gold sun disc
+    m.part('ball', 0.13, 1, p=(0, 3.05, 0.68), s=(1, 1, 0.4), color=GOLD, **body)
+    m.part('box', 1.85, 2.7, 0.12, p=(0, 2.4, -0.62), r=(-0.08, 0, 0), color=0xb8283a, bevel=0.03, **body)  # cape
+    hd = dict(bone='head')
+    m.part('box', 0.86, 0.32, 0.84, p=(0, 4.88, 0), color=GREY, bevel=0.08, **hd)
+    m.part('cyl', 0.5, 0.47, 0.34, 12, p=(0, 5.08, 0), color=GOLD, **hd)
+    for k in range(8):  # a tall crown, gems between the points
+        a = k / 8 * 2 * PI
+        m.part('cone', 0.09, 0.5, 5, p=(math.sin(a) * 0.46, 5.48, math.cos(a) * 0.46), color=GOLD, **hd)
+        m.part('ball', 0.06, 1, p=(math.sin(a + 0.4) * 0.5, 5.1, math.cos(a + 0.4) * 0.5), color=0x3a8ad9 if k % 2 else 0xd94a4a, **hd)
+    sw = dict(bone='arm.R')
+    m.part('box', 0.1, 2.6, 0.28, p=(1.2, 3.3, 0.45), color=0xe2e8ee, bevel=0.02, **sw)
+    m.part('box', 0.7, 0.12, 0.16, p=(1.2, 2.0, 0.45), color=GOLD, **sw)
+    m.part('cone', 0.15, 0.42, 4, p=(1.2, 4.8, 0.45), color=0xe2e8ee, **sw)
+    sh = dict(bone='arm.L')
+    m.part('cyl', 0.95, 0.95, 0.16, 18, p=(-1.5, 2.65, 0.25), r=(0, 0, PI / 2), color=SILVER, **sh)
+    m.part('cyl', 0.7, 0.7, 0.18, 16, p=(-1.52, 2.65, 0.25), r=(0, 0, PI / 2), color=ROYAL, **sh)
+    m.part('torus', 0.92, 0.06, 2 * PI, 18, p=(-1.6, 2.65, 0.25), r=(0, PI / 2, 0), color=GOLD, **sh)
+    m.part('ball', 0.22, 1, p=(-1.62, 2.65, 0.25), color=GOLD, **sh)
+    rigged('adonizedeque', m, GIANT_BONES, giant_clips(22, 4), 0.88)
 
 
 # ---------- Relics, weapons, the scroll ----------
@@ -1604,6 +1791,10 @@ if __name__ == '__main__':
     pharaoh()
     gogue()
     rei()
+    isbi()
+    janes()
+    ogue()
+    adonizedeque()
     items()
     props()
     for group, objs in built.items():

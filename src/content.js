@@ -629,6 +629,23 @@ export const BIOMES = {
   },
 };
 export const BOSS = 4;
+// Hidden bosses. Each map has one that shows up in 10% of runs, at some moment of the run, and the
+// Serpent can show up on any map in 1% of runs: the hardest fight in the game. They are much tougher
+// than the map's boss (hp: times its health; k: quicker, harder blows) and pay denários when beaten.
+export const SECRET_ODDS = 0.1;
+export const SERPENT_ODDS = 0.01;
+export const SECRET_BOSSES = {
+  ela: { model: 'isbi', name: 'Isbi-Benobe', ref: '2 Sm 21:16', hp: 3.5, k: 1.3, pay: 1500,
+    intro: 'Isbi-Benobe, filho do gigante, ergue a lança de bronze!', summon: 'Filhos de Rafa, avante!' },
+  mar: { model: 'janes', name: 'Janes, o mago', ref: '2 Tm 3:8', hp: 3, k: 1.3, pay: 1500,
+    intro: 'Janes, mago do Faraó, resiste a Moisés!', summon: 'As varas viram serpentes!' },
+  ossos: { model: 'ogue', name: 'Ogue, rei de Basã', ref: 'Dt 3:11', hp: 4, k: 1.3, pay: 1500,
+    intro: 'Ogue, o último dos refains, sai de Basã!', summon: 'Refains, levantai-vos!' },
+  jerico: { model: 'adonizedeque', name: 'Adoni-Zedeque', ref: 'Js 10:3', hp: 3.5, k: 1.3, pay: 1500,
+    intro: 'Adoni-Zedeque, rei de Jerusalém, chama os cinco reis!', summon: 'Os cinco reis atacam!' },
+};
+export const SERPENT = { model: 'serpente', name: 'A Antiga Serpente', ref: 'Ap 12:9', hp: 10, k: 1.55, pay: 10000, r: 1.8, h: 4.4,
+  intro: 'A antiga serpente, o dragão, ergue a cabeça!', summon: 'Serpentes ardentes!' };
 
 // ---------- Trophies and what they open ----------
 // Open from the start: two heroes, two maps, and every relic no trophy holds back.
@@ -676,6 +693,8 @@ export const TROPHIES = {
   resistente: { name: 'Resistente', desc: 'Resista 10 minutos na Sobrevivência.', tier: 0, cat: 'sobrevivencia' },
   incansavel: { name: 'Incansável', desc: 'Resista 20 minutos na Sobrevivência.', tier: 1, cat: 'sobrevivencia' },
   eterno: { name: 'Sobrevivente Eterno', desc: 'Resista 45 minutos na Sobrevivência.', tier: 2, cat: 'sobrevivencia', title: 'Sobrevivente eterno' },
+  secreto: { name: 'O Inimigo Escondido', desc: 'Derrote um chefe secreto.', tier: 2, cat: 'mapas', title: 'Caçador de gigantes' },
+  serpente: { name: 'A Cabeça da Serpente', desc: 'Derrote a Antiga Serpente (Gn 3:15).', tier: 2, cat: 'mapas', title: 'Esmagador da serpente' },
   alianca: { name: 'Aliança', desc: 'Faça uma aliança depois de um guardião na Sobrevivência.', tier: 0, cat: 'sobrevivencia' },
 };
 
