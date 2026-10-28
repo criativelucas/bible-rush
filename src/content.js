@@ -196,6 +196,28 @@ export const WEAPONS = {
     levels: [{ dmg: 0.3 }, { area: 0.25 }, { cd: 0.15 }, { count: 1, dmg: 0.3 }],
   },
 
+  // Bought in the Market's Arsenal (models in src/forge.js).
+  lanca: {
+    name: 'Lança de Saul', unit: 'lança', kind: 'shot', ref: '1 Sm 18:11', desc: 'Uma lança pesada que atravessa a fileira inteira.',
+    dmg: 30, cd: 1.7, count: 1, pierce: 6, speed: 26, life: 1.3, range: 28, size: 0.3, proj: 'lanca',
+    levels: [{ dmg: 0.3 }, { count: 1 }, { pierce: 3, cd: 0.1 }, { count: 1, dmg: 0.3 }],
+  },
+  estaca: {
+    name: 'Estaca de Jael', kind: 'melee', ref: 'Jz 4:21', desc: 'Martelada curta e certeira que atordoa quem é atingido.',
+    dmg: 40, cd: 1.3, radius: 2.6, arc: 1.6, knock: 4, stun: 1,
+    levels: [{ dmg: 0.3 }, { cd: 0.15 }, { area: 0.25 }, { dmg: 0.5 }],
+  },
+  corvos: {
+    name: 'Corvos de Elias', unit: 'bando', kind: 'swarm', bird: true, ref: '1 Rs 17:6', desc: 'Corvos voam até os inimigos e bicam sem parar.',
+    dmg: 5, cd: 0.35, count: 2, radius: 1.8, speed: 10,
+    levels: [{ dmg: 0.3 }, { count: 1 }, { area: 0.25 }, { count: 1, dmg: 0.3 }],
+  },
+  mo: {
+    name: 'Mó de Abimeleque', unit: 'mó', kind: 'sky', target: 'strong', mill: true, ref: 'Jz 9:53', desc: 'Uma mó de moinho cai do alto, esmaga e atordoa.',
+    dmg: 110, cd: 4.2, count: 1, radius: 3.2, range: 24, delay: 1.0,
+    levels: [{ dmg: 0.3 }, { area: 0.2 }, { cd: 0.2 }, { count: 1, dmg: 0.3 }],
+  },
+
   // Evolutions: a weapon at its last level, plus its relic, becomes one of these at the next chest.
   funda_evo: {
     name: 'Pedra do Gigante', evo: true, from: 'funda', needs: 'pedras', unit: 'pedra', kind: 'shot', ref: '1 Sm 17:49',
@@ -256,6 +278,26 @@ export const WEAPONS = {
     name: 'Fogo de Elias', evo: true, from: 'fogo', needs: 'harpa', unit: 'raio', kind: 'sky', target: 'strong', fire: true, ref: '1 Rs 18:38',
     desc: 'Três colunas de fogo consomem os mais fortes, até a pedra.',
     dmg: 220, cd: 2.4, count: 3, radius: 4, range: 30, delay: 0.7, burn: 4, levels: [],
+  },
+  lanca_evo: {
+    name: 'Lança de Golias', evo: true, from: 'lanca', needs: 'escudo', unit: 'lança', kind: 'shot', ref: '1 Sm 17:7',
+    desc: 'Lanças como cilindro de tecelão: três por vez, atravessam tudo.',
+    dmg: 60, cd: 1.3, count: 3, pierce: 12, speed: 30, life: 1.5, range: 30, size: 0.42, proj: 'lanca', levels: [],
+  },
+  estaca_evo: {
+    name: 'Golpe de Jael', evo: true, from: 'estaca', needs: 'vaso', kind: 'melee', ref: 'Jz 5:26',
+    desc: 'A martelada gira em volta e atordoa toda a roda.',
+    dmg: 80, cd: 1.0, radius: 3.6, arc: 6.28, knock: 6, stun: 1.6, levels: [],
+  },
+  corvos_evo: {
+    name: 'Corvos de Querite', evo: true, from: 'corvos', needs: 'paes', unit: 'bando', kind: 'swarm', bird: true, ref: '1 Rs 17:4',
+    desc: 'Cinco bandos de corvos; como levavam pão a Elias, cada bicada cura um pouco.',
+    dmg: 9, cd: 0.3, count: 5, radius: 2.4, speed: 12, heal: 0.25, levels: [],
+  },
+  mo_evo: {
+    name: 'Pedra da Torre', evo: true, from: 'mo', needs: 'arco', unit: 'mó', kind: 'sky', target: 'strong', mill: true, ref: 'Jz 9:53',
+    desc: 'Três mós caem de uma vez sobre os mais fortes.',
+    dmg: 180, cd: 3.5, count: 3, radius: 4, range: 26, delay: 1.0, levels: [],
   },
 };
 
@@ -532,27 +574,49 @@ export const BOSS = 4;
 // Open from the start: two heroes, two maps, and every relic no trophy holds back.
 export const START_OPEN = ['hero:davi', 'hero:sansao', 'map:ela', 'map:mar'];
 export const TIERS = [{ name: 'Bronze', color: '#e09a55' }, { name: 'Prata', color: '#dfe7ee' }, { name: 'Ouro', color: '#f2c14e' }];
+// cat: the tab it shows under; title: a title to wear once won. Every trophy pays denários (TROPHY_PAY by
+// tier), collected on the Troféus screen.
+export const TROPHY_CATS = { progresso: 'Progresso', mapas: 'Cenários', desafios: 'Desafios', colecao: 'Coleção', dificuldade: 'Dificuldade', sobrevivencia: 'Sobrevivência' };
 export const TROPHIES = {
-  inicio: { name: 'Primeira Jornada', desc: 'Termine uma partida.', tier: 0 },
-  memorial: { name: 'Memorial Erguido', desc: 'Erga as 3 Pedras do Memorial numa partida.', tier: 0, unlock: 'hero:moises' },
-  golias: { name: 'O Gigante Caiu', desc: 'Vença no Vale de Elá.', tier: 1, unlock: 'map:ossos' },
-  farao: { name: 'Cavalo e Cavaleiro', desc: 'Vença no Mar Vermelho.', tier: 1, unlock: 'map:jerico' },
-  gogue: { name: 'Ossos que Vivem', desc: 'Vença no Vale dos Ossos Secos.', tier: 2, unlock: 'hero:josue' },
-  rei: { name: 'As Muralhas Caíram', desc: 'Vença em Jericó.', tier: 2, unlock: 'relic:arco' },
-  perseveranca: { name: 'Perseverança', desc: 'Sobreviva 8 minutos numa partida.', tier: 1, unlock: 'hero:debora' },
-  evolucao: { name: 'Transformação', desc: 'Evolua uma arma.', tier: 1, unlock: 'relic:tabuas' },
-  pedras: { name: 'Cinco Pedras Lisas', desc: 'Junte as 5 pedras do ribeiro em Elá.', tier: 0, unlock: 'relic:escudo' },
-  mil: { name: 'Mil Abates', desc: 'Derrote 1000 inimigos numa partida.', tier: 1, unlock: 'relic:candelabro' },
-  tesouro: { name: 'Tesouro Recuperado', desc: 'Alcance um tesouro em fuga.', tier: 0, unlock: 'relic:sal' },
-  selo: { name: 'Selo Rompido', desc: 'Resista à emboscada de um baú selado.', tier: 0, unlock: 'relic:paes' },
-  poco: { name: 'Água Viva', desc: 'Beba de um poço ou fonte.', tier: 0 },
-  ungido: { name: 'Ungido', desc: 'Alcance o nível 20 numa partida.', tier: 1 },
-  noite: { name: 'Coluna de Fogo', desc: 'Atravesse uma noite inteira.', tier: 0 },
-  salomao: { name: 'Riqueza de Salomão', desc: 'Junte 300 siclos de uma vez.', tier: 1 },
-  relicario: { name: 'Relicário', desc: 'Tenha 8 relíquias numa partida.', tier: 1 },
-  maos: { name: 'Mãos Levantadas', desc: 'Faça 5 milagres numa partida.', tier: 0 },
-  valentes: { name: 'Os Valentes', desc: 'Vença com 3 heróis diferentes.', tier: 2 },
-  conquista: { name: 'Terra Prometida', desc: 'Vença nos 4 cenários.', tier: 2 },
+  inicio: { name: 'Primeira Jornada', desc: 'Termine uma partida.', tier: 0, cat: 'progresso' },
+  memorial: { name: 'Memorial Erguido', desc: 'Erga as 3 Pedras do Memorial numa partida.', tier: 0, unlock: 'hero:moises', cat: 'mapas' },
+  golias: { name: 'O Gigante Caiu', desc: 'Vença no Vale de Elá.', tier: 1, unlock: 'map:ossos', cat: 'mapas', title: 'Matador de gigantes' },
+  farao: { name: 'Cavalo e Cavaleiro', desc: 'Vença no Mar Vermelho.', tier: 1, unlock: 'map:jerico', cat: 'mapas' },
+  gogue: { name: 'Ossos que Vivem', desc: 'Vença no Vale dos Ossos Secos.', tier: 2, unlock: 'hero:josue', cat: 'mapas' },
+  rei: { name: 'As Muralhas Caíram', desc: 'Vença em Jericó.', tier: 2, unlock: 'relic:arco', cat: 'mapas' },
+  perseveranca: { name: 'Perseverança', desc: 'Sobreviva 8 minutos numa partida.', tier: 1, unlock: 'hero:debora', cat: 'progresso' },
+  evolucao: { name: 'Transformação', desc: 'Evolua uma arma.', tier: 1, unlock: 'relic:tabuas', cat: 'colecao' },
+  pedras: { name: 'Cinco Pedras Lisas', desc: 'Junte as 5 pedras do ribeiro em Elá.', tier: 0, unlock: 'relic:escudo', cat: 'mapas' },
+  mil: { name: 'Mil Abates', desc: 'Derrote 1000 inimigos numa partida.', tier: 1, unlock: 'relic:candelabro', cat: 'progresso' },
+  tesouro: { name: 'Tesouro Recuperado', desc: 'Alcance um tesouro em fuga.', tier: 0, unlock: 'relic:sal', cat: 'mapas' },
+  selo: { name: 'Selo Rompido', desc: 'Resista à emboscada de um baú selado.', tier: 0, unlock: 'relic:paes', cat: 'mapas' },
+  poco: { name: 'Água Viva', desc: 'Beba de um poço ou fonte.', tier: 0, cat: 'mapas' },
+  ungido: { name: 'Ungido', desc: 'Alcance o nível 20 numa partida.', tier: 1, cat: 'progresso' },
+  noite: { name: 'Coluna de Fogo', desc: 'Atravesse uma noite inteira.', tier: 0, cat: 'progresso' },
+  salomao: { name: 'Riqueza de Salomão', desc: 'Junte 300 siclos de uma vez.', tier: 1, cat: 'colecao' },
+  relicario: { name: 'Relicário', desc: 'Tenha 8 relíquias numa partida.', tier: 1, cat: 'colecao' },
+  maos: { name: 'Mãos Levantadas', desc: 'Faça 5 milagres numa partida.', tier: 0, cat: 'progresso' },
+  valentes: { name: 'Os Valentes', desc: 'Vença com 3 heróis diferentes.', tier: 2, cat: 'progresso' },
+  conquista: { name: 'Terra Prometida', desc: 'Vença nos 4 cenários.', tier: 2, cat: 'mapas', title: 'Conquistador de Canaã' },
+  veterano: { name: 'Veterano', desc: 'Derrote 5.000 inimigos, somando as partidas.', tier: 1, cat: 'progresso', goal: ['kills', 5000] },
+  lenda: { name: 'Lenda de Israel', desc: 'Derrote 25.000 inimigos, somando as partidas.', tier: 2, cat: 'progresso', goal: ['kills', 25000], title: 'Lenda de Israel' },
+  constancia: { name: 'Constância', desc: 'Jogue 10 partidas.', tier: 0, cat: 'progresso', goal: ['runs', 10] },
+  peregrino: { name: 'Peregrino', desc: 'Some 2 horas de jornada.', tier: 1, cat: 'progresso', goal: ['seconds', 7200], title: 'Peregrino' },
+  crescimento: { name: 'Crescimento', desc: 'Leve um herói ao estágio 2.', tier: 1, cat: 'colecao' },
+  plenitude: { name: 'Plenitude', desc: 'Leve um herói ao estágio 3.', tier: 2, cat: 'colecao', title: 'Ungido do Senhor' },
+  vestes: { name: 'Vestes Novas', desc: 'Tenha 5 itens no guarda-roupa.', tier: 0, cat: 'colecao' },
+  pesquisador: { name: 'Pesquisador', desc: 'Complete a pesquisa de um cenário no Bestiário.', tier: 1, cat: 'colecao' },
+  sabio: { name: 'Sábio como Salomão', desc: 'Complete a pesquisa dos 4 cenários.', tier: 2, cat: 'colecao', title: 'Sábio' },
+  contente: { name: 'Contentamento', desc: 'Vença com 3 relíquias ou menos.', tier: 2, cat: 'desafios', title: 'Contente com pouco' },
+  intocavel: { name: 'Intocável', desc: 'Vença levando no máximo 15 golpes.', tier: 2, cat: 'desafios', title: 'Intocável' },
+  porumfio: { name: 'Por um Fio', desc: 'Vença com menos de 10% da vida.', tier: 1, cat: 'desafios' },
+  recruta: { name: 'Com os Valentes', desc: 'Um valente de Davi se junta a você.', tier: 1, cat: 'desafios' },
+  coragem: { name: 'Coragem', desc: 'Vença no Difícil.', tier: 1, cat: 'dificuldade' },
+  destemido: { name: 'Destemido', desc: 'Vença no Pesadelo.', tier: 2, cat: 'dificuldade', title: 'Destemido' },
+  resistente: { name: 'Resistente', desc: 'Resista 10 minutos na Sobrevivência.', tier: 0, cat: 'sobrevivencia' },
+  incansavel: { name: 'Incansável', desc: 'Resista 20 minutos na Sobrevivência.', tier: 1, cat: 'sobrevivencia' },
+  eterno: { name: 'Sobrevivente Eterno', desc: 'Resista 45 minutos na Sobrevivência.', tier: 2, cat: 'sobrevivencia', title: 'Sobrevivente eterno' },
+  alianca: { name: 'Aliança', desc: 'Faça uma aliança depois de um guardião na Sobrevivência.', tier: 0, cat: 'sobrevivencia' },
 };
 
 // Everything a saved profile has opened ('hero:id', 'map:id', 'relic:id').
@@ -586,7 +650,9 @@ export function migrateProfile(raw) {
     v: PROFILE_VERSION,
     denarios: Number.isFinite(p.denarios) ? Math.max(0, p.denarios) : 0,
     trophies: o('trophies'), claimed: o('claimed'), wins: o('wins'), // wins: hero -> { map: true }
-    upgrades: o('upgrades'), tools: o('tools'), bag: o('bag'), heroes: o('heroes'),
+    upgrades: o('upgrades'), tools: o('tools'), bag: o('bag'), heroes: o('heroes'), mastery: o('mastery'),
+    stats: o('stats'), // kills, runs and seconds, summed over every run
+    mapWins: isObj(p.mapWins) ? p.mapWins : Object.fromEntries(Object.values(o('wins')).flatMap((w) => Object.keys(w)).map((m) => [m, 0])), // best difficulty won
     bestiary: o('bestiary'), records: o('records'), seen: o('seen'), tasks: o('tasks'),
     unlocked, owned: a('owned'),
   };
@@ -629,7 +695,10 @@ export const TOOLS = {
   alforje: { name: 'Alforje maior', desc: 'Leve 3 itens do alforje em vez de 2.', stat: 'pack', max: 1, cost: 600, icon: ['ui', 'scroll'] },
 };
 // Arsenal: weapons that only show up on cards and in chests after you buy them here.
-export const ARSENAL = { machado: 150, carros: 200, gafanhotos: 200, fogo: 250 };
+export const ARSENAL = { machado: 150, carros: 200, gafanhotos: 200, fogo: 250, estaca: 180, lanca: 220, corvos: 260, mo: 320 };
+// Mastery: every weapon can be strengthened for good, +10% damage a level (its evolution keeps it).
+export const MASTERY = { per: 0.1, max: 5, cost: 80 };
+export const masteryOf = (profile, id) => profile.mastery?.[WEAPONS[id].from ?? id] || 0;
 export const lockedWeapons = (profile) => new Set(Object.keys(ARSENAL).filter((id) => !(profile.unlocked || []).includes(`weapon:${id}`)));
 // Supplies: bought in stock, packed before a run (2 slots), used up when it starts.
 export const SUPPLIES = {
@@ -661,3 +730,142 @@ export function applyMarket(st, profile, pack = []) {
   if (pack.includes('bolsa')) st.gold += 0.5;
   return st;
 }
+
+// ---------- Hero evolution: time played with a hero (a win counts 5 minutes more) ----------
+export const STAGE_XP = [0, 3600, 10800]; // seconds: stage 2 after 1 h, stage 3 after 3 h
+export const heroStage = (xp = 0) => (xp >= STAGE_XP[2] ? 2 : xp >= STAGE_XP[1] ? 1 : 0);
+export const runXp = (seconds, won) => Math.floor(seconds) + (won ? 300 : 0);
+// names: the three stages; stat: what each stage adds; gear: pieces worn at each stage (see gear.js).
+export const STAGES = {
+  davi: { names: ['Pastor', 'Guerreiro de Saul', 'Rei Davi'], stat: ['dmg', 0.05, 'de dano'], ref: '2 Sm 5:3',
+    gear: [[], ['cuirass', 'swordBack'], ['crown', 'capeRoyal', 'harp']] },
+  sansao: { names: ['Nazireu', 'Juiz de Israel', 'Sansão de Gaza'], stat: ['maxHp', 12, 'de vida máxima'], ref: 'Jz 16:3',
+    gear: [[], ['braids', 'bracelets'], ['braids', 'bracelets', 'gates', 'fireEyes']] },
+  moises: { names: ['Pastor de Midiã', 'Profeta', 'Legislador'], stat: ['area', 0.05, 'de área'], ref: 'Êx 34:29',
+    gear: [[], ['capeBlue'], ['capeBlue', 'tablets', 'halo']] },
+  josue: { names: ['Servo de Moisés', 'Espião de Canaã', 'Comandante'], stat: ['armor', 0.03, 'de armadura'], ref: 'Js 5:14',
+    gear: [[], ['capeTravel', 'grapes'], ['armor', 'banner']] },
+  debora: { names: ['Profetisa', 'Juíza de Israel', 'Mãe em Israel'], stat: ['luck', 0.05, 'de sorte'], ref: 'Jz 5:7',
+    gear: [[], ['veil'], ['veil', 'leafCrown', 'quiverGold']] },
+};
+// Stage 2 and 3 add the stat once and twice; stage 3 also fills Fé 25% faster (the miracle comes sooner).
+export function stageBonus(st, hero, stage) {
+  const [stat, v] = STAGES[hero].stat;
+  st[stat] += v * stage;
+  if (stage >= 2) st.faith += 0.25;
+  return st;
+}
+export const stageText = (hero, stage) => {
+  const [, v, label] = STAGES[hero].stat;
+  const n = v * stage;
+  return stage ? `+${v < 1 ? `${Math.round(n * 100)}%` : n} ${label}${stage >= 2 ? ' · milagre mais frequente' : ''}` : 'Sem bônus ainda';
+};
+
+// ---------- Wardrobe: worn by any hero. slot: head, back (both hide the stage piece in that slot),
+// trail (a wake of sparks while running) or frame (around the portrait). unlock: earned, not bought.
+export const COSMETICS = {
+  louros: { name: 'Coroa de louros', slot: 'head', cost: 300 },
+  turbante: { name: 'Turbante', slot: 'head', cost: 200 },
+  capuz: { name: 'Capuz de viagem', slot: 'head', cost: 250 },
+  mantoRubro: { name: 'Manto escarlate', slot: 'back', cost: 350 },
+  mantoCores: { name: 'Túnica de muitas cores', slot: 'back', cost: 500, ref: 'Gn 37:3' },
+  aljava: { name: 'Aljava de cedro', slot: 'back', cost: 300 },
+  rastroOuro: { name: 'Rastro de pó dourado', slot: 'trail', cost: 250, color: 0xffd66b },
+  rastroPetalas: { name: 'Rastro de pétalas', slot: 'trail', cost: 250, color: 0xff9ab8 },
+  rastroBrasas: { name: 'Rastro de brasas', slot: 'trail', cost: 300, color: 0xff8a3d },
+  molduraReal: { name: 'Moldura real', slot: 'frame', cost: 600 },
+  molduraEla: { name: 'Moldura de Elá', slot: 'frame', unlock: 'research:ela' },
+  molduraMar: { name: 'Moldura do Mar', slot: 'frame', unlock: 'research:mar' },
+  molduraOssos: { name: 'Moldura dos Ossos', slot: 'frame', unlock: 'research:ossos' },
+  molduraJerico: { name: 'Moldura de Jericó', slot: 'frame', unlock: 'research:jerico' },
+};
+export const SLOT_NAME = { head: 'Cabeça', back: 'Costas', trail: 'Rastro', frame: 'Moldura' };
+
+// ---------- Bestiary: kills by map and kind; enough of each completes the map's research (a frame) ----------
+export const BEAST_KINDS = ['soldado', 'fundeiro', 'carro', 'gigante', 'elite', 'chefe'];
+export const RESEARCH = { soldado: 100, fundeiro: 50, carro: 40, gigante: 25, elite: 2, chefe: 1 };
+export const researchOf = (profile, biome) => BEAST_KINDS.every((k) => (profile.bestiary?.kills?.[`${biome}:${k}`] || 0) >= RESEARCH[k]);
+
+// ---------- Difficulty: opens map by map, one win at a time ----------
+export const DIFFS = [
+  { name: 'Normal', hp: 1, dmg: 1, pay: 1, text: 'como sempre' },
+  { name: 'Difícil', hp: 1.7, dmg: 1.35, pay: 1.75, text: 'inimigos +70% de vida, +35% de dano' },
+  { name: 'Pesadelo', hp: 2.6, dmg: 1.7, pay: 2.5, text: 'inimigos +160% de vida, +70% de dano' },
+];
+export const diffOpen = (profile, map, d) => d === 0 || (profile.mapWins?.[map] ?? -1) >= d - 1;
+
+// ---------- Survival: a guardian every 5 minutes; after each one, an alliance: a power and its price ----------
+export const GUARDIAN_EVERY = 300;
+export const ENDLESS_NIGHT = 2700; // 45:00
+export const PACTS = [
+  { name: 'Voto de nazireu', ref: 'Nm 6:5', good: ['dmg', 0.4, '+40% de dano'], bad: ['hpMul', 0.8, '−20% de vida máxima'] },
+  { name: 'Aliança com Gibeão', ref: 'Js 9:15', good: ['amount', 1, '+1 projétil'], bad: ['espd', 1.2, 'inimigos 20% mais rápidos'] },
+  { name: 'Voto de Jefté', ref: 'Jz 11:30', good: ['luck', 0.4, '+40% de sorte'], bad: ['chest', 2, 'baús custam o dobro'] },
+  { name: 'Pão da aflição', ref: 'Dt 16:3', good: ['regen', 3, '+3 de vida por segundo'], bad: ['speed', -0.15, '−15% de velocidade'] },
+  { name: 'Trombetas de Gideão', ref: 'Jz 7:20', good: ['area', 0.3, '+30% de área'], bad: ['spawn', 1.3, '+30% de inimigos'] },
+  { name: 'Oferta apressada', ref: '1 Sm 13:9', good: ['cd', 0.2, '−20% de recarga'], bad: ['armor', -0.15, '−15% de armadura'] },
+];
+
+// ---------- Tasks: three a day (easy, medium, hard) and three a week, the same for everyone that day ----------
+// stat: what a run adds (best: the best single run counts, not the sum).
+export const TASKS = {
+  facil: [
+    { id: 'k300', text: 'Derrote 300 inimigos', stat: 'kills', goal: 300 },
+    { id: 'c3', text: 'Abra 3 baús', stat: 'chests', goal: 3 },
+    { id: 'r2', text: 'Jogue 2 partidas', stat: 'runs', goal: 2 },
+    { id: 'p2', text: 'Erga 2 Pedras do Memorial', stat: 'stones', goal: 2 },
+    { id: 'v2', text: 'Mine 2 veios de prata', stat: 'veins', goal: 2 },
+  ],
+  media: [
+    { id: 'k1500', text: 'Derrote 1.500 inimigos', stat: 'kills', goal: 1500 },
+    { id: 'm15', text: 'Jogue 15 minutos', stat: 'minutes', goal: 15 },
+    { id: 'g4', text: 'Quebre 4 jarros de Gideão', stat: 'jars', goal: 4 },
+    { id: 's400', text: 'Junte 400 siclos', stat: 'gold', goal: 400 },
+    { id: 'e2', text: 'Derrote 2 campeões ou tesoureiros', stat: 'elites', goal: 2 },
+  ],
+  dificil: [
+    { id: 'w1', text: 'Vença um cenário', stat: 'wins', goal: 1 },
+    { id: 'b1000', text: 'Derrote 1.000 inimigos numa só partida', stat: 'kills', goal: 1000, best: true },
+    { id: 'l20', text: 'Chegue ao nível 20 numa partida', stat: 'level', goal: 20, best: true },
+    { id: 'sv10', text: 'Resista 10 minutos na Sobrevivência', stat: 'survMinutes', goal: 10, best: true },
+  ],
+  semana: [
+    { id: 'wk8k', text: 'Derrote 8.000 inimigos', stat: 'kills', goal: 8000 },
+    { id: 'wkw3', text: 'Vença 3 vezes', stat: 'wins', goal: 3 },
+    { id: 'wkc30', text: 'Abra 30 baús', stat: 'chests', goal: 30 },
+    { id: 'wkm90', text: 'Jogue 90 minutos', stat: 'minutes', goal: 90 },
+    { id: 'wkh1', text: 'Vença no Difícil ou no Pesadelo', stat: 'hardWins', goal: 1 },
+    { id: 'wkg2', text: 'Derrote 2 guardiões na Sobrevivência', stat: 'guardians', goal: 2 },
+  ],
+};
+export const TASK_PAY = { facil: 40, media: 80, dificil: 140, semana: [200, 300, 500] };
+export const TASK_BONUS = { day: 60, week: 400 }; // all three done: extra denários and supplies
+const hashStr = (str) => { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
+export const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export function weekKey(d = new Date()) { // Monday-first weeks
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+  return `S${dayKey(m)}`;
+}
+// The day's (or week's) tasks; swap: how many times the player traded one in, so the trade is stable too.
+export function rollTasks(key, kind, swaps = 0) {
+  if (kind === 'day') return ['facil', 'media', 'dificil'].map((tier, k) => { const l = TASKS[tier]; return { tier, id: l[hashStr(`${key}${k}${swaps}`) % l.length].id, prog: 0, claimed: false }; });
+  const l = TASKS.semana;
+  const start = hashStr(`${key}${swaps}`) % l.length;
+  return [0, 1, 2].map((k) => ({ tier: 'semana', id: l[(start + k * 2) % l.length].id, prog: 0, claimed: false }));
+}
+export const taskDef = (t) => TASKS[t.tier].find((x) => x.id === t.id);
+export function addRunToTasks(list, run) {
+  for (const t of list) {
+    const d = taskDef(t);
+    const v = run[d.stat] || 0;
+    t.prog = Math.min(d.goal, d.best ? Math.max(t.prog, v) : t.prog + v);
+  }
+}
+
+// ---------- Bestiary names, by map and kind ----------
+export const BEAST_NAMES = {
+  ela: ['Soldado filisteu', 'Fundeiro filisteu', 'Carro filisteu', 'Gigante anaquim'],
+  mar: ['Soldado egípcio', 'Arqueiro egípcio', 'Carro do Faraó', 'Colosso de pedra'],
+  ossos: ['Esqueleto', 'Esqueleto atirador', 'Carro de ossos', 'Gigante de ossos'],
+  jerico: ['Guarda de Jericó', 'Fundeiro cananeu', 'Carro cananeu', 'Guardião da muralha'],
+};

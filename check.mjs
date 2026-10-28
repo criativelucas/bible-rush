@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { FlowField, SpatialHash, rng } from './src/sim.js';
 import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX_LEVEL, baseStats, rollOffers, weaponStats, rollRarity, readyToEvolve, openSet, unlockedBy, migrateProfile, exportCode, importCode, PROFILE_VERSION,
-  TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, runDenarios, applyMarket, lockedWeapons, packSize } from './src/content.js';
+  TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, runDenarios, applyMarket, lockedWeapons, packSize,
+  STAGES, STAGE_XP, heroStage, runXp, stageBonus, COSMETICS, MASTERY, masteryOf, TROPHY_CATS, DIFFS, diffOpen, PACTS, TASKS, rollTasks, taskDef, addRunToTasks, dayKey, weekKey, researchOf, BEAST_KINDS, RESEARCH } from './src/content.js';
 
 // Open field: west of the player, arrows point straight east.
 {
@@ -225,6 +226,74 @@ import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX
     }
   }
   for (const it of Object.values(SUPPLIES)) assert.ok(it.cost > 0 && it.name && it.desc);
+}
+
+// Hero evolution: stages by time played; bonuses grow with the stage; every hero has three named stages
+// whose gear exists in gear.js (checked by name here: gear.js needs a browser).
+{
+  assert.equal(heroStage(0), 0);
+  assert.equal(heroStage(STAGE_XP[1]), 1);
+  assert.equal(heroStage(STAGE_XP[2] + 1), 2);
+  assert.equal(runXp(600, true), 900);
+  const gearSrc = (await import('node:fs')).readFileSync(new URL('./src/gear.js', import.meta.url), 'utf8');
+  for (const [id, st] of Object.entries(STAGES)) {
+    assert.ok(HEROES[id], `${id}: no such hero`);
+    assert.equal(st.names.length, 3);
+    for (const g of st.gear.flat()) assert.ok(gearSrc.includes(`  ${g}: [`), `${id}: gear ${g} missing in gear.js`);
+    const a = stageBonus(baseStats(HEROES[id]), id, 0);
+    const c = stageBonus(baseStats(HEROES[id]), id, 2);
+    assert.ok(c[st.stat[0]] > a[st.stat[0]] && c.faith > a.faith, `${id}: stage 3 should be stronger`);
+  }
+  for (const [cid, c] of Object.entries(COSMETICS)) {
+    assert.ok(c.cost > 0 || c.unlock, `${cid}: neither sold nor earned`);
+    if (c.slot === 'head' || c.slot === 'back') assert.ok(gearSrc.includes(`  ${cid}: [`), `${cid}: no model in gear.js`);
+  }
+}
+
+// Weapon mastery: kept by the evolution; every Arsenal weapon exists; trophies are sorted into known tabs.
+{
+  const prof = migrateProfile({ mastery: { funda: 3 } });
+  assert.equal(masteryOf(prof, 'funda'), 3);
+  assert.equal(masteryOf(prof, 'funda_evo'), 3);
+  assert.equal(masteryOf(prof, 'lanca'), 0);
+  for (const id in ARSENAL) assert.ok(WEAPONS[id] && !WEAPONS[id].evo, `${id}: not a base weapon`);
+  for (const [id, t] of Object.entries(TROPHIES)) assert.ok(TROPHY_CATS[t.cat], `${id}: unknown tab ${t.cat}`);
+}
+
+// Difficulty opens one win at a time; old wins count as Normal wins.
+{
+  const fresh = migrateProfile({});
+  assert.ok(diffOpen(fresh, 'ela', 0) && !diffOpen(fresh, 'ela', 1));
+  const won = migrateProfile({ wins: { davi: { ela: true } } });
+  assert.ok(diffOpen(won, 'ela', 1) && !diffOpen(won, 'ela', 2) && !diffOpen(won, 'mar', 1));
+  assert.ok(DIFFS[2].hp > DIFFS[1].hp && DIFFS[2].pay > DIFFS[1].pay);
+  for (const pc of PACTS) assert.ok(pc.good[2] && pc.bad[2] && pc.ref);
+}
+
+// Tasks: the same list for the same day; one of each kind; progress adds up (or keeps the best run) and stops at the goal.
+{
+  const a = rollTasks('2026-10-27', 'day');
+  assert.deepEqual(a, rollTasks('2026-10-27', 'day'));
+  assert.deepEqual(a.map((t) => t.tier), ['facil', 'media', 'dificil']);
+  const w = rollTasks(weekKey(new Date(2026, 9, 29)), 'week');
+  assert.equal(new Set(w.map((t) => t.id)).size, 3);
+  assert.equal(weekKey(new Date(2026, 9, 26)), weekKey(new Date(2026, 10, 1))); // Monday to Sunday
+  assert.notEqual(weekKey(new Date(2026, 10, 1)), weekKey(new Date(2026, 10, 2)));
+  assert.equal(dayKey(new Date(2026, 0, 5)), '2026-01-05');
+  const list = [{ tier: 'facil', id: 'k300', prog: 0 }, { tier: 'dificil', id: 'b1000', prog: 0 }];
+  addRunToTasks(list, { kills: 200 });
+  addRunToTasks(list, { kills: 500 });
+  assert.equal(list[0].prog, 300); // capped
+  assert.equal(list[1].prog, 500); // the best single run
+  for (const tier of Object.keys(TASKS)) for (const t of TASKS[tier]) assert.ok(taskDef({ tier, id: t.id }) && t.goal > 0);
+}
+
+// Bestiary: research needs every kind of a map.
+{
+  const kills = Object.fromEntries(BEAST_KINDS.map((k) => [`ela:${k}`, RESEARCH[k]]));
+  assert.ok(researchOf({ bestiary: { kills } }, 'ela'));
+  assert.ok(!researchOf({ bestiary: { kills: { ...kills, 'ela:chefe': 0 } } }, 'ela'));
+  assert.ok(!researchOf({ bestiary: { kills } }, 'mar'));
 }
 
 console.log('ok');

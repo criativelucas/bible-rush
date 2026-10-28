@@ -44,14 +44,20 @@ locais e um código para exportar e importar o progresso.
 | 0 | Feita |
 | 1 | Feita, com exceções abaixo |
 | 2 | Feita |
-| 3 | Por fazer |
+| 3 | Feita |
 | 4 | Feita, com exceções abaixo |
-| 5 | Por fazer |
+| 5 | Feita |
 
 **Ficou de fora da Fase 1:**
 - A Caverna de Adulão: o terreno é um mapa de alturas, que não faz túneis. Pediria um modelo próprio.
 - O mar se abrindo e a tempestade de areia no Mar Vermelho.
 - Forja de Tubalcaim, Balança do Templo, Escriba, Vaso da viúva e a Brasa do altar.
+
+**Como ficou a Fase 3:** os estágios trocam peças 3D presas aos ossos do herói (feitas em `src/gear.js`), não um modelo novo do Blender; o retrato passa a ser o rosto do modelo 3D com as peças. Paletas de cor ficaram de fora: no lugar, a Túnica de muitas cores e os mantos do guarda-roupa.
+
+**Acrescentado a pedido:** quatro armas novas no Arsenal (Lança de Saul, Estaca de Jael, Corvos de Elias, Mó de Abimeleque), cada uma com evolução, e a Maestria, que fortalece qualquer arma para sempre.
+
+**Como ficou a Fase 5:** ranking, temporada, clã e cooperativo continuam de fora (precisam de servidor).
 
 **Ficou de fora da Fase 4:**
 - A tela de detalhe do herói com a linha de evolução: depende da Fase 3.

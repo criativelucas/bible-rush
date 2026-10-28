@@ -3,9 +3,14 @@ import { rng, FlowField, SpatialHash } from './sim.js';
 import {
   HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL, TROPHIES, TIERS, openSet, migrateProfile, exportCode, importCode, unlockedBy,
   TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
+  STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, researchOf, MASTERY, masteryOf,
+  TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
+import { buildGear, dress, PIECES } from './gear.js';
+import { forgeModels } from './forge.js';
+import { clone as cloneRig } from 'three/addons/utils/SkeletonUtils.js';
 import { buildWorld } from './world.js';
 import { loadAll } from './assets.js';
 
@@ -25,6 +30,11 @@ const unlockName = (key) => {
 const params = new URLSearchParams(location.search);
 const wantBiome = params.get('biome');
 const BIOME_ID = BIOMES[wantBiome] && isOpen('map', wantBiome) ? wantBiome : 'ela'; // a locked map in the URL falls back
+// Difficulty and mode: chosen on the setup screen (kept in the URL for "Jogar de novo"); fixed once a run starts.
+let DIFF_ID = Math.min(2, Math.max(0, Number(params.get('diff')) || 0));
+if (!diffOpen(profile, BIOME_ID, DIFF_ID)) DIFF_ID = 0;
+let DIFF = DIFFS[DIFF_ID];
+let SURV = params.get('mode') === 'surv';
 const DEFAULTS = { style: 'crisp', shadows: true, dmgNumbers: true, fps: false, sens: 1, camDist: 8.5, invertY: false, autoCam: true, lockMouse: true, volume: 0.7 };
 const cfg = { ...DEFAULTS };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('otr-cfg') || '{}')); } catch {}
@@ -130,6 +140,7 @@ scene.add(hemi, sun, sun.target);
 
 // ---------- World ----------
 const ASSETS = await loadAll(BIOMES[BIOME_ID].bossModel, Object.keys(HEROES)); // models built in Blender (tools/build_models.sh)
+Object.assign(ASSETS.items, forgeModels()); // the newer weapons' models
 const world = buildWorld(scene, BIOME_ID, random, ASSETS.props);
 const B = world.B;
 const terrainH = world.terrainH;
@@ -212,7 +223,7 @@ function instanced(geo, mat, max, colors = false, shadow = false) {
 }
 const enemyMat = M.toon(0xffffff, { walk: true, fade: true });
 const enemyMeshes = [0, 1, 2, 3].map((t) => instanced(ASSETS.mobs[`mob_${t}_${BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true));
-const PROJ = ['stone', 'arrow', 'snake', 'axe'];
+const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca'];
 const shotMeshes = PROJ.map((k) => instanced(ASSETS.items[`proj_${k}`], M.toon(), MAX_SHOTS, true));
 const eshotMesh = instanced(new THREE.IcosahedronGeometry(0.25, 0), new THREE.MeshBasicMaterial({ color: 0xff3fb4 }), MAX_ESHOTS);
 const manaMesh = instanced(ASSETS.items.proj_mana, new THREE.MeshBasicMaterial({ vertexColors: true }), MAX_GEMS);
@@ -225,6 +236,8 @@ const starMesh = instanced(ASSETS.items.proj_mana, new THREE.MeshBasicMaterial({
 const pickMeshes = PICKUPS.map((p) => instanced(ASSETS.items[`pick_${p.id}`], M.toon(), 64, false, true));
 const pickGlow = instanced(new THREE.RingGeometry(0.3, 0.62, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd66b, transparent: true, opacity: 0.75, depthWrite: false }), 256);
 const locustMesh = instanced(ASSETS.items.proj_locust, M.toon(), 160);
+const ravenMesh = instanced(ASSETS.items.proj_raven, M.toon(), 80);
+const millMesh = instanced(ASSETS.items.proj_mill, M.toon(), MAX_STRIKES, false, true);
 function flameMatOf() { return new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false }); }
 const partMesh = instanced(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial(), MAX_PARTS, true);
 const flameMat = new THREE.MeshBasicMaterial({ vertexColors: true });
@@ -394,6 +407,34 @@ function spriteFace(id) {
 }
 
 const HERO_RIGS = Object.fromEntries(Object.keys(HEROES).map((id) => [id, makeRig(ASSETS.heroes[id])]));
+for (const rig of Object.values(HERO_RIGS)) rig.gear = buildGear(rig); // in the rest pose, before any clip plays
+
+// ---------- Hero evolution and wardrobe ----------
+const heroRec = (id) => (profile.heroes[id] ??= { xp: 0, look: {} });
+const stageOf = (id) => heroStage(heroRec(id).xp);
+const hasCosmetic = (cid) => {
+  const c = COSMETICS[cid];
+  if (c.unlock?.startsWith('research:')) return researchDone(c.unlock.slice(9));
+  return profile.owned.includes(`cos:${cid}`);
+};
+// The pieces a hero shows: the stage's, with the wardrobe's head and back pieces in place of the stage's own.
+function gearIds(id) {
+  const look = heroRec(id).look;
+  let ids = STAGES[id].gear[stageOf(id)];
+  for (const slot of ['head', 'back']) {
+    const c = look[slot];
+    if (c && hasCosmetic(c)) ids = [...ids.filter((g) => PIECES[g][1] !== slot), c];
+  }
+  return ids;
+}
+const dressHero = (id) => dress(HERO_RIGS[id], gearIds(id));
+function researchDone(biome) { return researchOf(profile, biome); }
+// The portrait's frame: the one worn, or bronze and gold rims for stages 2 and 3.
+function frameClass(id) {
+  const f = heroRec(id).look.frame;
+  return f && hasCosmetic(f) ? `frame-${f}` : `stage-${stageOf(id)}`;
+}
+for (const id in HERO_RIGS) dressHero(id);
 
 // ---------- Icons: 3D models rendered once into small pixel images ----------
 // Each scroll shows what it improves: an emblem from assets/ui drawn over its paper.
@@ -428,6 +469,7 @@ const ICON = (() => {
   const sz = new THREE.Vector3();
   function snap(obj, { yaw = 0.5, pitch = 0.25, center, r, size = S, over, edge = [26, 15, 11, 255] } = {}) {
     const { rt, cv, ctx, buf } = target(size);
+    const parent = obj.parent; // the hero may be out in the world: put it back afterwards
     sc.add(obj);
     obj.updateMatrixWorld(true);
     box.setFromObject(obj).getCenter(c);
@@ -444,6 +486,7 @@ const ICON = (() => {
     renderer.readRenderTargetPixels(rt, 0, 0, size, size, buf);
     renderer.setRenderTarget(null);
     sc.remove(obj);
+    parent?.add(obj);
     const img = ctx.createImageData(size, size);
     for (let y = 0; y < size; y++) img.data.set(buf.subarray((size - 1 - y) * size * 4, (size - y) * size * 4), y * size * 4); // flip rows
     const px = img.data;
@@ -464,14 +507,6 @@ const ICON = (() => {
     return cv.toDataURL();
   }
   const out = { hero: {}, face: {}, weapon: {}, relic: {} };
-  for (const id in HEROES) {
-    out.hero[id] = snap(HERO_RIGS[id].group, { yaw: 0.42, pitch: 0.1, size: 32 }); // the 3D model as a 32 px sprite
-    if (SPRITES[id]) out.face[id] = spriteFace(id);
-    else { // no sprite sheet: a close-up of the 3D model's head
-      const top = new THREE.Box3().setFromObject(HERO_RIGS[id].group).max.y;
-      out.face[id] = snap(HERO_RIGS[id].group, { yaw: 0.25, pitch: 0.05, size: 32, center: new THREE.Vector3(0, top - 0.2, 0.04), r: 0.3 });
-    }
-  }
   const item = (name) => M.solid(ASSETS.items[name], M.toon());
   for (const [id, w] of Object.entries(WEAPONS)) { // evolutions: the base weapon with a gold outline and a star
     out.weapon[id] = snap(item(`weapon_${w.from ?? id}`), w.evo
@@ -486,6 +521,19 @@ const ICON = (() => {
     const e = EMBLEMS[id];
     out.scrolls[id] = snap(item('scroll'), { yaw: 0.4, pitch: 0.2, over: (c, n) => c.drawImage(e, Math.round((n - e.width) / 2), Math.round((n - e.height) / 2) + 1) });
   }
+  // The 3D model as a 32 px sprite, and the face: the sprite sheet's, or (no sheet, or wearing gear) a
+  // close-up of the model's head. Done again after evolving or changing clothes.
+  out.redoHero = (id) => {
+    out.hero[id] = snap(HERO_RIGS[id].group, { yaw: 0.42, pitch: 0.1, size: 32 });
+    if (SPRITES[id] && !gearIds(id).length) out.face[id] = spriteFace(id);
+    else {
+      const top = new THREE.Box3().setFromObject(HERO_RIGS[id].group).max.y;
+      const head = HERO_RIGS[id].group.getObjectByName('head').getWorldPosition(new THREE.Vector3()).y;
+      out.face[id] = snap(HERO_RIGS[id].group, { yaw: 0.25, pitch: 0.05, size: 32, center: new THREE.Vector3(0, head + 0.17, 0.04), r: 0.3 + (top - head > 0.45 ? 0.06 : 0) });
+    }
+  };
+  for (const id in HEROES) out.redoHero(id);
+  out.mob = (name) => snap(M.solid(ASSETS.mobs[name], M.toon()), { yaw: 0.5, pitch: 0.15, size: 32 }); // for the Bestiary
   return out;
 })();
 const iconImg = (src) => `<img class="icon" src="${src}" alt="">`;
@@ -503,6 +551,8 @@ const P = {
   sunT: 0, miracles: 0, conquests: 0, // Josué: the sun standing still, and stones/chests taken
   banned: new Set(), star: false, dmgBy: {}, killsBy: {}, pack: [], // Market: banned cards, Estrela de Jacó; run report
   bless: null, blessT: 0, // a blessing from the pillar of Bethel
+  goldGot: 0, veins: 0, jars: 0, chests: 0, hits: 0, lastHit: -99, guardians: 0, // for tasks and trophies
+  mods: { espd: 1, spawn: 1, chest: 1 }, endless: false, // survival: the prices of the alliances
 };
 let dmgSrc = 'other'; // who is dealing damage right now (a weapon id, 'move', 'miracle', 'passive', 'other'): fills P.dmgBy
 let srcSlot = -3; // the same for shots and strikes, kept on them: weapon slot, or -1 miracle, -2 passive, -3 other
@@ -559,6 +609,7 @@ let nextCarrier = 75; // a treasure carrier every 150 s
 let nextEvent = 120; // the map's own event every 150 s
 let melCarrier = Infinity; // Mel silvestre: one more carrier early on
 let seenHoreb = false;
+let nextGuardian = GUARDIAN_EVERY; // survival: a guardian every 5 minutes
 let challenge = null; // the sealed chest being fought for: { c, t, wave }
 let dustT = 0; // wind over the bones: dust closes in
 let glintsGot = 0;
@@ -660,7 +711,9 @@ function go(id) {
   if (id === 'setup') renderSetup();
   if (id === 'trophies') renderTrophies();
   if (id === 'shop') renderShop();
-  if (id === 'menu') renderPurse();
+  if (id === 'tasks') renderTasks();
+  if (id === 'bestiary') renderBestiary();
+  if (id === 'menu') { renderPurse(); updateDots(); }
   state = id;
   show(id);
   if (id === 'menu') guide('menu', MENU_GUIDE);
@@ -684,7 +737,7 @@ $('resume').onclick = resume;
 const reload = (q) => { location.search = new URLSearchParams(q).toString(); };
 $('quit').onclick = () => reload({ biome: BIOME_ID });
 $('to-menu').onclick = () => reload({ biome: BIOME_ID });
-$('again').onclick = () => reload({ biome: BIOME_ID, hero: P.hero, screen: 'setup' });
+$('again').onclick = () => reload({ biome: BIOME_ID, hero: P.hero, screen: 'setup', diff: DIFF_ID, mode: SURV ? 'surv' : 'classic' });
 $('reroll').onclick = () => reroll();
 $('skip').onclick = () => skip();
 $('ban').onclick = () => toggleBan();
@@ -721,11 +774,28 @@ function renderSetup() {
     ${ab(iconImg(ICON.weapon[h.weapon]), `Arma: ${w.name}`, w.desc)}
     ${ab('<img class="ico" src="assets/ui/star.png" alt="">', `Passiva: ${h.passive[0]}`, h.passive[1])}
     ${ab('<kbd class="k">E</kbd>', h.move[0], h.move[1])}
-    ${ab('<kbd class="k">Q</kbd>', h.miracle[0], h.miracle[1])}`;
+    ${ab('<kbd class="k">Q</kbd>', h.miracle[0], h.miracle[1])}
+    ${evoLine(selHero)}<div id="wardrobe" class="wardrobe"></div>`;
+  renderWardrobe();
   renderPack();
-  const rec = profile.records[BIOME_ID];
+  const rec = SURV ? profile.records[`surv:${BIOME_ID}`] : profile.records[BIOME_ID];
   $('map-info').innerHTML = `<div class="tags">${B.tags.map((t) => `<i>${t}</i>`).join('')}</div><p>${B.desc}</p>
-    <small>${rec ? `Seu recorde: ${fmt(rec.best)}${rec.fastest ? ` · vitória mais rápida ${fmt(rec.fastest)}` : ''}` : 'Ainda sem recorde neste cenário.'}</small>`;
+    <small>${rec ? `Seu recorde${SURV ? ' na Sobrevivência' : ''}: ${fmt(rec.best)}${rec.fastest ? ` · vitória mais rápida ${fmt(rec.fastest)}` : ''}` : 'Ainda sem recorde aqui.'}</small>
+    <div class="modes">${[['classic', 'Clássico', 'Erga as 3 pedras e vença o chefe'], ['surv', 'Sobrevivência', 'Sem fim: um guardião a cada 5 min e uma aliança depois de cada um']]
+      .map(([k, n, d]) => `<button data-mode="${k}" class="${(k === 'surv') === SURV ? 'on' : ''}"><b>${n}</b><small>${d}</small></button>`).join('')}</div>
+    <div class="diffs">${DIFFS.map((d, k) => `<button data-diff="${k}" class="${k === DIFF_ID ? 'on' : ''}${diffOpen(profile, BIOME_ID, k) ? '' : ' locked'}"><b>${d.name}</b><small>${k ? `×${d.pay} denários` : 'denários ×1'}</small></button>`).join('')}</div>
+    <small class="diff-note">${diffOpen(profile, BIOME_ID, Math.min(2, DIFF_ID + 1)) || DIFF_ID === 2 ? DIFFS[DIFF_ID].text : `${DIFFS[DIFF_ID].text} · vença no ${DIFFS[DIFF_ID].name} para abrir o ${DIFFS[DIFF_ID + 1].name} neste cenário`}</small>`;
+  $('map-info').querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => { SURV = b.dataset.mode === 'surv'; renderSetup(); beep(600, 0.05, 'triangle', 0.03); }; });
+  $('map-info').querySelectorAll('[data-diff]').forEach((b) => {
+    b.onclick = () => {
+      const k = Number(b.dataset.diff);
+      if (!diffOpen(profile, BIOME_ID, k)) { $('lock-hint').textContent = `${DIFFS[k].name} está bloqueado: vença ${B.name} no ${DIFFS[k - 1].name}.`; return beep(180, 0.12, 'square', 0.03); }
+      DIFF_ID = k;
+      DIFF = DIFFS[k];
+      renderSetup();
+      beep(600, 0.05, 'triangle', 0.03);
+    };
+  });
   $('biomes').replaceChildren(...Object.entries(BIOMES).map(([id, b]) => {
     const el = document.createElement('button');
     const open = isOpen('map', id);
@@ -739,6 +809,39 @@ function renderSetup() {
       if (id !== BIOME_ID) reload({ biome: id, hero: selHero, screen: 'setup' });
     };
     return el;
+  }));
+}
+
+// Evolution: the three stages, the one reached, time to the next and what it gives.
+function evoLine(id) {
+  const st = STAGES[id];
+  const xp = heroRec(id).xp;
+  const at = heroStage(xp);
+  const next = STAGE_XP[at + 1];
+  return `<div class="evo-line"><div class="steps">${st.names.map((n, k) => `<span class="${k <= at ? 'on' : ''}${k === at ? ' cur' : ''}">${n}</span>`).join('<i>›</i>')}</div>
+    <div class="bar xp-h"><i style="width:${next ? Math.min(100, ((xp - STAGE_XP[at]) / (next - STAGE_XP[at])) * 100) : 100}%"></i></div>
+    <small>${next ? `${Math.ceil((next - xp) / 60)} min de jornada com ${HEROES[id].name} até ${st.names[at + 1]} (vitórias contam 5 min a mais)` : `Estágio máximo · ${st.ref}`} · Bônus: ${stageText(id, at)}</small></div>`;
+}
+// Wardrobe: what this hero wears (head, back, trail, frame) among what you own.
+function renderWardrobe() {
+  const look = heroRec(selHero).look;
+  const owned = Object.keys(COSMETICS).filter(hasCosmetic);
+  const el = $('wardrobe');
+  if (!owned.length) { el.innerHTML = '<span class="none">Guarda-roupa vazio: compre roupas e rastros no Mercado.</span>'; return; }
+  el.replaceChildren(...owned.map((cid) => {
+    const c = COSMETICS[cid];
+    const b = document.createElement('button');
+    b.className = look[c.slot] === cid ? 'on' : '';
+    b.innerHTML = `<small>${SLOT_NAME[c.slot]}</small>${c.name}`;
+    b.onclick = () => {
+      look[c.slot] = look[c.slot] === cid ? undefined : cid;
+      saveProfile();
+      dressHero(selHero);
+      ICON.redoHero(selHero);
+      renderSetup();
+      beep(600, 0.05, 'triangle', 0.03);
+    };
+    return b;
   }));
 }
 
@@ -776,8 +879,9 @@ function renderPurse() {
 const SHOP_TABS = {
   treino: ['Treinamento', 'Melhorias permanentes: valem para todos os heróis em todas as partidas. Cada nível custa mais que o anterior.'],
   ferramentas: ['Ferramentas', 'Mudam a partida: mais controle sobre as cartas de nível e uma reserva de vida.'],
-  arsenal: ['Arsenal', 'Armas que só aparecem nas cartas de nível depois de compradas aqui.'],
+  arsenal: ['Arsenal', 'Compre armas novas para as cartas de nível, e fortaleça as que você já tem: a maestria vale para sempre, com todos os heróis.'],
   alforje: ['Alforje', 'Itens para uma partida. Escolha quais levar em Nova jornada; eles são gastos ao começar.'],
+  guarda: ['Guarda-roupa', 'Roupas, rastros e molduras para qualquer herói. Vista em Nova jornada. Algumas molduras só se ganham no Bestiário.'],
 };
 let shopTab = 'treino';
 function renderShop() {
@@ -797,7 +901,7 @@ function renderShop() {
     el.className = `ware ${shopTab}${maxed ? ' maxed' : ''}`;
     const pips = max > 1 ? `<div class="pips">${Array.from({ length: max }, (_, k) => `<i class="${k < level ? 'on' : ''}"></i>`).join('')}</div>` : '';
     el.innerHTML = `<div class="top"><img src="${icon}" alt=""></div>${note ? `<i class="lv">${note}</i>` : ''}<b>${name}</b><span>${text}</span>${pips}
-      <button class="btn buy">${maxed ? (shopTab === 'arsenal' ? 'Comprada' : 'Completo') : `${coinImg} ${cost}`}</button>`;
+      <button class="btn buy">${maxed ? ({ arsenal: 'Comprada', guarda: 'Comprado' }[shopTab] ?? 'Completo') : `${coinImg} ${cost}`}</button>`;
     const btn = el.querySelector('.buy');
     btn.disabled = maxed || profile.denarios < cost;
     btn.onclick = () => {
@@ -825,10 +929,26 @@ function renderShop() {
         note: t.max > 1 ? `Nv. ${level}/${t.max}` : '', buy: () => { profile.tools[id] = level + 1; } });
     });
   } else if (shopTab === 'arsenal') {
-    items = Object.entries(ARSENAL).map(([id, cost]) => {
-      const have = !LOCKED.has(id);
-      return ware({ icon: ICON.weapon[id], name: WEAPONS[id].name, text: WEAPONS[id].desc, level: have ? 1 : 0, max: 1, cost,
-        note: have ? 'No arsenal' : '', buy: () => profile.unlocked.push(`weapon:${id}`) });
+    items = Object.keys(WEAPONS).filter((id) => !WEAPONS[id].evo).map((id) => {
+      const w = WEAPONS[id];
+      if (LOCKED.has(id)) { // not yet in the cards: buy it
+        return ware({ icon: ICON.weapon[id], name: w.name, text: `${w.desc}${w.ref ? ` · ${w.ref}` : ''}`, level: 0, max: 1, cost: ARSENAL[id],
+          note: 'Nova arma', buy: () => profile.unlocked.push(`weapon:${id}`) });
+      }
+      const level = profile.mastery[id] || 0; // owned: strengthen it for good
+      const el = ware({ icon: ICON.weapon[id], name: w.name, text: `Maestria: +${Math.round(MASTERY.per * 100)}% de dano por nível${level ? ` (agora +${Math.round(MASTERY.per * level * 100)}%)` : ''}`,
+        level, max: MASTERY.max, cost: levelCost(MASTERY.cost, level), note: `Maestria ${level}/${MASTERY.max}`, buy: () => { profile.mastery[id] = level + 1; } });
+      if (level < MASTERY.max) el.querySelector('.buy').insertAdjacentText('afterbegin', 'Fortalecer ');
+      return el;
+    });
+  } else if (shopTab === 'guarda') {
+    items = Object.entries(COSMETICS).map(([cid, c]) => {
+      const have = hasCosmetic(cid);
+      const w = ware({ icon: `assets/ui/${{ head: 'star', back: 'scroll', trail: 'wing', frame: 'gem' }[c.slot]}.png`, name: c.name,
+        text: `${SLOT_NAME[c.slot]}${c.ref ? ` · ${c.ref}` : ''}${c.unlock ? ` · complete a pesquisa de ${BIOMES[c.unlock.slice(9)].name} no Bestiário` : ''}`,
+        level: have ? 1 : 0, max: 1, cost: c.cost ?? 0, note: have ? 'Seu' : '', buy: () => profile.owned.push(`cos:${cid}`) });
+      if (c.unlock && !have) { const b = w.querySelector('.buy'); b.disabled = true; b.textContent = 'Conquista'; }
+      return w;
     });
   } else {
     items = Object.entries(SUPPLIES).map(([id, it]) => {
@@ -881,6 +1001,7 @@ function showGuide() {
   box.style.top = `${clamp(y, 16, innerHeight - bh - 16)}px`;
 }
 function endGuide() {
+  if (!coachOn) return;
   document.querySelector('.coach-hl')?.classList.remove('coach-hl');
   profile.seen[coachOn.key] = 1;
   saveProfile();
@@ -892,16 +1013,189 @@ $('coach-back').onclick = () => { coachOn.at = Math.max(0, coachOn.at - 1); show
 $('coach-skip').onclick = () => endGuide();
 addEventListener('resize', () => { if (coachOn) showGuide(); });
 
+let trophyTab = 'todos';
+const titleOf = () => (profile.title && TROPHIES[profile.title]?.title && profile.trophies[profile.title] ? TROPHIES[profile.title].title : '');
+// Progress toward the trophies that build up over many runs.
+function trophyProgress(id) {
+  const g = TROPHIES[id].goal;
+  return g ? [Math.min(g[1], profile.stats[g[0]] || 0), g[1]] : null;
+}
 function renderTrophies() {
   const ids = Object.keys(TROPHIES);
   $('trophy-count').textContent = `${ids.filter((id) => profile.trophies[id]).length} de ${ids.length} troféus`;
-  $('trophy-grid').innerHTML = ids.map((id) => {
+  // Title: any won trophy that gives one.
+  const titles = ids.filter((id) => profile.trophies[id] && TROPHIES[id].title);
+  $('title-sel').innerHTML = `<option value="">Sem título</option>${titles.map((id) => `<option value="${id}"${profile.title === id ? ' selected' : ''}>${TROPHIES[id].title}</option>`).join('')}`;
+  $('title-sel').disabled = !titles.length;
+  $('trophy-tabs').replaceChildren(...Object.entries({ todos: 'Todos', ...TROPHY_CATS }).map(([k, name]) => {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.className = k === trophyTab ? 'on' : '';
+    b.onclick = () => { trophyTab = k; renderTrophies(); };
+    return b;
+  }));
+  // Won, not yet collected: their denários.
+  const ready = ids.filter((id) => profile.trophies[id] && !profile.claimed[id]);
+  $('trophy-claim').innerHTML = ready.length ? `<h3>Prontos para resgatar · ${ready.length}</h3>` : '';
+  for (const id of ready) {
+    const t = TROPHIES[id];
+    const row = document.createElement('div');
+    row.className = 'claim';
+    row.innerHTML = `<img src="assets/ui/trophy-${t.tier}.png" alt=""><div><b>${t.name}</b><small>${t.desc}</small></div><button class="btn primary">Resgatar ${coinImg} ${TROPHY_PAY[t.tier]}</button>`;
+    row.querySelector('button').onclick = () => {
+      profile.claimed[id] = 1;
+      profile.denarios += TROPHY_PAY[t.tier];
+      saveProfile();
+      chord([784, 988, 1175, 1568], 'triangle');
+      renderTrophies();
+      renderPurse();
+      updateDots();
+    };
+    $('trophy-claim').append(row);
+  }
+  $('trophy-grid').innerHTML = ids.filter((id) => trophyTab === 'todos' || TROPHIES[id].cat === trophyTab).map((id) => {
     const t = TROPHIES[id];
     const won = profile.trophies[id];
     const opens = t.unlock ? `<em>${won ? 'Desbloqueou' : 'Desbloqueia'}: ${unlockName(t.unlock)}</em>` : '';
+    const title = t.title ? `<em class="ttl">Título: «${t.title}»</em>` : '';
+    const pr = !won && trophyProgress(id);
     return `<div class="tro${won ? ' won' : ''}"><img class="icon" src="assets/ui/trophy-${won ? t.tier : 'off'}.png" alt="${TIERS[t.tier].name}">
-      <div><b>${t.name}</b><small>${t.desc}</small>${opens}</div></div>`;
+      <div><b>${t.name}</b><small>${t.desc} · ${TROPHY_PAY[t.tier]} denários</small>${opens}${title}${pr ? `<div class="prog" title="${pr[0]} de ${pr[1]}"><i style="width:${(pr[0] / pr[1]) * 100}%"></i></div>` : ''}</div></div>`;
   }).join('');
+}
+$('title-sel').onchange = (e) => { profile.title = e.target.value; saveProfile(); };
+
+// ---------- Tasks ----------
+// Fresh lists when the day (or week) turns; a swap trades one task for another of the same kind.
+function tasksNow() {
+  const tk = profile.tasks;
+  const day = dayKey();
+  const week = weekKey();
+  if (tk.day !== day) Object.assign(tk, { day, daily: rollTasks(day, 'day'), dSwap: 0, dBonus: false });
+  if (tk.week !== week) Object.assign(tk, { week, weekly: rollTasks(week, 'week'), wSwap: 0, wBonus: false });
+  return tk;
+}
+function renderTasks() {
+  const tk = tasksNow();
+  saveProfile();
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const nextMon = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7 - ((now.getDay() + 6) % 7));
+  const left = (t) => { const m = Math.max(0, Math.round((t - now) / 60000)); return m >= 1440 ? `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+  $('task-day-left').textContent = `novas em ${left(midnight)}`;
+  $('task-week-left').textContent = `novas em ${left(nextMon)}`;
+  $('task-streak').textContent = tk.streak ? `Sequência: ${tk.streak} dia${tk.streak > 1 ? 's' : ''}` : '';
+  const TIER_NAME = { facil: 'Fácil', media: 'Média', dificil: 'Difícil', semana: 'Semana' };
+  const list = (el, items, weekly) => {
+    $(el).replaceChildren(...items.map((t, k) => {
+      const d = taskDef(t);
+      const pay = weekly ? TASK_PAY.semana[k] : TASK_PAY[t.tier];
+      const done = t.prog >= d.goal;
+      const row = document.createElement('div');
+      row.className = `task${t.claimed ? ' done' : ''}`;
+      const canSwap = !done && !t.claimed && (weekly ? tk.wSwap : tk.dSwap) < 1;
+      row.innerHTML = `<div><i class="tier ${t.tier}">${TIER_NAME[t.tier]}</i> <b>${d.text}</b></div>
+        <div class="pay"><span>${coinImg}+${pay}</span>${t.claimed ? '<small>Resgatada</small>' : done ? '<button class="btn primary">Resgatar</button>' : canSwap ? '<button class="btn swap">Trocar</button>' : ''}</div>
+        <div class="meter" title="${t.prog} de ${d.goal}"><i style="width:${(t.prog / d.goal) * 100}%"></i></div><small>${t.prog} / ${d.goal}</small>`;
+      const b = row.querySelector('button');
+      if (b && done) b.onclick = () => { t.claimed = true; profile.denarios += pay; saveProfile(); chord([784, 988, 1175], 'triangle'); renderTasks(); renderPurse(); updateDots(); };
+      else if (b) b.onclick = () => { // trade it for another of the same kind
+        const key = weekly ? tk.week : tk.day;
+        const swaps = (weekly ? ++tk.wSwap : ++tk.dSwap) + 10;
+        const pool = TASKS[t.tier].filter((x) => !items.some((o) => o.id === x.id));
+        if (pool.length) Object.assign(t, { id: pool[(key.length * 7 + swaps * 13 + k) % pool.length].id, prog: 0 });
+        saveProfile();
+        renderTasks();
+      };
+      return row;
+    }));
+  };
+  list('task-day', tk.daily, false);
+  list('task-week', tk.weekly, true);
+  const bonus = (el, items, done, pay, items2, onClaim) => {
+    const all = items.every((t) => t.claimed);
+    $(el).innerHTML = `<div>Prêmio ${items2}: ${coinImg} +${pay} e ${items2 === 'do dia' ? 'um item' : 'dois itens'} para o alforje</div>`;
+    const b = document.createElement('button');
+    b.className = 'btn primary';
+    b.textContent = done ? 'Resgatado' : all ? 'Resgatar' : `${items.filter((t) => t.claimed).length}/3`;
+    b.disabled = done || !all;
+    b.onclick = onClaim;
+    $(el).append(b);
+  };
+  const giveSupplies = (n) => {
+    const ids = Object.keys(SUPPLIES);
+    const got = [];
+    for (let k = 0; k < n; k++) { const id = ids[Math.floor(Math.random() * ids.length)]; profile.bag[id] = (profile.bag[id] || 0) + 1; got.push(SUPPLIES[id].name); }
+    toast(`Para o alforje: ${got.join(', ')}`, '#ffe08f');
+  };
+  bonus('task-day-bonus', tk.daily, tk.dBonus, TASK_BONUS.day, 'do dia', () => {
+    tk.dBonus = true;
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    tk.streak = tk.lastBonus === dayKey(y) ? (tk.streak || 0) + 1 : 1;
+    tk.lastBonus = tk.day;
+    profile.denarios += TASK_BONUS.day;
+    giveSupplies(1);
+    saveProfile();
+    chord([523, 659, 784, 1046], 'triangle');
+    renderTasks();
+    renderPurse();
+  });
+  bonus('task-week-bonus', tk.weekly, tk.wBonus, TASK_BONUS.week, 'da semana', () => {
+    tk.wBonus = true;
+    profile.denarios += TASK_BONUS.week;
+    giveSupplies(2);
+    saveProfile();
+    chord([523, 659, 784, 1046], 'triangle');
+    renderTasks();
+    renderPurse();
+  });
+}
+// Red dots on the menu: something to collect.
+function updateDots() {
+  const tk = tasksNow();
+  const taskReady = [...tk.daily, ...tk.weekly].some((t) => !t.claimed && t.prog >= taskDef(t).goal);
+  $('tasks-dot').hidden = !taskReady;
+  $('trophy-dot').hidden = !Object.keys(profile.trophies).some((id) => TROPHIES[id] && !profile.claimed[id]);
+}
+
+// ---------- Bestiary ----------
+let beastTab = 'inimigos';
+const beastIcons = {};
+const mobIcon = (t, biome) => (beastIcons[`${t}${biome}`] ??= ICON.mob(`mob_${t}_${biome}`));
+function renderBestiary() {
+  const tabs = { inimigos: 'Inimigos', armas: 'Armas', reliquias: 'Relíquias' };
+  $('beast-tabs').replaceChildren(...Object.entries(tabs).map(([k, name]) => {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.className = k === beastTab ? 'on' : '';
+    b.onclick = () => { beastTab = k; renderBestiary(); };
+    return b;
+  }));
+  const kills = profile.bestiary.kills ?? {};
+  const cell = (icon, name, sub, seen, done, meter) => `<div class="beast${seen ? '' : ' unseen'}${done ? ' done' : ''}"><img src="${icon}" alt=""><b>${seen ? name : '???'}</b>${meter ?? ''}<small>${sub}</small></div>`;
+  if (beastTab === 'inimigos') {
+    $('beast-hint').textContent = 'Cada inimigo derrotado conta para a pesquisa do seu cenário. Complete as seis e ganhe a moldura do cenário para o retrato do herói.';
+    $('beast-body').innerHTML = Object.entries(BIOMES).map(([biome, b]) => {
+      const names = [...BEAST_NAMES[biome], 'Campeão', b.boss];
+      const done = researchOf(profile, biome);
+      const cells = BEAST_KINDS.map((k, i) => {
+        const n = kills[`${biome}:${k}`] || 0;
+        const goal = RESEARCH[k];
+        const icon = i < 4 ? mobIcon(i, biome) : i === 4 ? mobIcon(3, biome) : 'assets/ui/skull.png';
+        return cell(icon, names[i], `${n} derrotado${n === 1 ? '' : 's'}`, n > 0, n >= goal, `<div class="meter" title="${Math.min(n, goal)} de ${goal}"><i style="width:${Math.min(1, n / goal) * 100}%"></i></div>`);
+      }).join('');
+      return `<div class="beast-map"><h3>${b.name}<small>${done ? 'Pesquisa completa · moldura ganha' : `${BEAST_KINDS.filter((k) => (kills[`${biome}:${k}`] || 0) >= RESEARCH[k]).length} de 6 pesquisados`}</small></h3><div class="beast-grid">${cells}</div></div>`;
+    }).join('');
+  } else if (beastTab === 'armas') {
+    const used = profile.bestiary.w ?? {};
+    $('beast-hint').textContent = 'As armas que você já levou numa jornada, e quantas vezes.';
+    $('beast-body').innerHTML = `<div class="beast-grid">${Object.keys(WEAPONS).map((id) => cell(ICON.weapon[id], WEAPONS[id].name, used[id] ? `em ${used[id]} jornada${used[id] > 1 ? 's' : ''}` : WEAPONS[id].evo ? 'evolução' : 'nunca usada', !!used[id])).join('')}</div>`;
+  } else {
+    const found = profile.bestiary.r ?? {};
+    $('beast-hint').textContent = 'As relíquias que você já encontrou em baús e caravanas.';
+    $('beast-body').innerHTML = `<div class="beast-grid">${Object.keys(RELICS).map((id) => cell(ICON.relic[id], RELICS[id].name, found[id] ? `achada ${found[id]}×` : RELICS[id].ref, !!found[id])).join('')}</div>`;
+  }
 }
 
 // Carry the save to another browser: copy the code here, paste it there.
@@ -945,11 +1239,14 @@ function startRun() {
   P.pack = packed.filter((id) => profile.bag[id] > 0);
   for (const id of P.pack) profile.bag[id]--;
   saveProfile();
-  P.st = applyMarket(baseStats(h), profile, P.pack);
+  P.st = stageBonus(applyMarket(baseStats(h), profile, P.pack), P.hero, stageOf(P.hero));
   P.hp = P.st.maxHp;
   if (P.pack.includes('mana')) { P.level = 3; pendingLevels = 2; P.xpNext = Math.round(5 + 2 * 7 + 0.3 * 4); }
   if (P.pack.includes('mel')) melCarrier = 45;
   P.star = P.pack.includes('estrela');
+  const trail = heroRec(P.hero).look.trail;
+  P.trail = trail && hasCosmetic(trail) ? COSMETICS[trail].color : 0;
+  P.trailT = 0;
   P.weapons = [{ id: h.weapon, level: 1, timer: 0 }];
   refreshWeapons();
   if (!heroRig) setHero(selHero);
@@ -961,7 +1258,8 @@ function startRun() {
   M.shared.uFadeOn.value = 1;
   $('hud').hidden = false;
   $('hero-face').src = ICON.face[P.hero];
-  $('hero-name').textContent = h.name;
+  $('hero-face').className = `icon ${frameClass(P.hero)}`;
+  $('hero-name').textContent = `${h.name} · ${STAGES[P.hero].names[stageOf(P.hero)]}`;
   $('boss-name').textContent = B.boss;
   $('skill-e').querySelector('span').textContent = h.move[0];
   $('skill-q').querySelector('span').textContent = h.miracle[0];
@@ -972,7 +1270,7 @@ function startRun() {
 function renderBuild() {
   const evoLine = (w) => {
     const e = EVOLUTIONS[w.id];
-    if (!e) return '<small class="evo">Evoluída</small>';
+    if (!e) return WEAPONS[w.id].evo ? '<small class="evo">Evoluída</small>' : '';
     const has = P.relics.some((r) => r.id === e.needs);
     return `<small class="evo">Evolui: nível ${MAX_LEVEL} ${w.level >= MAX_LEVEL ? '✓' : `(${w.level}/${MAX_LEVEL})`} + ${RELICS[e.needs].name} ${has ? '✓' : ''} → ${WEAPONS[e.into].name}</small>`;
   };
@@ -1264,6 +1562,10 @@ function updatePlayer(dt) {
     gainFe(1.2 * dt); // time in the air feeds Fé
   }
   if (hs > 0.5) { P.faceX = v.x / hs; P.faceZ = v.z / hs; }
+  if (P.trail && hs > 3 && (P.trailT -= dt) <= 0) { // the wardrobe's trail
+    P.trailT = 0.05;
+    burst(p.x - v.x * 0.03, p.y + 0.15, p.z - v.z * 0.03, P.trail, 1, 0.6, 0.11, 1.5);
+  }
   P.hp = Math.min(P.st.maxHp, P.hp + (P.st.regen + (P.harpT > 0 ? 6 : 0)) * dt);
 }
 
@@ -1275,7 +1577,9 @@ function hurt(dmg, fromX, fromZ) {
     dmgNumber(P.pos.x, P.pos.y + 2, P.pos.z, 0, false, 'Esquiva');
     return;
   }
-  P.hp -= dmg * (1 - Math.min(0.6, P.st.armor));
+  P.hp -= dmg * DIFF.dmg * (1 - Math.min(0.6, P.st.armor));
+  P.hits++;
+  P.lastHit = time;
   P.iframes = 0.6;
   P.hurtT = 0.25;
   shake = 0.35;
@@ -1559,7 +1863,8 @@ function spawnEnemy(type, x, z) {
   const t = ENEMIES[type];
   E.type[i] = type;
   E.elite[i] = 0;
-  E.hp[i] = E.maxhp[i] = t.boss ? t.hp : t.hp * (1 + time / 120) * (night > 0.5 ? 1.2 : 1);
+  E.hp[i] = E.maxhp[i] = (t.boss ? t.hp : t.hp * (1 + time / 120) * (night > 0.5 ? 1.2 : 1)) * DIFF.hp
+    * (SURV && time > ENDLESS_NIGHT ? 1 + (time - ENDLESS_NIGHT) / 300 : 1); // the endless night keeps getting worse
   E.spd[i] = t.speed + random() * t.speedVar;
   E.r[i] = t.r;
   E.h[i] = t.h;
@@ -1642,7 +1947,7 @@ function mapEvent() {
   }
 }
 
-function spawnBoss(enraged) {
+function spawnBoss(enraged, guardian = false) {
   Object.assign(boss, { spawned: true, enraged, st: 'walk', t: 2.5, n: 0 });
   let x = 0;
   let z = 0;
@@ -1654,9 +1959,11 @@ function spawnBoss(enraged) {
   }
   const i = spawnEnemy(BOSS, x, z);
   if (enraged) E.hp[i] = E.maxhp[i] *= 1.3;
+  if (guardian) E.hp[i] = E.maxhp[i] *= 0.35 + 0.2 * P.guardians; // survival: each guardian tougher than the last
   bossRig.group.visible = true;
+  bossRig.dissolve.value = 0;
   $('bossbar').hidden = false;
-  toast(enraged ? `O tempo acabou: ${B.boss} vem furioso!` : B.bossIntro, '#ff9a8a');
+  toast(guardian ? `Guardião ${P.guardians + 1}: ${B.boss}!` : enraged ? `O tempo acabou: ${B.boss} vem furioso!` : B.bossIntro, '#ff9a8a');
   burst(x, terrainH(x, z) + 1, z, 0xcbb89a, 30, 8, 0.25, 6);
   shake = 0.8;
   beep(55, 1.2, 'sawtooth', 0.08);
@@ -1669,13 +1976,14 @@ function director(dt) {
   const wave = 0.55 + 0.45 * (0.5 - 0.5 * Math.cos((time / WAVE) * Math.PI * 2));
   const k = (1 + night * 0.25) * (boss.spawned ? 0.5 : 1) * wave;
   const cap = Math.min(MAX_ENEMIES * 0.5, (14 + time * 0.5) * k);
-  spawnAcc += dt * (0.8 + time / 40) * k;
+  spawnAcc += dt * (0.8 + time / 40) * k * P.mods.spawn * (SURV && time > ENDLESS_NIGHT ? 2 : 1);
   for (; spawnAcc >= 1; spawnAcc--) if (E.n < cap) spawnEnemy(pickWeighted(spawnWeights(time), random));
   if (elitesSpawned < 2 && time >= 180 * (elitesSpawned + 1)) { elitesSpawned++; spawnElite(); }
   if (!boss.spawned && time >= nextCarrier) { nextCarrier += 150; spawnCarrier(); }
   if (time >= melCarrier) { melCarrier = Infinity; spawnCarrier(); }
   if (!boss.spawned && time >= nextEvent) { nextEvent += 150; mapEvent(); }
-  if (!boss.spawned && time >= RUN_TIME) spawnBoss(true);
+  if (!SURV && !boss.spawned && time >= RUN_TIME) spawnBoss(true);
+  if (SURV && !boss.spawned && time >= nextGuardian) spawnBoss(false, true);
 }
 
 function enemyShot(x, y, z, dx, dz, dmg) {
@@ -1764,6 +2072,7 @@ function updateEnemies(dt) {
         if ((E.t[i] -= dt) <= 0) E.st[i] = 0;
       }
     }
+    speed *= P.mods.espd;
     if (E.stun[i] > 0) speed = 0;
     else if (E.slow[i] > 0) speed *= 0.4;
 
@@ -1948,6 +2257,7 @@ function reapEnemies() {
     if (type.boss) {
       burst(x, y + 2, z, 0xffe08f, 60, 10, 0.3, 10);
       removeAt(E, i);
+      if (SURV) { guardianDown(x, y, z); continue; }
       startVictory(x, y, z);
       return;
     }
@@ -1969,6 +2279,7 @@ function reapEnemies() {
       award('tesouro');
       chord([784, 988, 1175], 'square');
     } else if (E.elite[i]) {
+      if (time - P.lastHit > 12 && allies.length < 2) recruit(x, z); // beaten without a scratch: a valiant joins
       const s = world.freeSpot(x, z); // never inside a rock or tree, where it could not be reached
       world.addChest(s.x, s.z, true);
       indexObstacle(obstacles.length - 1);
@@ -1989,7 +2300,10 @@ function reapEnemies() {
 // ---------- Weapons ----------
 const evoHinted = new Set();
 function refreshWeapons() {
-  for (const w of P.weapons) w.s = weaponStats(w.id, w.level, P.st);
+  for (const w of P.weapons) {
+    w.s = weaponStats(w.id, w.level, P.st);
+    w.s.dmg *= 1 + MASTERY.per * masteryOf(profile, w.id); // the Arsenal's mastery
+  }
   for (const w of readyToEvolve(P.weapons, P.relics)) { // tell once: the next chest evolves it
     if (evoHinted.has(w.id)) continue;
     evoHinted.add(w.id);
@@ -2190,7 +2504,7 @@ function updateWeapons(dt) {
       const pool = s.target === 'strong' ? [...targets.subarray(0, m)].sort((a, b) => E.hp[b] - E.hp[a]) : null;
       for (let k = 0; k < s.count; k++) {
         const t = pool ? pool[k % m] : targets[Math.floor(random() * m)];
-        addStrike(E.x[t], E.z[t], s.radius, s.dmg, s.delay, s.fire ? 1 : 0, s.burn || 0);
+        addStrike(E.x[t], E.z[t], s.radius, s.dmg, s.delay, s.mill ? 3 : s.fire ? 1 : 0, s.burn || 0);
       }
     } else if (s.kind === 'sweep') {
       if (w.timer > 0) continue;
@@ -2260,7 +2574,8 @@ function updateSwarms(w, s, dt) {
     if (d > 0.5) { sw.x += sw.vx * dt; sw.z += sw.vz * dt; }
     const y = terrainH(sw.x, sw.z);
     if (bite) hitArea(sw.x, y + 1, sw.z, s.radius, s.dmg);
-    swarmDraw.push(sw.x, y, sw.z, s.radius);
+    if (bite && s.heal && d < 1.5) P.hp = Math.min(P.st.maxHp, P.hp + s.heal); // Querith's ravens brought bread
+    swarmDraw.push(sw.x, y, sw.z, s.radius, s.bird ? 1 : 0);
   });
 }
 
@@ -2363,7 +2678,9 @@ function updateStrikes(dt) {
     const fire = K.fire[i] === 1;
     if (K.fire[i] === 2) burst(K.x[i], y + 0.4, K.z[i], 0xfff1b8, 10, 5, 0.12, 5); // a star lands
     dmgSrc = srcName(K.src[i]);
-    hitArea(K.x[i], y + 0.5, K.z[i], K.r[i], K.dmg[i], 0, K.burn[i]);
+    const mill = K.fire[i] === 3; // Abimelech's millstone: crushes and stuns
+    hitArea(K.x[i], y + 0.5, K.z[i], K.r[i], K.dmg[i], mill ? 6 : 0, K.burn[i], mill ? 1.2 : 0);
+    if (mill) { burst(K.x[i], y + 0.4, K.z[i], 0x9a8a72, 18, 5, 0.18, 4); shake = Math.max(shake, 0.3); beep(70, 0.3, 'sawtooth', 0.06, 0, 40); }
     addFx(ringGeo, fire ? 0xff8a3d : 0xdff4ff, K.x[i], 0.2, K.z[i], K.r[i], fire ? 0.5 : 0.25, { grow: 0.5, ground: true });
     burst(K.x[i], y + 0.3, K.z[i], fire ? 0xffb347 : 0xdff4ff, fire ? 14 : 6, fire ? 6 : 4, fire ? 0.18 : 0.12, fire ? 6 : 3);
     if (fire) beep(110, 0.25, 'sawtooth', 0.04, 0, 50);
@@ -2378,7 +2695,9 @@ function dropPickup(x, y, z, k = pickWeighted(PICK_WEIGHTS, random)) {
 }
 function addGold(v) {
   const g = v * (1 + P.st.gold); // Anel de José
-  P.gold += Math.floor(g) + (random() < g % 1 ? 1 : 0);
+  const n = Math.floor(g) + (random() < g % 1 ? 1 : 0);
+  P.gold += n;
+  P.goldGot += n;
 }
 function usePickup(k) {
   srcSlot = -3;
@@ -2469,9 +2788,10 @@ function gainXp(v) {
   }
 }
 
-const chestCost = () => 10 + 8 * chestsOpened; // linear: every chest stays within reach of a run's siclos
+const chestCost = () => (10 + 8 * chestsOpened) * P.mods.chest; // linear: every chest stays within reach of a run's siclos
 function openChest(c) {
   c.open = true;
+  P.chests++;
   P.conquests++;
   if (!c.free && !c.challenge) {
     P.gold -= chestCost();
@@ -2564,7 +2884,7 @@ function updateWorld(dt) {
         burst(s.x, s.y + 1.5, s.z, 0xffe08f, 30, 6, 0.15, 8);
         toast(stonesDone < 3 ? `Pedra do Memorial erguida (${stonesDone}/3)` : 'As três pedras estão erguidas!', '#ffe08f');
         chord([392, 494, 587, 784]);
-        if (stonesDone === 3 && !boss.spawned) spawnBoss(false);
+        if (stonesDone === 3 && !boss.spawned && !SURV) spawnBoss(false);
       }
     } else s.p = Math.max(0, s.p - dt / 90); // stepping away to fight costs little progress
     s.beam.material.opacity = 0.22 + 0.08 * Math.sin(time * 3) + (d < STONE_R ? 0.2 : 0);
@@ -2645,6 +2965,7 @@ function updateWorld(dt) {
       if (random() < 0.4) burst(t.x, t.y + 1, t.z, 0xe8f2ff, 1, 2, 0.08, 3);
       if (t.p >= 1) {
         t.used = true;
+        P.veins++;
         t.mesh.children.slice(1).forEach((c) => { c.visible = false; });
         for (let k = 0; k < 16; k++) dropGem(t.x + random() * 3 - 1.5, t.y + 1, t.z + random() * 3 - 1.5, 1, 1);
         burst(t.x, t.y + 1, t.z, 0xe8f2ff, 24, 5, 0.12, 6);
@@ -2663,6 +2984,7 @@ function updateWorld(dt) {
     } else if (t.kind === 'gideon') { // Gideon's jar (Jz 7:20): breaks into a blinding light
       if (t.used || d > 1.6 || p.y - t.y > 1.5) continue;
       t.used = true;
+      P.jars++;
       t.mesh.visible = t.flame.visible = false;
       dmgSrc = 'other';
       for (let i = 0; i < E.n; i++) {
@@ -2857,10 +3179,15 @@ function renderChoice() {
         icon = ICON.pickup.pao;
       }
       if (!can) { b.classList.add('poor'); text += `<em class="evo">Faltam ${o.price - P.gold} siclos</em>`; }
+    } else if (o.kind === 'pact') {
+      tag = `Aliança · ${o.pact.ref}`;
+      name = o.pact.name;
+      text = `<ul class="delta"><li><ins>${o.pact.good[2]}</ins></li><li><s style="color:#b8463a">${o.pact.bad[2]}</s></li></ul>`;
+      icon = 'assets/ui/book.png';
     } else if (o.kind === 'leave') {
-      tag = 'Caravana';
-      name = 'Seguir viagem';
-      text = 'Não comprar nada agora. Volte depois: a caravana fica aqui.';
+      tag = o.pact ? 'Sem aliança' : 'Caravana';
+      name = o.pact ? 'Seguir sozinho' : 'Seguir viagem';
+      text = o.pact ? 'Nenhum poder, nenhum preço.' : 'Não comprar nada agora. Volte depois: a caravana fica aqui.';
       icon = 'assets/ui/wing.png';
     } else if (o.kind === 'weapon') {
       tag = 'Arma';
@@ -2904,6 +3231,7 @@ function pick(i) {
   const o = choice.offers[i];
   if (choice.banning) return banOffer(i);
   if (o.kind === 'leave') { choice = null; return resume(); }
+  if (o.kind === 'pact') { applyPact(o.pact); choice = null; return resume(); }
   if (o.kind === 'buy') {
     if (P.gold < o.price) { beep(180, 0.12, 'square', 0.03); return toast('Siclos insuficientes', '#ff9a8a'); }
     P.gold -= o.price;
@@ -2982,14 +3310,14 @@ const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(
 // ---------- Trophies ----------
 const runTrophies = [];
 function award(id) {
-  if (!id || profile.trophies[id] || !runStarted) return;
-  profile.trophies[id] = Date.now();
-  profile.denarios += TROPHY_PAY[TROPHIES[id].tier];
+  if (!id || profile.trophies[id]) return;
+  profile.trophies[id] = Date.now(); // its denários wait on the Troféus screen ("Resgatar")
   saveProfile();
   OPEN = openSet(profile);
   runTrophies.push(id);
   const t = TROPHIES[id];
-  banner(`assets/ui/trophy-${t.tier}.png`, `Troféu de ${TIERS[t.tier].name.toLowerCase()}`, t.name, TIERS[t.tier].color, t.desc,
+  if (!runStarted) return toast(`Troféu: ${t.name} · resgate +${TROPHY_PAY[t.tier]} denários em Troféus`, TIERS[t.tier].color);
+  banner(`assets/ui/trophy-${t.tier}.png`, `Troféu de ${TIERS[t.tier].name.toLowerCase()} · +${TROPHY_PAY[t.tier]} denários para resgatar`, t.name, TIERS[t.tier].color, t.desc,
     t.unlock ? `Desbloqueado: ${unlockName(t.unlock)}` : '');
   toast(`Troféu: ${t.name}${t.unlock ? ` · ${unlockName(t.unlock)} desbloqueado` : ''}`, TIERS[t.tier].color);
   chord([659, 784, 988, 1319], 'triangle');
@@ -3003,16 +3331,21 @@ function checkTrophies(dt) { // the ones that build up over a run, checked once 
   if (P.level >= 20) award('ungido');
   if (P.gold >= 300) award('salomao');
   if (P.relics.length >= 8) award('relicario');
+  if (SURV && time >= 600) award('resistente');
+  if (SURV && time >= 1200) award('incansavel');
+  if (SURV && time >= ENDLESS_NIGHT) award('eterno');
 }
 
 function endScreen(title, text, verse, won = false) {
   award('inicio');
+  recordRun(won);
   state = 'end';
   document.exitPointerLock?.();
   $('end-title').textContent = title;
   $('end-text').textContent = text;
   $('end').classList.add(won ? 'win' : 'lose');
   $('end-face').src = ICON.face[P.hero];
+  $('end-face').className = frameClass(P.hero);
   $('end-verse').innerHTML = `“${verse[0]}”<cite>${verse[1]}</cite>`;
   $('end-summary').innerHTML = [[fmt(time), 'Tempo', 'hourglass'], [P.level, 'Nível', 'star'], [P.kills, 'Abates', 'skull'], [P.relics.length, 'Relíquias', 'gem']]
     .map(([v, l, ic]) => `<div class="well"><img class="ico" src="assets/ui/${ic}.png" alt=""><b>${v}</b><small>${l}</small></div>`).join('');
@@ -3022,12 +3355,24 @@ function endScreen(title, text, verse, won = false) {
   }).join('')}` : '';
   // Denários: the run's pay line by line (trophies were paid as they were won), then the record for this map.
   const pay = runDenarios({ time, kills: P.kills, stones: stonesDone, chests: chestsOpened, won });
-  const trophyPay = runTrophies.reduce((t, id) => t + TROPHY_PAY[TROPHIES[id].tier], 0);
-  if (trophyPay) pay.lines.push(['Troféus', trophyPay]);
+  if (P.guardians) { pay.lines.push([`Guardiões vencidos (${P.guardians})`, P.guardians * 40]); pay.total += P.guardians * 40; }
+  if (DIFF.pay > 1) { const extra = Math.round(pay.total * (DIFF.pay - 1)); pay.lines.push([`${DIFF.name} ×${DIFF.pay}`, extra]); pay.total += extra; }
+  const trophyPay = 0;
   profile.denarios += pay.total;
   const rec = (profile.records[BIOME_ID] ??= { best: 0 });
   rec.best = Math.max(rec.best, Math.floor(time));
   if (won) rec.fastest = Math.min(rec.fastest || Infinity, Math.floor(time));
+  // The hero grows with the time played: a new stage changes the model, the portrait and the bonus.
+  const hr = heroRec(P.hero);
+  const before = heroStage(hr.xp);
+  hr.xp += runXp(time, won);
+  const after = heroStage(hr.xp);
+  const next = STAGE_XP[after + 1];
+  $('end-evo').innerHTML = after > before
+    ? `<b>${HEROES[P.hero].name} evoluiu: ${STAGES[P.hero].names[after]}!</b><small>${stageText(P.hero, after)} · veja em Nova jornada</small>`
+    : `<span>${STAGES[P.hero].names[after]}</span><div class="bar xp-h"><i style="width:${next ? Math.min(100, (hr.xp / next) * 100) : 100}%"></i></div>
+      <small>${next ? `${Math.ceil((next - hr.xp) / 60)} min de jornada até ${STAGES[P.hero].names[after + 1]}` : 'Estágio máximo'}</small>`;
+  if (after > before) { dressHero(P.hero); ICON.redoHero(P.hero); chord([523, 659, 784, 1046, 1318], 'triangle'); }
   saveProfile();
   $('end-den').innerHTML = `<div class="tot">${coinImg}+${pay.total + trophyPay} denários<small>Agora você tem ${profile.denarios}</small></div>
     <ul>${pay.lines.map(([l, v]) => `<li>${l}<b>+${v}</b></li>`).join('')}</ul>`;
@@ -3035,7 +3380,7 @@ function endScreen(title, text, verse, won = false) {
   show('end');
 }
 // Run report: who dealt the damage, and what fell.
-const SRC_NAME = { move: () => HEROES[P.hero].move[0], miracle: () => HEROES[P.hero].miracle[0], passive: () => HEROES[P.hero].passive[0], other: () => 'Outros' };
+const SRC_NAME = { allies: () => 'Valentes de Davi', move: () => HEROES[P.hero].move[0], miracle: () => HEROES[P.hero].miracle[0], passive: () => HEROES[P.hero].passive[0], other: () => 'Outros' };
 function dmgRows() {
   const total = Object.values(P.dmgBy).reduce((a, b) => a + b, 0) || 1;
   const rows = Object.entries(P.dmgBy).filter(([, v]) => v >= 1).sort((a, b) => b[1] - a[1]);
@@ -3054,6 +3399,45 @@ function killRows() {
   const rows = Object.entries(P.killsBy).sort((a, b) => b[1] - a[1]);
   return rows.length ? `<div class="kills">${rows.map(([k, n]) => `<span>${KILL_NAME[k] ?? k}</span><b>${n}</b>`).join('')}</div>` : '<small>Nenhum.</small>';
 }
+// Every run counts: totals over all runs, the tasks, the bestiary, and the trophies that build up.
+function recordRun(won) {
+  const st = profile.stats;
+  st.kills = (st.kills || 0) + P.kills;
+  st.runs = (st.runs || 0) + 1;
+  st.seconds = (st.seconds || 0) + Math.floor(time);
+  const run = {
+    kills: P.kills, chests: P.chests, runs: 1, stones: stonesDone, veins: P.veins, minutes: Math.floor(time / 60), jars: P.jars,
+    gold: P.goldGot, elites: P.killsBy.elite || 0, wins: won ? 1 : 0, level: P.level, survMinutes: SURV ? Math.floor(time / 60) : 0,
+    hardWins: won && DIFF_ID > 0 ? 1 : 0, guardians: P.guardians,
+  };
+  const tk = tasksNow();
+  addRunToTasks(tk.daily, run);
+  addRunToTasks(tk.weekly, run);
+  const bs = profile.bestiary;
+  bs.kills ??= {};
+  for (const [k, n] of Object.entries(P.killsBy)) bs.kills[`${BIOME_ID}:${k}`] = (bs.kills[`${BIOME_ID}:${k}`] || 0) + n;
+  if (won || P.guardians) bs.kills[`${BIOME_ID}:chefe`] = (bs.kills[`${BIOME_ID}:chefe`] || 0) + (won ? 1 : P.guardians);
+  bs.w ??= {};
+  for (const w of P.weapons) bs.w[w.id] = (bs.w[w.id] || 0) + 1;
+  bs.r ??= {};
+  for (const r of P.relics) bs.r[r.id] = (bs.r[r.id] || 0) + 1;
+  for (const id in TROPHIES) { const g = trophyProgress(id); if (g && g[0] >= g[1]) award(id); }
+  const stages = Object.keys(HEROES).map((id) => heroStage(heroRec(id).xp + (id === P.hero ? runXp(time, won) : 0)));
+  if (stages.some((x) => x >= 1)) award('crescimento');
+  if (stages.some((x) => x >= 2)) award('plenitude');
+  if (profile.owned.filter((k) => k.startsWith('cos:')).length >= 5) award('vestes');
+  const researched = Object.keys(BIOMES).filter((b) => researchOf(profile, b));
+  if (researched.length) award('pesquisador');
+  if (researched.length === Object.keys(BIOMES).length) award('sabio');
+  if (won) {
+    if (P.relics.length <= 3) award('contente');
+    if (P.hits <= 15) award('intocavel');
+    if (P.hp < P.st.maxHp * 0.1) award('porumfio');
+    if (DIFF_ID >= 1) award('coragem');
+    if (DIFF_ID >= 2) award('destemido');
+    profile.mapWins[BIOME_ID] = Math.max(profile.mapWins[BIOME_ID] ?? -1, DIFF_ID);
+  }
+}
 function revive() {
   P.st.revives--;
   P.hp = P.st.maxHp * 0.5;
@@ -3067,6 +3451,7 @@ let outro = null;
 let camZoom = 1;
 function startDeath() {
   state = 'dying';
+  for (const g of Object.values(heroRig.gear)) if (g.slot === 'fx') for (const o of g.objs) o.visible = false; // glows do not crumble
   outro = { t: 0 };
   P.vel.set(0, 0, 0);
   P.hurtT = 0.6;
@@ -3077,6 +3462,91 @@ function startDeath() {
   [392, 349, 311, 262].forEach((f, k) => beep(f, k === 3 ? 0.9 : 0.3, 'triangle', 0.06, 0.9 + k * 0.3));
   document.body.classList.add('outro');
 }
+// Survival: a guardian falls. Its chest, then an alliance: a power and its price (or none).
+function guardianDown(x, y, z) {
+  P.guardians++;
+  boss.spawned = false;
+  spear.on = false;
+  bossRig.group.visible = false;
+  teleLine.visible = teleCircle.visible = false;
+  $('bossbar').hidden = true;
+  nextGuardian = (Math.floor(time / GUARDIAN_EVERY) + 1) * GUARDIAN_EVERY;
+  burst(x, y + 2, z, 0xffe08f, 50, 9, 0.28, 9);
+  const sp = world.freeSpot(x, z);
+  world.addChest(sp.x, sp.z, true);
+  indexObstacle(obstacles.length - 1);
+  for (let k = 0; k < 16; k++) dropGem(x + random() * 4 - 2, y + 0.5, z + random() * 4 - 2, 3, 0);
+  chord([523, 659, 784, 1046], 'square');
+  toast(`Guardião ${P.guardians} vencido! O próximo vem em ${fmt(nextGuardian - time)}.`, '#ffd66b');
+  const pool = [...PACTS];
+  const list = [];
+  while (list.length < 3) list.push({ kind: 'pact', pact: pool.splice(Math.floor(random() * pool.length), 1)[0] });
+  list.push({ kind: 'leave', pact: true });
+  openChoice('Uma aliança?', list, 'pact');
+}
+function applyPact(pc) {
+  const [gs, gv] = pc.good;
+  P.st[gs] += gv;
+  const [bs, bv] = pc.bad;
+  if (bs === 'hpMul') { P.st.maxHp *= bv; P.hp = Math.min(P.hp, P.st.maxHp); }
+  else if (bs in P.mods) P.mods[bs] *= bv;
+  else P.st[bs] += bv;
+  refreshWeapons();
+  award('alianca');
+  toast(`${pc.name} (${pc.ref}): ${pc.good[2]}, ${pc.bad[2]}`, '#ffd66b');
+}
+
+// The valiant men of David (2 Sm 23): a champion beaten without taking a hit in the last 12 s joins the run.
+const VALIANTS = ['Adino', 'Eleazar', 'Samá', 'Abisai', 'Benaia'];
+const allies = [];
+function recruit(x, z) {
+  const src = ASSETS.heroes.josue;
+  const scene2 = cloneRig(src.scene);
+  scene2.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh) o.visible = false; }); // no borrowed gear
+  const rig = makeRig({ scene: scene2, clips: src.clips });
+  rig.mat.color.setHex(0xe8d8b8);
+  for (const [k, a] of Object.entries(rig.act)) { a.play(); a.setEffectiveWeight(k === 'idle' ? 1 : 0); if (k === 'attack') a.setLoop(THREE.LoopOnce, 1); }
+  scene.add(rig.group);
+  const name = VALIANTS[Math.floor(random() * VALIANTS.length)];
+  allies.push({ rig, x, z, y: terrainH(x, z), face: 0, cd: 0, side: allies.length ? -1 : 1, name });
+  burst(x, terrainH(x, z) + 1, z, 0xffe08f, 30, 5, 0.14, 6);
+  banner(ICON.hero.josue, 'Um valente de Davi', name, '#ffd66b', 'Lutará ao seu lado até o fim da jornada.', '2 Sm 23:8');
+  award('recruta');
+}
+function updateAllies(dt) {
+  for (const a of allies) {
+    let tx = P.pos.x + Math.cos(Math.atan2(P.faceX, P.faceZ) + a.side * 2.2) * 2.6;
+    let tz = P.pos.z + Math.sin(Math.atan2(P.faceX, P.faceZ) + a.side * 2.2) * 2.6;
+    let fighting = false;
+    if (nearestEnemies(a.x, a.z, 1, 9, -1) && Math.hypot(E.x[targets[0]] - P.pos.x, E.z[targets[0]] - P.pos.z) < 16) {
+      tx = E.x[targets[0]];
+      tz = E.z[targets[0]];
+      fighting = true;
+    }
+    if (Math.hypot(P.pos.x - a.x, P.pos.z - a.z) > 30) { a.x = P.pos.x - P.faceX * 3; a.z = P.pos.z - P.faceZ * 3; } // left behind: catch up
+    const dx = tx - a.x;
+    const dz = tz - a.z;
+    const d = Math.hypot(dx, dz);
+    const sp = d > (fighting ? 1.6 : 0.8) ? Math.min(11, 3 + d * 2) : 0;
+    if (sp) { a.x += (dx / d) * sp * dt; a.z += (dz / d) * sp * dt; a.face = Math.atan2(dx, dz); }
+    a.y = terrainH(a.x, a.z);
+    a.cd -= dt;
+    if (fighting && d < 2.4 && a.cd <= 0) {
+      a.cd = 0.9;
+      dmgSrc = 'allies';
+      hitArea(a.x, a.y + 1, a.z, 2.6, 26, 8);
+      a.rig.act.attack?.reset().play();
+      addFx(sectorGeo(2.2), 0xfff4dc, a.x, a.y + 0.9, a.z, 2.4, 0.2, { rotY: a.face });
+    }
+    const walk = Math.min(1, sp / 6);
+    a.rig.act.walk?.setEffectiveWeight(walk);
+    a.rig.act.idle?.setEffectiveWeight(1 - walk);
+    a.rig.group.position.set(a.x, a.y, a.z);
+    a.rig.group.rotation.y = a.face;
+    a.rig.mixer.update(dt);
+  }
+}
+
 // Victory: the rest of the horde turns to light, the boss crumbles into gold, fireworks over the hero.
 const FIREWORK = [0xffd27a, 0xfff1b8, 0xe8584a, 0x6fa8ff, 0x9be37a];
 function startVictory(x, y, z) {
@@ -3141,6 +3611,13 @@ function updateOutro(dt) {
   if (o.t > 2.6) { outro = null; die(); }
 }
 function die() {
+  if (SURV) {
+    const rec = (profile.records[`surv:${BIOME_ID}`] ??= { best: 0 });
+    const best = Math.floor(time) > rec.best;
+    rec.best = Math.max(rec.best, Math.floor(time));
+    return endScreen(`Você resistiu ${fmt(time)}`, `${HEROES[P.hero].name} venceu ${P.guardians} guardi${P.guardians === 1 ? 'ão' : 'ões'} em ${B.name}.${best ? ' Novo recorde!' : ` Recorde: ${fmt(rec.best)}.`}`,
+      ['Os que esperam no Senhor renovam as suas forças.', 'Is 40:31']);
+  }
   endScreen('Você caiu', `${HEROES[P.hero].name} lutou bravamente em ${B.name}.`, ['O justo cai sete vezes e se levanta.', 'Pv 24:16']);
 }
 function win() {
@@ -3162,6 +3639,10 @@ const SUN = new THREE.Color(0xffeccc);
 function updateSky() {
   const t2 = time % (DAY_LEN * 2);
   night = t2 < DAY_LEN ? (time > DAY_LEN ? clamp(1 - t2 / 6, 0, 1) : 0) : clamp((t2 - DAY_LEN) / 6, 0, 1);
+  if (SURV && time > ENDLESS_NIGHT) { // survival after 45:00: the night that does not end
+    night = Math.max(night, clamp((time - ENDLESS_NIGHT) / 6, 0, 1));
+    if (!P.endless) { P.endless = true; toast('A noite sem fim começou. Ninguém resiste para sempre.', '#ff9a8a'); }
+  }
   hemi.intensity = 1.45 - 0.85 * night;
   sun.intensity = 2.5 - 1.75 * night;
   sun.color.lerpColors(SUN, MOON, night);
@@ -3191,6 +3672,7 @@ function step(dt) {
   updateEnemyShots(dt);
   updateSpear(dt);
   updateMiracles(dt);
+  updateAllies(dt);
   reapEnemies();
   updateParticles(dt);
   updateFx(dt);
@@ -3302,7 +3784,7 @@ function syncMeshes(dt) {
   });
   if (bossRig.group.visible) bossAnim(dt);
 
-  const sc = [0, 0, 0];
+  const sc = PROJ.map(() => 0);
   for (let i = 0; i < S.n; i++) {
     const kind = S.kind[i];
     dummy.position.set(S.x[i], S.y[i], S.z[i]);
@@ -3383,24 +3865,35 @@ function syncMeshes(dt) {
     dummy.scale.set(bolt ? 0.35 : 0, bolt ? 0.7 : 0, bolt ? 0.35 : 0);
     dummy.updateMatrix();
     fireBolt.setMatrixAt(i, dummy.matrix);
+    dummy.position.y = y + 0.6 + fall * 16; // the millstone tumbles down
+    dummy.rotation.set(fall * 4, 0, 0.5);
+    dummy.scale.setScalar(K.fire[i] === 3 ? 1.1 : 0);
+    dummy.updateMatrix();
+    millMesh.setMatrixAt(i, dummy.matrix);
   }
-  strikeMesh.count = hailMesh.count = fireBolt.count = starMesh.count = K.n;
+  strikeMesh.count = hailMesh.count = fireBolt.count = starMesh.count = millMesh.count = K.n;
+  millMesh.instanceMatrix.needsUpdate = true;
   strikeMesh.instanceMatrix.needsUpdate = hailMesh.instanceMatrix.needsUpdate = fireBolt.instanceMatrix.needsUpdate = starMesh.instanceMatrix.needsUpdate = true;
 
-  let nl = 0; // locusts whirling around each swarm's centre
-  for (let k = 0; k < swarmDraw.length; k += 4) {
-    for (let j = 0; j < 16 && nl < 160; j++) {
-      const a = time * (2.5 + (j % 5) * 0.6) + j * 2.39;
-      const rr = swarmDraw[k + 3] * (0.3 + ((j * 0.618) % 1) * 0.7);
-      dummy.position.set(swarmDraw[k] + Math.cos(a) * rr, swarmDraw[k + 1] + 0.8 + Math.sin(time * 6 + j) * 0.35 + (j % 3) * 0.25, swarmDraw[k + 2] + Math.sin(a) * rr);
-      dummy.rotation.set(0, -a, 0);
-      dummy.scale.setScalar(0.9);
+  let nl = 0; // locusts whirling around each swarm's centre; Elijah's ravens circle higher and wider
+  let nr = 0;
+  for (let k = 0; k < swarmDraw.length; k += 5) {
+    const bird = swarmDraw[k + 4] === 1;
+    for (let j = 0; j < (bird ? 6 : 16); j++) {
+      if (bird ? nr >= 80 : nl >= 160) break;
+      const a = time * (bird ? 1.8 + (j % 3) * 0.4 : 2.5 + (j % 5) * 0.6) + j * 2.39;
+      const rr = swarmDraw[k + 3] * (0.3 + ((j * 0.618) % 1) * 0.7) * (bird ? 1.4 : 1);
+      dummy.position.set(swarmDraw[k] + Math.cos(a) * rr, swarmDraw[k + 1] + (bird ? 1.6 : 0.8) + Math.sin(time * 6 + j) * 0.35 + (j % 3) * 0.25, swarmDraw[k + 2] + Math.sin(a) * rr);
+      dummy.rotation.set(0, -a, bird ? Math.sin(time * 14 + j) * 0.3 : 0);
+      dummy.scale.setScalar(bird ? 0.32 : 0.9);
       dummy.updateMatrix();
-      locustMesh.setMatrixAt(nl++, dummy.matrix);
+      if (bird) ravenMesh.setMatrixAt(nr++, dummy.matrix);
+      else locustMesh.setMatrixAt(nl++, dummy.matrix);
     }
   }
   locustMesh.count = nl;
-  locustMesh.instanceMatrix.needsUpdate = true;
+  ravenMesh.count = nr;
+  locustMesh.instanceMatrix.needsUpdate = ravenMesh.instanceMatrix.needsUpdate = true;
 
   dummy.rotation.set(0, 0, 0);
   for (let i = 0; i < PT.n; i++) {
@@ -3723,7 +4216,8 @@ function updateHud() {
   document.body.classList.toggle('sunstop', P.sunT > 0);
   setText(hud.timer, fmt(time));
   hud['phase-dot'].classList.toggle('night', night > 0.5);
-  setHtml(hud.objective, boss.spawned ? `<b>Derrote ${B.boss}</b>`
+  setHtml(hud.objective, SURV ? (boss.spawned ? `<b>Derrote o guardião ${P.guardians + 1}</b>` : `<span>Sobrevivência</span><span style="opacity:.7">· guardião em ${fmt(Math.max(0, nextGuardian - time))}</span>`)
+    : boss.spawned ? `<b>Derrote ${B.boss}</b>`
     : `<span>Pedras do Memorial</span><span class="pips">${stones.map((s) => `<i class="${s.done ? 'on' : ''}"></i>`).join('')}</span><span style="opacity:.7">· ${B.boss} em ${fmt(Math.max(0, RUN_TIME - time))}</span>`);
   if (boss.idx >= 0) hud['boss-hp'].style.width = `${clamp(E.hp[boss.idx] / E.maxhp[boss.idx], 0, 1) * 100}%`;
   setText(hud.level, String(P.level));
@@ -3781,6 +4275,7 @@ if (params.get('screen') === 'setup') go('setup');
 else {
   setCur(document.querySelector('#menu .nav .btn'));
   renderPurse();
+  updateDots();
   guide('menu', MENU_GUIDE);
 }
 
@@ -3820,6 +4315,15 @@ window.arm = (ids, level = 1) => {
 window.dev = {
   P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, cfg, scene, ASSETS, profile, saveProfile, world,
   look: (y, p = pitch) => { yaw = y; pitch = p; },
+  warp: (t) => { time = t; return time; }, // jump the run's clock (tests: guardians, the endless night)
+  tick: (n = 1, dt = 1 / 30) => { // run frames by hand, as the loop would (works in a background tab)
+    for (let k = 0; k < n; k++) {
+      if (state === 'play') step(dt);
+      syncMeshes(dt);
+      if (outro) updateOutro(dt);
+    }
+    return state;
+  },
   // Give a relic, e.g. dev.relic('pedras'); open the nearest closed chest as if touched.
   relic: (id, tier = 2) => { const r = { id, tier: RELICS[id].flat ? RELICS[id].tier : tier }; applyEntry(P.st, RELICS[id], r.tier); P.relics.push(r); refreshWeapons(); return P.relics.map((x) => x.id); },
   chest: () => { const c = chests.filter((k) => !k.open && !k.challenge).sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.z) - Math.hypot(b.x - P.pos.x, b.z - P.pos.z))[0]; c.free = true; openChest(c); return c; },
