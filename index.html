@@ -257,6 +257,11 @@
 
     /* Settings */
     .settings { display: grid; grid-template-columns: 1fr auto; gap: 10px 24px; align-items: center; }
+    .save-hint { margin: 0 0 8px; font-size: 16px; color: var(--dim); }
+    #save-code { width: 100%; box-sizing: border-box; resize: vertical; padding: 6px 8px; font: 14px/1.3 monospace; word-break: break-all;
+      color: var(--ink); background: #1f120d; border: 0; box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line); }
+    .save-btns { margin-top: 12px; align-items: center; }
+    #save-msg { font-size: 16px; color: var(--gold2); }
     .seg { display: inline-flex; gap: 6px; }
     .seg label { cursor: pointer; padding: 0 8px 1px; font-size: 17px; font-weight: 600; color: var(--ink); text-shadow: 0 2px 0 var(--line);
       border-style: solid; border-color: transparent; border-width: calc(4 * var(--hx)) calc(4 * var(--hx)) calc(5 * var(--hx)); image-rendering: pixelated;
@@ -319,6 +324,18 @@
     .build li img { width: 48px; height: 48px; flex: none; padding: 2px; background: #1f120d; box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line); }
     .build li small { display: block; color: var(--dim); font-size: 14px; }
     #end-text { text-align: center; font-size: 18px; }
+    #end-face { display: block; width: 96px; height: 96px; margin: 8px auto 6px; image-rendering: pixelated; background: #1f120d;
+      box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line); }
+    #end-verse { margin: 8px 0 0; text-align: center; font-size: 17px; color: var(--gold2); }
+    #end-verse cite { display: block; font-style: normal; font-size: 14px; color: var(--dim); }
+    #end.lose #end-face { filter: grayscale(1) brightness(.75); box-shadow: 0 0 0 3px var(--bronze), 0 0 0 6px var(--line); }
+    #end.lose #end-verse { color: var(--dim); }
+    #end.win .ribbon { border-image-source: url(assets/ui/ribbon-gold.png); color: var(--ink-d); text-shadow: 0 var(--px) 0 rgba(255, 241, 184, .5); }
+    #end.win::before { content: ''; position: fixed; inset: -50%; pointer-events: none; animation: spin 60s linear infinite;
+      background: repeating-conic-gradient(rgba(255, 214, 107, .13) 0 9deg, transparent 9deg 18deg); } /* sun rays behind the panel */
+    #end.win .panel { animation: pop .4s steps(4); }
+    @keyframes spin { to { transform: rotate(1turn); } }
+    @media (prefers-reduced-motion: reduce) { #end.win::before, #end.win .panel { animation: none; } }
     .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
     .summary div { display: grid; justify-items: center; gap: 2px; padding: 4px 2px; }
     .summary b { font-size: 26px; }
@@ -429,6 +446,10 @@
       </div>
       <h3>Som</h3>
       <div class="settings"><label>Volume</label><input type="range" min="0" max="1" step="0.05" data-cfg="volume"></div>
+      <h3>Progresso</h3>
+      <p class="save-hint">Seu progresso fica neste navegador. Para levá-lo a outro, copie o código e cole lá.</p>
+      <textarea id="save-code" rows="3" spellcheck="false" placeholder="Cole aqui um código de progresso" aria-label="Código de progresso"></textarea>
+      <div class="row-btns save-btns"><button id="save-copy" class="btn">Copiar código</button><button id="save-load" class="btn">Carregar código</button><span id="save-msg" role="status"></span></div>
     </div>
   </div>
 
@@ -488,7 +509,9 @@
   <div id="end" class="screen center dim">
     <div class="panel frame" style="max-width:620px">
       <h2 id="end-title" class="ribbon"></h2>
+      <img id="end-face" alt="">
       <div id="end-text"></div>
+      <p id="end-verse"></p>
       <div id="end-summary" class="summary"></div>
       <div id="end-trophies" class="end-tro"></div>
       <div class="row-btns mid nav">

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { rng, FlowField, SpatialHash } from './sim.js';
 import {
-  HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL, TROPHIES, TIERS, openSet, unlockedBy,
+  HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL, TROPHIES, TIERS, openSet, migrateProfile, exportCode, importCode, unlockedBy,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
@@ -10,9 +10,7 @@ import { loadAll } from './assets.js';
 
 // ---------- Profile: trophies won and what they opened, kept in this browser ----------
 const PROFILE_KEY = 'bible-rush-profile';
-const profile = (() => { try { return JSON.parse(localStorage.getItem(PROFILE_KEY)) || {}; } catch { return {}; } })();
-profile.trophies ??= {};
-profile.wins ??= {}; // hero -> { map: true }
+const profile = migrateProfile((() => { try { return JSON.parse(localStorage.getItem(PROFILE_KEY)); } catch { return null; } })());
 const saveProfile = () => { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch {} };
 let OPEN = openSet(profile);
 const isOpen = (kind, id) => OPEN.has(`${kind}:${id}`);
@@ -726,6 +724,20 @@ function renderTrophies() {
   }).join('');
 }
 
+// Carry the save to another browser: copy the code here, paste it there.
+$('save-copy').onclick = async () => {
+  const box = $('save-code');
+  box.value = exportCode(profile);
+  box.select();
+  try { await navigator.clipboard.writeText(box.value); $('save-msg').textContent = 'Código copiado.'; } catch { $('save-msg').textContent = 'Copie o código acima.'; }
+};
+$('save-load').onclick = () => {
+  const p = importCode($('save-code').value);
+  if (!p) { $('save-msg').textContent = 'Código inválido.'; return; }
+  if (!confirm(`Carregar este progresso (${Object.keys(p.trophies).length} troféus)? O progresso atual deste navegador será substituído.`)) return;
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch { $('save-msg').textContent = 'Não foi possível salvar.'; return; }
+  location.reload();
+};
 function syncSettingsForm() {
   document.querySelectorAll('[data-cfg]').forEach((el) => {
     const k = el.dataset.cfg;
@@ -1691,7 +1703,7 @@ function reapEnemies() {
     if (type.boss) {
       burst(x, y + 2, z, 0xffe08f, 60, 10, 0.3, 10);
       removeAt(E, i);
-      win();
+      startVictory(x, y, z);
       return;
     }
     if (E.elite[i] === 3) { // a treasure carrier that got away
@@ -2520,12 +2532,15 @@ function checkTrophies(dt) { // the ones that build up over a run, checked once 
   if (P.relics.length >= 8) award('relicario');
 }
 
-function endScreen(title, text) {
+function endScreen(title, text, verse, won = false) {
   award('inicio');
   state = 'end';
   document.exitPointerLock?.();
   $('end-title').textContent = title;
   $('end-text').textContent = text;
+  $('end').classList.add(won ? 'win' : 'lose');
+  $('end-face').src = ICON.face[P.hero];
+  $('end-verse').innerHTML = `“${verse[0]}”<cite>${verse[1]}</cite>`;
   $('end-summary').innerHTML = [[fmt(time), 'Tempo', 'hourglass'], [P.level, 'Nível', 'star'], [P.kills, 'Abates', 'skull'], [P.relics.length, 'Relíquias', 'gem']]
     .map(([v, l, ic]) => `<div class="well"><img class="ico" src="assets/ui/${ic}.png" alt=""><b>${v}</b><small>${l}</small></div>`).join('');
   $('end-trophies').innerHTML = runTrophies.length ? `<h3>Troféus nesta jornada</h3>${runTrophies.map((id) => {
@@ -2557,6 +2572,33 @@ function startDeath() {
   [392, 349, 311, 262].forEach((f, k) => beep(f, k === 3 ? 0.9 : 0.3, 'triangle', 0.06, 0.9 + k * 0.3));
   document.body.classList.add('outro');
 }
+// Victory: the rest of the horde turns to light, the boss crumbles into gold, fireworks over the hero.
+const FIREWORK = [0xffd27a, 0xfff1b8, 0xe8584a, 0x6fa8ff, 0x9be37a];
+function startVictory(x, y, z) {
+  state = 'victory';
+  outro = { t: 0, win: true, x, y, z, next: 0.5 };
+  for (let i = 0; i < E.n; i++) burst(E.x[i], E.y[i] + 1, E.z[i], 0xfff1b8, 3, 4, 0.16, 5);
+  E.n = EP.n = 0;
+  teleLine.visible = teleCircle.visible = false;
+  $('bossbar').hidden = true;
+  P.vel.set(0, 0, 0);
+  P.faceX = Math.sin(yaw); // turn to the camera
+  P.faceZ = Math.cos(yaw);
+  boom(0.9, 0.6, 1400);
+  [523, 659, 784].forEach((f, k) => beep(f, 0.14, 'square', 0.05, 0.2 + k * 0.13));
+  beep(1046, 0.8, 'square', 0.05, 0.6);
+  [523, 659, 784, 1046].forEach((f) => beep(f, 1.5, 'triangle', 0.045, 0.6));
+  const beam = mesh(new THREE.CylinderGeometry(1.3, 1.3, 40, 12, 1, true), glow(0xffe08f, 0.3, { side: THREE.DoubleSide }), P.pos.x, P.pos.y + 20, P.pos.z);
+  addObjFx(beam, 3.8, (m, k) => { m.material.opacity = 0.3 * Math.min(1, k * 6) * (1 - k); });
+  document.body.classList.add('outro');
+}
+function firework() {
+  const a = random() * Math.PI * 2;
+  const r = 3 + random() * 4;
+  burst(P.pos.x + Math.cos(a) * r, P.pos.y + 7 + random() * 3, P.pos.z + Math.sin(a) * r, FIREWORK[Math.floor(random() * FIREWORK.length)], 36, 7, 0.22, 3);
+  beep(1400 + random() * 900, 0.15, 'triangle', 0.03);
+  boom(0.35, 0.3, 2400);
+}
 function updateOutro(dt) {
   const o = outro;
   o.t += dt;
@@ -2564,6 +2606,19 @@ function updateOutro(dt) {
   shake = Math.max(0, shake - dt * 1.5);
   updateParticles(dt);
   updateFx(dt);
+  if (o.win) {
+    yaw += dt * 0.35; // slow orbit around the hero
+    camZoom += (0.75 - camZoom) * Math.min(1, dt * 1.5);
+    heroRig.group.visible = true;
+    if (!heroRig.act.cast.isRunning()) heroRig.act.cast.reset().play(); // arms up, again and again
+    const k = clamp(o.t / 1.4, 0, 1);
+    bossRig.dissolve.value = k;
+    bossRig.group.visible = k < 1;
+    if (k < 1) burst(o.x + (random() - 0.5) * 3, o.y + random() * 5, o.z + (random() - 0.5) * 3, 0xffd27a, 3, 2, 0.2, 4);
+    if ((o.next -= dt) <= 0) { o.next = 0.4; firework(); }
+    if (o.t > 3.8) { outro = null; win(); }
+    return;
+  }
   camZoom += (0.6 - camZoom) * Math.min(1, dt * 2);
   const k = clamp((o.t - 0.5) / 1.6, 0, 1); // how much has crumbled
   heroRig.group.visible = k < 1;
@@ -2581,7 +2636,7 @@ function updateOutro(dt) {
   if (o.t > 2.6) { outro = null; die(); }
 }
 function die() {
-  endScreen('Você caiu', `${HEROES[P.hero].name} lutou bravamente em ${B.name}.`);
+  endScreen('Você caiu', `${HEROES[P.hero].name} lutou bravamente em ${B.name}.`, ['O justo cai sete vezes e se levanta.', 'Pv 24:16']);
 }
 function win() {
   bossRig.group.visible = false;
@@ -2593,8 +2648,7 @@ function win() {
   if (Object.keys(profile.wins).length >= 3) award('valentes');
   const mapsWon = new Set(Object.values(profile.wins).flatMap((w) => Object.keys(w)));
   if (Object.keys(BIOMES).every((m) => mapsWon.has(m))) award('conquista');
-  endScreen('Vitória!', B.win);
-  chord([523, 659, 784, 1046, 1318], 'square');
+  endScreen('Vitória!', `${B.win} ${HEROES[P.hero].name} venceu em ${fmt(time)}.`, B.verse, true);
 }
 
 // ---------- Day and night ----------

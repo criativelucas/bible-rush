@@ -364,6 +364,7 @@ export const BIOMES = {
     sky: { top: 0x7fb8e6, horizon: 0xf1e2c4, nightTop: 0x0b1230, nightHorizon: 0x2b3158 },
     boss: 'Golias', bossIntro: 'Golias desafia os exércitos de Israel!', summon: 'Filisteus, avante!',
     elite: 'Um campeão anaquim apareceu! Ele guarda um baú.', win: 'Golias caiu no Vale de Elá.',
+    verse: ['A batalha é do Senhor.', '1 Sm 17:47'],
     bossModel: 'golias', groundKind: 1, death: [0x9c4a32, 0x7d8a4a, 0x8a5a2b, 0xb98560],
     well: ['Poço de Belém', '2 Sm 23:15'], event: 'Os filisteus avançam em fileira!', carrier: 'Um mercador filisteu foge com ouro!',
     brookZ, ledgeX: 68,
@@ -391,6 +392,7 @@ export const BIOMES = {
     sky: { top: 0x5fb0e8, horizon: 0xf6e3c0, nightTop: 0x0a1030, nightHorizon: 0x30305a },
     boss: 'Faraó', bossIntro: 'O Faraó persegue o povo até o mar!', summon: 'Carros do Egito, avante!',
     elite: 'Um colosso de pedra despertou! Ele guarda um baú.', win: 'O Faraó foi vencido à beira do Mar Vermelho.',
+    verse: ['Cantarei ao Senhor, que triunfou gloriosamente.', 'Êx 15:1'],
     bossModel: 'farao', groundKind: 2, death: [0xf4efe4, 0xf4efe4, 0xe8b84a, 0xd8b98a], summonChariots: true,
     well: ['Fonte de Elim', 'Êx 15:27'], event: 'Os carros do Faraó atravessam a ilha!', carrier: 'Um escriba do Faraó foge com o tesouro!',
     terrain(x, z) {
@@ -415,6 +417,7 @@ export const BIOMES = {
     sky: { top: 0x9ab0cc, horizon: 0xf0cda2, nightTop: 0x0d0b20, nightHorizon: 0x3b2a44 },
     boss: 'Gogue', bossIntro: 'Gogue, príncipe de Magogue, marcha sobre o vale!', summon: 'Ossos, levantai-vos!',
     elite: 'Um gigante de ossos se ergueu! Ele guarda um baú.', win: 'Gogue caiu no Vale dos Ossos Secos.',
+    verse: ['O espírito entrou neles, e viveram: um exército enorme.', 'Ez 37:10'],
     bossModel: 'gogue', groundKind: 3, death: [0xe6dcc2, 0xe6dcc2, 0xc9bc9c, 0xe6dcc2], summonChariots: true,
     well: ['Fonte que dá vida', 'Ez 47:9'], event: 'Vento sobre os ossos: eles se levantam!', carrier: 'O esqueleto do tesoureiro foge com siclos!',
     wadi,
@@ -442,6 +445,7 @@ export const BIOMES = {
     sky: { top: 0x78b4e4, horizon: 0xf6dcae, nightTop: 0x0b1230, nightHorizon: 0x34305a },
     boss: 'Rei de Jericó', bossIntro: 'O rei de Jericó abre as portas e sai para a batalha!', summon: 'Guardas da muralha, avante!',
     elite: 'Um guardião da muralha avançou! Ele guarda um baú.', win: 'As muralhas de Jericó caíram.',
+    verse: ['O povo gritou, e as muralhas caíram.', 'Js 6:20'],
     bossModel: 'rei', groundKind: 2, death: [0x7a3a6a, 0xb8463a, 0x8a5a2b, 0xc08a3e], summonChariots: true,
     well: ['Fonte de Eliseu', '2 Rs 2:21'], event: 'As trombetas soam: guardas saem pelas portas da cidade!', carrier: 'Um mercador de Jericó foge com ouro!',
     city: CITY, oasis: OASIS,
@@ -506,4 +510,33 @@ export const unlockedBy = (key) => Object.keys(TROPHIES).find((id) => TROPHIES[i
 // Which enemy types join the horde as the minutes pass.
 export function spawnWeights(t) {
   return [1, t > 60 ? 0.12 : 0, t > 120 ? 0.15 : 0, t > 180 ? 0.1 : 0]; // slingers survive longer, so keep them rare
+}
+
+// ---------- Save ----------
+// v1 kept only trophies and wins; v2 adds what the shop, hero evolution and tasks will fill (see PLANO.md).
+export const PROFILE_VERSION = 2;
+const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+export function migrateProfile(raw) {
+  const p = isObj(raw) ? raw : {};
+  const o = (k) => (isObj(p[k]) ? p[k] : {});
+  const a = (k) => (Array.isArray(p[k]) ? p[k] : []);
+  return {
+    ...p,
+    v: PROFILE_VERSION,
+    denarios: Number.isFinite(p.denarios) ? Math.max(0, p.denarios) : 0,
+    trophies: o('trophies'), claimed: o('claimed'), wins: o('wins'), // wins: hero -> { map: true }
+    upgrades: o('upgrades'), tools: o('tools'), bag: o('bag'), heroes: o('heroes'),
+    bestiary: o('bestiary'), records: o('records'), seen: o('seen'), tasks: o('tasks'),
+    unlocked: a('unlocked'), owned: a('owned'),
+  };
+}
+// A text code to carry the save to another browser.
+export const exportCode = (p) => `BR${PROFILE_VERSION}:${btoa(unescape(encodeURIComponent(JSON.stringify(p))))}`;
+export function importCode(code) { // the profile, or null when the text is not a Bible Rush save
+  const m = /^BR\d+:([A-Za-z0-9+/=]+)$/.exec(String(code).replace(/\s+/g, ''));
+  if (!m) return null;
+  try {
+    const p = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+    return isObj(p) ? migrateProfile(p) : null;
+  } catch { return null; }
 }

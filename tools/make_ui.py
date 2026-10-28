@@ -224,6 +224,15 @@ def buttons():
         for x in (7, w - 8):
             put(img, x, y, 'k')
     save(img, 'ribbon')
+    # Gold ribbon for the victory screen: the same shape, wine turned to gold and gold to wine.
+    swap = {PAL['V']: PAL['g'], PAL['v']: PAL['Y'], PAL['u']: PAL['d'], PAL['Y']: PAL['v'], PAL['d']: PAL['u'], PAL['I']: PAL['d']}
+    gold = img.copy()
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = gold.getpixel((x, y))
+            if a and (r, g, b) in swap:
+                gold.putpixel((x, y), (*swap[(r, g, b)], a))
+    save(gold, 'ribbon-gold')
 
     # Scroll rod (3-slice, left/right 6): turned wood with gold knobs.
     w, h = 24, 7

@@ -1,7 +1,7 @@
 // Run: node check.mjs — checks the pure logic in src/sim.js and src/content.js.
 import assert from 'node:assert/strict';
 import { FlowField, SpatialHash, rng } from './src/sim.js';
-import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX_LEVEL, baseStats, rollOffers, weaponStats, rollRarity, readyToEvolve, openSet, unlockedBy } from './src/content.js';
+import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX_LEVEL, baseStats, rollOffers, weaponStats, rollRarity, readyToEvolve, openSet, unlockedBy, migrateProfile, exportCode, importCode, PROFILE_VERSION } from './src/content.js';
 
 // Open field: west of the player, arrows point straight east.
 {
@@ -155,6 +155,29 @@ import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX
   for (const [id, t] of Object.entries(TROPHIES)) if (t.unlock) assert.ok(all.includes(t.unlock), `${id} opens unknown ${t.unlock}`);
   const full = openSet({ trophies: Object.fromEntries(Object.keys(TROPHIES).map((id) => [id, 1])) });
   for (const key of all) assert.ok(full.has(key), `${key} never opens`);
+}
+
+// Save: a v1 profile keeps its trophies and wins; junk becomes an empty profile;
+// the export code round-trips (accents included) and anything else is refused.
+{
+  const v1 = { trophies: { golias: 5 }, wins: { davi: { ela: true } } };
+  const p = migrateProfile(v1);
+  assert.equal(p.v, PROFILE_VERSION);
+  assert.deepEqual(p.trophies, v1.trophies);
+  assert.deepEqual(p.wins, v1.wins);
+  assert.equal(p.denarios, 0);
+  assert.deepEqual(p.unlocked, []);
+  for (const junk of [null, 7, 'x', [], { trophies: [], denarios: 'mil' }]) {
+    const q = migrateProfile(junk);
+    assert.deepEqual(q.trophies, {});
+    assert.equal(q.denarios, 0);
+  }
+  assert.deepEqual(migrateProfile(p), p); // migrating twice changes nothing
+  const rich = migrateProfile({ ...v1, denarios: 340, seen: { 'Mercado': 1 }, owned: ['cos:davi:coroa'] });
+  assert.deepEqual(importCode(exportCode(rich)), rich);
+  assert.deepEqual(importCode(` ${exportCode(rich).replace(/(.{20})/g, '$1\n')} `), rich); // pasted with line breaks
+  for (const bad of ['', 'hello', 'BR2:@@@', 'BR2:' + btoa('[1,2]'), 'BR2:' + btoa('{oops')]) assert.equal(importCode(bad), null);
+  assert.ok(openSet(migrateProfile(v1)).has('map:ossos')); // golias opens the Valley of Dry Bones
 }
 
 console.log('ok');
