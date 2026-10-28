@@ -577,7 +577,7 @@
     .tile b { font: 400 22px/1 var(--f-title); color: var(--gold2); }
     .tile small { font-size: 14px; color: var(--dim); min-height: 1.2em; }
     .tile:nth-child(1) { --bar: #8fdc7a; } .tile:nth-child(2) { --bar: #7fc6ff; } .tile:nth-child(3) { --bar: #f2c14e; } .tile:nth-child(4) { --bar: #c9a8ff; } .tile:nth-child(5) { --bar: #ff9a8a; }
-    .season { width: var(--season-w, 360px); justify-self: end; display: flex; flex-direction: column; gap: 6px; padding: 0 0 8px; min-height: 0; max-height: calc(100vh - 120px); background: rgba(31, 18, 13, .94); box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line), 0 8px 0 4px rgba(10, 5, 2, .35);
+    .season { width: var(--season-w, 360px); justify-self: end; align-self: stretch; display: flex; flex-direction: column; gap: 6px; padding: 0 0 8px; min-height: 0; max-height: calc(100vh - 120px); background: rgba(31, 18, 13, .94); box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line), 0 8px 0 4px rgba(10, 5, 2, .35);
  }
     .season-head { display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: repeating-linear-gradient(-45deg, #a8701c 0 12px, #b8802a 12px 24px); box-shadow: 0 3px 0 var(--line); }
     .season-head img { width: 27px; height: 30px; }
@@ -586,7 +586,9 @@
     .mini-tabs { display: flex; gap: 4px; padding: 0 8px; }
     .mini-tabs button { flex: 1; padding: 2px 4px 4px; border: 0; cursor: pointer; font: 600 14px/1.1 var(--f-ui); color: var(--dim); background: #2a1810; box-shadow: 0 0 0 2px var(--line); }
     .mini-tabs button.on { color: var(--ink-d); background: var(--gold); }
-    .season-list { display: grid; align-content: start; gap: 3px; padding: 0 8px; min-height: 60px; overflow: auto; }
+    .season-list { flex: 1; display: grid; align-content: start; gap: 3px; padding: 0 8px; min-height: 60px; overflow: auto; }
+    .rk.open { opacity: .45; }
+    .rk.open i { width: 28px; height: 28px; background: #1c100b; box-shadow: inset 0 0 0 2px #3a2418; }
     .season-list .off { padding: 10px 4px; font-size: 15px; color: var(--dim); }
     .rk { display: grid; grid-template-columns: 26px 28px 1fr auto; gap: 8px; align-items: center; padding: 2px 8px; background: #2a1810; box-shadow: 0 0 0 2px var(--line); font-size: 15px; }
     .rk .n { font: 400 19px/1 var(--f-title); text-align: center; color: var(--dim); }

@@ -30,6 +30,17 @@ const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'jul
 export const seasonName = (key) => { const [y, m] = key.split('-'); return `${MONTHS[Number(m) - 1]} de ${y}`; };
 export const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ0-9 _.-]{2,16}$/; // the same rule as the server's
 
+// Picking a name: the server keeps one player per name. 'ok', or why not ('nome já em uso', ...). When the
+// server cannot be asked (offline, or its SQL not updated yet) the name is kept and checked with the next run.
+export async function claimName(profile, name) {
+  if (!onlineOn()) return 'ok';
+  try {
+    await rpc('claim_name', { p_player: profile.pid, p_name: name });
+    return 'ok';
+  } catch (e) {
+    return /Failed to fetch|NetworkError|erro 5|erro 404|claim_name/.test(e.message) ? 'ok' : e.message;
+  }
+}
 // One finished run. Sent when the run ends; kept in profile.pending and sent later if the network fails.
 export async function submitRun(profile, run) {
   if (!onlineOn()) return 'offline';

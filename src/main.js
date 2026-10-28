@@ -11,7 +11,7 @@ import * as M from './models.js';
 import { buildGear, dress, PIECES } from './gear.js';
 import { forgeModels } from './forge.js';
 import { clone as cloneRig } from 'three/addons/utils/SkeletonUtils.js';
-import { onlineOn, submitRun, flushPending, leaderboard, clearBoards, seasonKey, prevSeason, seasonEnd, seasonName, NAME_RE } from './online.js';
+import { onlineOn, claimName, submitRun, flushPending, leaderboard, clearBoards, seasonKey, prevSeason, seasonEnd, seasonName, NAME_RE } from './online.js';
 import { buildWorld } from './world.js';
 import { loadAll } from './assets.js';
 
@@ -1275,9 +1275,11 @@ async function renderSeason() {
   list.innerHTML = '<div class="off">Carregando…</div>';
   const ask = ++seasonAsk;
   try {
-    const rows = await leaderboard(seasonTab, seasonKey(), null, profile, 12);
+    const rows = await leaderboard(seasonTab, seasonKey(), null, profile, 20);
     if (ask !== seasonAsk) return; // a newer tab was picked meanwhile
-    list.innerHTML = rows.length ? rows.map((r) => rankRow(r, seasonTab)).join('') : '<div class="off">Ninguém ainda nesta temporada. Seja o primeiro!</div>';
+    const top = rows.filter((r) => r.pos <= 20);
+    const open = Array.from({ length: Math.max(0, 10 - top.length) }, (_, k) => `<div class="rk open"><span class="n">${top.length + k + 1}</span><i></i><div><b>Vaga aberta</b><small>jogue para entrar</small></div><span class="v">—</span></div>`);
+    list.innerHTML = rows.map((r) => rankRow(r, seasonTab)).join('') + open.join('');
   } catch (e) { list.innerHTML = `<div class="off">Sem conexão com o ranking (${esc(e.message)}).</div>`; }
 }
 let rankTab = 'abates';
@@ -1343,9 +1345,22 @@ function askName() {
   dlg.showModal();
   $('name-in').focus();
 }
-$('name-ok').onclick = (e) => {
+// Saves the name once the server agrees it is free (each name belongs to one player). True when saved.
+$('name-ok').onclick = async (e) => {
+  e.preventDefault();
   const v = $('name-in').value.trim();
-  if (!NAME_RE.test(v)) { e.preventDefault(); $('name-msg').textContent = 'Use de 2 a 16 letras, números, espaço, ponto, hífen ou sublinhado.'; return; }
+  if (!NAME_RE.test(v)) { $('name-msg').textContent = 'Use de 2 a 16 letras, números, espaço, ponto, hífen ou sublinhado.'; return false; }
+  if (v.toLowerCase() !== (profile.name || '').toLowerCase()) {
+    $('name-msg').textContent = 'Verificando…';
+    const r = await claimName(profile, v);
+    if (r !== 'ok') {
+      $('name-msg').textContent = /em uso/.test(r)
+        ? 'Esse nome já é de outro jogador. Se for você em outro navegador, traga seu progresso pelo código (Configurações › Progresso).'
+        : `Não deu certo: ${r}`;
+      return false;
+    }
+  }
+  $('name-dlg').close();
   profile.name = v;
   saveProfile();
   clearBoards();
@@ -1357,6 +1372,7 @@ $('name-ok').onclick = (e) => {
   });
   if (state === 'menu') renderMenu();
   if (state === 'ranking') renderRanking();
+  return true;
 };
 flushPending(profile).then(saveProfile);
 
@@ -4236,9 +4252,8 @@ function endScreen(title, text, verse, won = false) {
       $('end-pick-name').onclick = () => {
         askName();
         const baseOk = $('name-ok').onclick;
-        $('name-ok').onclick = (e) => {
-          baseOk(e);
-          if (profile.name) { // the run is already waiting in profile.pending: the name's handler sends it
+        $('name-ok').onclick = async (e) => {
+          if (await baseOk(e)) { // the run is already waiting in profile.pending: the name's handler sends it
             online.textContent = `Partida enviada à temporada de ${seasonName(seasonKey())} com o nome ${profile.name}.`;
           }
         };

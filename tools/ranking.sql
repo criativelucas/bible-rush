@@ -1,7 +1,8 @@
 -- Bible Rush: online rankings on Supabase (free plan).
 -- Run this once in the project's SQL Editor (Supabase > SQL Editor > New query > paste > Run).
 --
--- The game only calls two functions with the project's public (anon) key:
+-- The game only calls three functions with the project's public (anon) key:
+--   claim_name   when the player picks a name (each name belongs to one player)
 --   submit_run   after each run, to record it
 --   leaderboard  to read a ranking
 -- The tables stay closed to that key (row level security on, no policies), and submit_run checks every
@@ -35,6 +36,36 @@ create index if not exists runs_board_idx on public.runs (season, map, mode);
 alter table public.players enable row level security;
 alter table public.runs enable row level security;
 
+-- One player per name (any case). A save in another browser (or another address, like a local test) is
+-- another player; before names were unique, such saves could take a name already in use. Those are merged
+-- into the one with the most runs: their runs move over and they are removed. Nothing to do once the
+-- unique index exists. To play as the same player in another browser, carry the save over with its
+-- code (Configurações > Progresso): the code keeps the player id.
+update public.runs r set player = d.keep
+from (select p.id, first_value(p.id) over (partition by lower(btrim(p.name))
+        order by (select count(*) from public.runs x where x.player = p.id) desc, p.last_run desc) as keep
+      from public.players p) d
+where r.player = d.id and d.id <> d.keep;
+delete from public.players p
+using (select p2.id, first_value(p2.id) over (partition by lower(btrim(p2.name))
+         order by (select count(*) from public.runs x where x.player = p2.id) desc, p2.last_run desc) as keep
+       from public.players p2) d
+where p.id = d.id and d.id <> d.keep;
+create unique index if not exists players_name_key on public.players (lower(name));
+
+-- Picking (or changing) a name: refused when another player has it.
+create or replace function public.claim_name(p_player uuid, p_name text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_name text := btrim(coalesce(p_name, ''));
+begin
+  if v_name !~ '^[A-Za-zÀ-ÖØ-öø-ÿ0-9 _.-]{2,16}$' then raise exception 'nome inválido'; end if;
+  if exists (select 1 from players where lower(name) = lower(v_name) and id <> p_player) then raise exception 'nome já em uso'; end if;
+  insert into players (id, name, last_run) values (p_player, v_name, '-infinity') -- no run yet: nothing overlaps
+  on conflict (id) do update set name = excluded.name;
+  return v_name;
+end $$;
+
 create or replace function public.submit_run(
   p_player uuid, p_name text, p_title text, p_frame text, p_map text, p_mode text, p_diff integer,
   p_hero text, p_kills integer, p_seconds integer, p_won boolean
@@ -54,6 +85,7 @@ begin
     raise exception 'números impossíveis';
   end if;
   if p_won and (p_mode <> 'classic' or p_seconds < 120 or p_seconds > 1500) then raise exception 'vitória impossível'; end if;
+  if exists (select 1 from players where lower(name) = lower(v_name) and id <> p_player) then raise exception 'nome já em uso'; end if;
   if exists (select 1 from players where id = p_player
              and last_run > now() - make_interval(secs => greatest(20, p_seconds * 0.8))) then
     raise exception 'partidas sobrepostas';
@@ -96,5 +128,7 @@ $$;
 
 revoke all on function public.submit_run(uuid, text, text, text, text, text, integer, text, integer, integer, boolean) from public;
 revoke all on function public.leaderboard(text, text, text, uuid, integer) from public;
+revoke all on function public.claim_name(uuid, text) from public;
+grant execute on function public.claim_name(uuid, text) to anon, authenticated;
 grant execute on function public.submit_run(uuid, text, text, text, text, text, integer, text, integer, integer, boolean) to anon, authenticated;
 grant execute on function public.leaderboard(text, text, text, uuid, integer) to anon, authenticated;
