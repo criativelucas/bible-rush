@@ -1,8 +1,8 @@
 // Online rankings on Supabase (free plan): the database and its two functions are in tools/ranking.sql,
 // the setup steps in README.md. With the address and key empty the game plays offline, as before.
 // The key is the project's "anon public" key: made to be in a web page; it can only call those functions.
-export const SUPABASE_URL = '';
-export const SUPABASE_KEY = '';
+export const SUPABASE_URL = 'https://ymoqqhkgyzlyjvjymsxv.supabase.co';
+export const SUPABASE_KEY = 'sb_publishable_89xlN5gbZy2CU4ZFIdI7bw_VPGInfOB'; // publishable: never put the secret key here
 
 // For testing against another server without editing this file: localStorage 'bible-rush-online' = {"url", "key"}.
 const cfg = (() => {
