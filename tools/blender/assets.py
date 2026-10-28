@@ -12,7 +12,10 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(__file__))
+import lib  # noqa: E402
 from lib import ROOT, Model, actions, export_glb, make_armature, prim, reset, skin  # noqa: E402
+
+lib.SOFT = 0.32  # rounded, worn edges on everything built here (see lib.SOFT)
 
 PI = math.pi
 SKIN, SKIN2, SKIN3 = 0xd9a87a, 0xc98a5a, 0xb07a4e
@@ -50,35 +53,38 @@ def moss_top(base, cover=MOSS, k=0.65):
 
 # ---------- Humanoid mobs (legs/arms swing in the game's shader) ----------
 def humanoid(m, h, c):
+    """A soldier's body: tapered legs and arms, a torso with a waist and a chest, round hands, a soft head."""
     hip, sh = 0.62 * h, 1.1 * h
     for x, sw in ((-0.11 * h, 1), (0.11 * h, -1)):
         leg = dict(swing=sw, pivot=hip)
-        m.part('box', 0.15 * h, 0.5 * h, 0.17 * h, p=(x, 0.37 * h, 0), color=c['leg'], bevel=0.012 * h, **leg)
-        m.part('box', 0.17 * h, 0.1 * h, 0.27 * h, p=(x, 0.05 * h, 0.03 * h), color=c['feet'], bevel=0.015 * h, **leg)
-        m.part('box', 0.165 * h, 0.04 * h, 0.18 * h, p=(x, 0.22 * h, 0), color=c.get('wrap', LEATHER), **leg)
-        m.part('box', 0.165 * h, 0.04 * h, 0.18 * h, p=(x, 0.32 * h, 0), color=c.get('wrap', LEATHER), **leg)
-    m.part('cyl', 0.2 * h, 0.29 * h, 0.3 * h, 10, p=(0, 0.61 * h, 0), color=c['bottom'], bevel=0.008 * h)
+        m.part('cyl', 0.085 * h, 0.066 * h, 0.52 * h, 10, p=(x, 0.37 * h, 0), color=c['leg'], **leg)  # thigh to ankle
+        m.part('box', 0.15 * h, 0.1 * h, 0.27 * h, p=(x, 0.05 * h, 0.03 * h), color=c['feet'], **leg)
+        for y in (0.22, 0.32):
+            m.part('cyl', 0.077 * h, 0.074 * h, 0.04 * h, 10, p=(x, y * h, 0), color=c.get('wrap', LEATHER), **leg)
+    m.part('cyl', 0.2 * h, 0.29 * h, 0.3 * h, 12, p=(0, 0.61 * h, 0), color=c['bottom'])
     for k in range(8):  # kilt fringe
         a = k / 8 * 2 * PI
         m.part('box', 0.07 * h, 0.06 * h, 0.03 * h, p=(math.sin(a) * 0.28 * h, 0.47 * h, math.cos(a) * 0.28 * h), r=(0, a, 0),
                color=c.get('fringe', c['bottom']))
-    m.part('box', 0.41 * h, 0.46 * h, 0.25 * h, p=(0, 0.95 * h, 0), color=c['top'], bevel=0.035 * h)
-    m.part('box', 0.43 * h, 0.07 * h, 0.27 * h, p=(0, 0.75 * h, 0), color=c.get('belt', LEATHER), bevel=0.01 * h)
+    # torso: narrow at the waist, broad at the chest, rounded shoulders, flatter front to back
+    m.part('lathe', [(0.0, 0.72 * h), (0.17 * h, 0.72 * h), (0.19 * h, 0.8 * h), (0.225 * h, 0.95 * h), (0.235 * h, 1.06 * h),
+                     (0.2 * h, 1.15 * h), (0.11 * h, 1.19 * h), (0.0, 1.2 * h)], 14, s=(1, 1, 0.64), color=c['top'], smooth=True)
+    m.part('cyl', 0.2 * h, 0.2 * h, 0.07 * h, 14, p=(0, 0.75 * h, 0), s=(1.05, 1, 0.68), color=c.get('belt', LEATHER))
     m.part('box', 0.07 * h, 0.07 * h, 0.03 * h, p=(0, 0.75 * h, 0.14 * h), color=c.get('buckle', BRONZE))
     for x, sw in ((-0.285 * h, -0.7), (0.285 * h, 0.7)):
         arm = dict(swing=sw, pivot=sh)
-        m.part('box', 0.13 * h, 0.4 * h, 0.14 * h, p=(x, 0.9 * h, 0), color=c.get('arm', c['skin']), bevel=0.015 * h, **arm)
-        m.part('box', 0.155 * h, 0.13 * h, 0.165 * h, p=(x, 1.07 * h, 0), color=c.get('sleeve', c['top']), bevel=0.025 * h, **arm)
-        m.part('box', 0.14 * h, 0.05 * h, 0.15 * h, p=(x, 0.76 * h, 0), color=c.get('bracer', LEATHER), **arm)
-        m.part('box', 0.12 * h, 0.1 * h, 0.13 * h, p=(x, 0.67 * h, 0.01 * h), color=c['skin'], bevel=0.015 * h, **arm)
-    m.part('cyl', 0.08 * h, 0.09 * h, 0.08 * h, 8, p=(0, 1.2 * h, 0), color=c['skin'])
-    m.part('box', 0.28 * h, 0.29 * h, 0.27 * h, p=(0, 1.34 * h, 0), color=c['skin'], bevel=0.035 * h)
-    m.part('box', 0.05 * h, 0.08 * h, 0.06 * h, p=(0, 1.32 * h, 0.14 * h), color=c['skin'], bevel=0.01 * h)
-    for x in (-0.07 * h, 0.07 * h):
-        m.part('box', 0.05 * h, 0.05 * h, 0.02 * h, p=(x, 1.36 * h, 0.137 * h), color=DARK)
-        m.part('box', 0.07 * h, 0.018 * h, 0.02 * h, p=(x, 1.405 * h, 0.137 * h), color=c.get('brow', BLACK))
+        m.part('cyl', 0.066 * h, 0.055 * h, 0.42 * h, 10, p=(x, 0.9 * h, 0), color=c.get('arm', c['skin']), **arm)
+        m.part('ball', 0.09 * h, 1, p=(x, 1.07 * h, 0), s=(1, 0.85, 1), color=c.get('sleeve', c['top']), **arm)  # shoulder
+        m.part('cyl', 0.066 * h, 0.07 * h, 0.06 * h, 10, p=(x, 0.76 * h, 0), color=c.get('bracer', LEATHER), **arm)
+        m.part('ball', 0.062 * h, 1, p=(x, 0.67 * h, 0.01 * h), s=(1, 1.1, 1), color=c['skin'], **arm)  # hand
+    m.part('cyl', 0.08 * h, 0.09 * h, 0.08 * h, 10, p=(0, 1.2 * h, 0), color=c['skin'])
+    m.part('box', 0.28 * h, 0.3 * h, 0.27 * h, p=(0, 1.34 * h, 0), color=c['skin'], soft=0.4)
+    m.part('ball', 0.032 * h, 1, p=(0, 1.32 * h, 0.13 * h), s=(1, 1.3, 1), color=c['skin'])  # nose
+    for x in (-0.062 * h, 0.062 * h):
+        m.part('ball', 0.026 * h, 1, p=(x, 1.36 * h, 0.118 * h), s=(1, 1.15, 0.7), color=DARK)
+        m.part('box', 0.07 * h, 0.018 * h, 0.02 * h, p=(x, 1.405 * h, 0.135 * h), r=(0, 0, -0.15 if x < 0 else 0.15), color=c.get('brow', BLACK), soft=0)
     if c.get('beard'):
-        m.part('box', 0.26 * h, 0.12 * h, 0.08 * h, p=(0, 1.24 * h, 0.12 * h), color=c['beard'], bevel=0.02 * h)
+        m.part('box', 0.26 * h, 0.12 * h, 0.09 * h, p=(0, 1.24 * h, 0.115 * h), color=c['beard'])
     return m
 
 
@@ -409,47 +415,47 @@ def goliath():
     S = 0.85
     leg = lambda b: dict(bone=b)
     for x, b in ((-0.42, 'leg.L'), (0.42, 'leg.R')):
-        m.part('box', 0.55, 1.7, 0.6, p=(x, 1.05, 0), color=0x4a3b2a, bevel=0.05, **leg(b))
-        m.part('box', 0.64, 0.95, 0.7, p=(x, 0.65, 0.02), color=BRONZE, bevel=0.06, **leg(b))
+        m.part('cyl', 0.3, 0.23, 1.75, 12, p=(x, 1.05, 0), color=0x4a3b2a, **leg(b))
+        m.part('cyl', 0.33, 0.29, 0.95, 12, p=(x, 0.65, 0.02), color=BRONZE, **leg(b))  # greaves (1 Sm 17:6)
         for k in range(3):
-            m.part('box', 0.66, 0.05, 0.72, p=(x, 0.35 + k * 0.3, 0.02), color=0x8a6a2e, **leg(b))
+            m.part('cyl', 0.335, 0.335, 0.05, 12, p=(x, 0.35 + k * 0.3, 0.02), color=0x8a6a2e, **leg(b))
         m.part('box', 0.64, 0.25, 0.98, p=(x, 0.12, 0.12), color=LEATHER, bevel=0.05, **leg(b))
     body = dict(bone='hips')
     m.part('cyl', 0.8, 1.0, 0.75, 12, p=(0, 1.95, 0), color=0x6b4a2a, bevel=0.03, **body)
     for k in range(12):
         a = k / 12 * 2 * PI
         m.part('box', 0.3, 0.5, 0.06, p=(math.sin(a) * 0.98, 1.7, math.cos(a) * 0.98), r=(0, a, 0), color=0x8a5a2b, **body)
-    m.part('box', 1.9, 1.6, 1.15, p=(0, 2.95, 0), color=0x9c7a3e, bevel=0.12, **body)
+    m.part('lathe', [(0.0, 2.15), (0.84, 2.15), (0.92, 2.4), (1.0, 2.85), (1.03, 3.25), (0.93, 3.6), (0.55, 3.8), (0.0, 3.84)], 16, s=(1, 1, 0.6), color=0x9c7a3e, smooth=True, **body)
     for row in range(6):  # scale armour (1 Sm 17:5)
         for k in range(7):
-            m.part('box', 0.26, 0.2, 0.06, p=(-0.78 + k * 0.26 + (row % 2) * 0.13, 2.3 + row * 0.24, 0.6), r=(0.2, 0, 0),
+            m.part('ball', 0.16, 1, s=(1, 0.82, 0.34), p=(sx := -0.78 + k * 0.26 + (row % 2) * 0.13, 2.3 + row * 0.24, 0.63 * math.sqrt(max(0.0, 1 - (sx / 1.03) ** 2)) + 0.02), r=(0.2, math.asin(max(-0.9, min(0.9, sx / 1.03))) * 0.8, 0),
                    color=0xb08a42 if (row + k) % 2 else 0x8a6a2e, bevel=0.02, **body)
-    m.part('box', 1.95, 0.22, 1.2, p=(0, 2.2, 0), color=LEATHER, bevel=0.04, **body)
+    m.part('cyl', 0.9, 0.9, 0.24, 16, p=(0, 2.2, 0), s=(1, 1, 0.66), color=LEATHER, **body)
     m.part('box', 0.3, 0.22, 0.08, p=(0, 2.2, 0.62), color=GOLD, **body)
     for x in (-1.0, 1.0):
         m.part('ball', 0.48, 1, p=(x, 3.65, 0), color=BRONZE, **body)
         m.part('torus', 0.4, 0.06, 2 * PI, 12, p=(x, 3.5, 0), r=(PI / 2, 0, 0), color=0x8a6a2e, **body)
     hd = dict(bone='head')
-    m.part('box', 0.5, 0.3, 0.5, p=(0, 3.95, 0), color=SKIN2, **hd)
-    m.part('box', 0.82, 0.86, 0.8, p=(0, 4.45, 0), color=SKIN2, bevel=0.08, **hd)
-    m.part('box', 0.74, 0.55, 0.28, p=(0, 4.2, 0.4), color=BLACK, bevel=0.06, **hd)
+    m.part('cyl', 0.24, 0.27, 0.32, 12, p=(0, 3.95, 0), color=SKIN2, **hd)
+    m.part('box', 0.82, 0.86, 0.8, p=(0, 4.45, 0), color=SKIN2, soft=0.42, **hd)
+    m.part('box', 0.74, 0.55, 0.3, p=(0, 4.2, 0.38), color=BLACK, soft=0.7, **hd)
     for x in (-0.18, 0.18):
         m.part('box', 0.14, 0.1, 0.04, p=(x, 4.57, 0.41), color=WHITE, **hd)
         m.part('box', 0.07, 0.08, 0.04, p=(x, 4.57, 0.43), color=DARK, **hd)
         m.part('box', 0.2, 0.06, 0.05, p=(x, 4.68, 0.41), r=(0, 0, -0.2 if x < 0 else 0.2), color=BLACK, **hd)
     m.part('box', 0.12, 0.16, 0.12, p=(0, 4.42, 0.44), color=SKIN2, bevel=0.03, **hd)
-    m.part('box', 0.98, 0.45, 0.98, p=(0, 5.0, 0), color=BRONZE, bevel=0.1, **hd)
+    m.part('ball', 0.52, 2, p=(0, 4.86, 0), s=(1, 0.8, 1), color=BRONZE, **hd)  # bronze helmet (1 Sm 17:5)
     m.part('box', 0.16, 0.5, 1.15, p=(0, 5.4, 0), color=RED, bevel=0.06, **hd)
     for x in (-0.47, 0.47):
         m.part('box', 0.08, 0.45, 0.52, p=(x, 4.55, 0.15), color=BRONZE, bevel=0.02, **hd)
     m.part('box', 0.1, 0.3, 0.08, p=(0, 4.75, 0.48), color=BRONZE, **hd)
     for x, b in ((-1.2, 'arm.L'), (1.2, 'arm.R')):
         a = dict(bone=b)
-        m.part('box', 0.45, 1.5, 0.48, p=(x, 2.95, 0), color=SKIN2, bevel=0.06, **a)
-        m.part('box', 0.52, 0.42, 0.55, p=(x, 2.6, 0), color=BRONZE, bevel=0.05, **a)
-        m.part('box', 0.42, 0.34, 0.46, p=(x, 2.1, 0), color=SKIN2, bevel=0.06, **a)
+        m.part('cyl', 0.25, 0.21, 1.5, 12, p=(x, 2.95, 0), color=SKIN2, **a)
+        m.part('cyl', 0.27, 0.25, 0.42, 12, p=(x, 2.6, 0), color=BRONZE, **a)
+        m.part('ball', 0.25, 1, p=(x, 2.08, 0.02), s=(1, 1.05, 1.1), color=SKIN2, **a)
     sh = dict(bone='arm.L')
-    m.part('box', 0.22, 2.0, 1.6, p=(-1.45, 2.65, 0.25), color=BRONZE, bevel=0.08, **sh)
+    m.part('box', 0.22, 2.0, 1.6, p=(-1.45, 2.65, 0.25), color=BRONZE, soft=0.9, **sh)
     m.part('torus', 0.55, 0.06, 2 * PI, 16, p=(-1.58, 2.65, 0.25), r=(0, PI / 2, 0), color=0x8a6a2e, **sh)
     m.part('ball', 0.3, 1, p=(-1.6, 2.65, 0.25), color=GOLD, **sh)
     sp = dict(bone='arm.R')
@@ -486,7 +492,7 @@ def pharaoh():
     m = Model('farao', 22)
     hz = 1.3
     hb = dict(bone='horse')
-    m.part('box', 0.62, 0.72, 1.7, p=(0, 1.4, hz + 0.8), color=0xeae4d8, bevel=0.12, **hb)
+    m.part('ball', 0.5, 2, p=(0, 1.4, hz + 0.8), s=(0.66, 0.78, 1.75), color=0xeae4d8, **hb)  # barrel
     m.part('box', 0.36, 0.85, 0.42, p=(0, 1.95, hz + 1.6), r=(-0.5, 0, 0), color=0xeae4d8, bevel=0.08, **hb)
     m.part('box', 0.32, 0.34, 0.68, p=(0, 2.35, hz + 1.95), color=0xeae4d8, bevel=0.07, **hb)
     m.part('box', 0.24, 0.22, 0.2, p=(0, 2.27, hz + 2.33), color=0xc9c2b4, bevel=0.04, **hb)
@@ -571,8 +577,8 @@ def gogue():
     IRONK, IRONL, ASH, CRIMSON = 0x4a4a52, 0x6a6a76, 0x9a7a6a, 0x8a2020
     for x, b in ((-0.42, 'leg.L'), (0.42, 'leg.R')):
         lg = dict(bone=b)
-        m.part('box', 0.55, 1.7, 0.6, p=(x, 1.05, 0), color=0x3a2e2a, bevel=0.05, **lg)
-        m.part('box', 0.64, 0.95, 0.7, p=(x, 0.65, 0.02), color=IRONK, bevel=0.06, **lg)
+        m.part('cyl', 0.3, 0.23, 1.75, 12, p=(x, 1.05, 0), color=0x3a2e2a, **lg)
+        m.part('cyl', 0.33, 0.29, 0.95, 12, p=(x, 0.65, 0.02), color=IRONK, **lg)
         m.part('cone', 0.12, 0.3, 6, p=(x, 1.1, 0.4), r=(PI / 2, 0, 0), color=IRONL, **lg)  # knee spike
         m.part('box', 0.66, 0.25, 0.98, p=(x, 0.12, 0.12), color=0x2a2220, bevel=0.05, **lg)
     body = dict(bone='hips')
@@ -580,36 +586,36 @@ def gogue():
     for k in range(12):
         a = k / 12 * 2 * PI
         m.part('box', 0.3, 0.55, 0.06, p=(math.sin(a) * 0.98, 1.68, math.cos(a) * 0.98), r=(0, a, 0), color=IRONK if k % 2 else IRONL, **body)
-    m.part('box', 1.9, 1.6, 1.15, p=(0, 2.95, 0), color=IRONK, bevel=0.12, **body)
+    m.part('lathe', [(0.0, 2.15), (0.84, 2.15), (0.92, 2.4), (1.0, 2.85), (1.03, 3.25), (0.93, 3.6), (0.55, 3.8), (0.0, 3.84)], 16, s=(1, 1, 0.6), color=IRONK, smooth=True, **body)
     for row in range(6):  # lamellar plates
         for k in range(7):
-            m.part('box', 0.26, 0.2, 0.06, p=(-0.78 + k * 0.26 + (row % 2) * 0.13, 2.3 + row * 0.24, 0.6), r=(0.2, 0, 0),
+            m.part('ball', 0.16, 1, s=(1, 0.82, 0.34), p=(sx := -0.78 + k * 0.26 + (row % 2) * 0.13, 2.3 + row * 0.24, 0.63 * math.sqrt(max(0.0, 1 - (sx / 1.03) ** 2)) + 0.02), r=(0.2, math.asin(max(-0.9, min(0.9, sx / 1.03))) * 0.8, 0),
                    color=IRONL if (row + k) % 2 else 0x55555f, bevel=0.02, **body)
-    m.part('box', 1.95, 0.24, 1.2, p=(0, 2.2, 0), color=CRIMSON, bevel=0.04, **body)
+    m.part('cyl', 0.9, 0.9, 0.26, 16, p=(0, 2.2, 0), s=(1, 1, 0.66), color=CRIMSON, **body)
     m.part('box', 1.7, 2.6, 0.12, p=(0, 2.4, -0.62), r=(-0.08, 0, 0), color=CRIMSON, bevel=0.03, **body)  # cape
     for x in (-1.0, 1.0):
         m.part('ball', 0.5, 1, p=(x, 3.65, 0), color=IRONL, **body)
         for k in range(3):
             m.part('cone', 0.1, 0.45, 6, p=(x * (1.05 + k * 0.05), 3.95, -0.25 + k * 0.25), r=(0, 0, -x * 0.5), color=0x2a2a30, **body)
     hd = dict(bone='head')
-    m.part('box', 0.5, 0.3, 0.5, p=(0, 3.95, 0), color=ASH, **hd)
-    m.part('box', 0.82, 0.86, 0.8, p=(0, 4.45, 0), color=ASH, bevel=0.08, **hd)
-    m.part('box', 0.74, 0.6, 0.28, p=(0, 4.15, 0.4), color=0x1a1414, bevel=0.06, **hd)
+    m.part('cyl', 0.24, 0.27, 0.32, 12, p=(0, 3.95, 0), color=ASH, **hd)
+    m.part('box', 0.82, 0.86, 0.8, p=(0, 4.45, 0), color=ASH, soft=0.42, **hd)
+    m.part('box', 0.74, 0.6, 0.3, p=(0, 4.15, 0.38), color=0x1a1414, soft=0.7, **hd)
     for k in range(3):  # braided beard
         m.part('cyl', 0.07, 0.04, 0.5, 6, p=(-0.2 + k * 0.2, 3.75, 0.5), color=0x1a1414, **hd)
     for x in (-0.18, 0.18):
         m.part('box', 0.14, 0.08, 0.04, p=(x, 4.57, 0.41), color=0xff5a3a, **hd)
         m.part('box', 0.22, 0.06, 0.05, p=(x, 4.68, 0.41), r=(0, 0, -0.3 if x < 0 else 0.3), color=0x1a1414, **hd)
-    m.part('box', 0.98, 0.5, 0.98, p=(0, 5.0, 0), color=IRONK, bevel=0.1, **hd)
+    m.part('ball', 0.53, 2, p=(0, 4.88, 0), s=(1, 0.8, 1), color=IRONK, **hd)
     for x in (-1, 1):  # great curled horns
         for k in range(5):
             a = k * 0.42
             m.part('ball', 0.2 - k * 0.025, 1, p=(x * (0.55 + math.sin(a) * 0.45), 5.1 + math.cos(a) * 0.5 - 0.1 * k, -0.05 * k), color=BONE3 if k % 2 else BONE2, **hd)
     for x, b in ((-1.2, 'arm.L'), (1.2, 'arm.R')):
         a_ = dict(bone=b)
-        m.part('box', 0.45, 1.5, 0.48, p=(x, 2.95, 0), color=ASH, bevel=0.06, **a_)
-        m.part('box', 0.52, 0.5, 0.55, p=(x, 2.55, 0), color=IRONK, bevel=0.05, **a_)
-        m.part('box', 0.42, 0.34, 0.46, p=(x, 2.1, 0), color=ASH, bevel=0.06, **a_)
+        m.part('cyl', 0.25, 0.21, 1.5, 12, p=(x, 2.95, 0), color=ASH, **a_)
+        m.part('cyl', 0.27, 0.25, 0.5, 12, p=(x, 2.55, 0), color=IRONK, **a_)
+        m.part('ball', 0.25, 1, p=(x, 2.08, 0.02), s=(1, 1.05, 1.1), color=ASH, **a_)
     sh = dict(bone='arm.L')
     m.part('cyl', 0.9, 0.9, 0.18, 16, p=(-1.5, 2.65, 0.25), r=(0, 0, PI / 2), color=0x3a2e24, **sh)
     m.part('torus', 0.88, 0.07, 2 * PI, 18, p=(-1.6, 2.65, 0.25), r=(0, PI / 2, 0), color=IRONL, **sh)
@@ -651,23 +657,23 @@ def rei():
     S = 0.82
     for x, b in ((-0.42, 'leg.L'), (0.42, 'leg.R')):
         lg = dict(bone=b)
-        m.part('box', 0.55, 1.7, 0.6, p=(x, 1.05, 0), color=SKIN2, bevel=0.05, **lg)
-        m.part('box', 0.62, 0.7, 0.68, p=(x, 0.5, 0.02), color=BRONZE, bevel=0.06, **lg)
+        m.part('cyl', 0.3, 0.23, 1.75, 12, p=(x, 1.05, 0), color=SKIN2, **lg)
+        m.part('cyl', 0.32, 0.28, 0.7, 12, p=(x, 0.5, 0.02), color=BRONZE, **lg)
         m.part('box', 0.64, 0.25, 0.98, p=(x, 0.12, 0.12), color=LEATHER, bevel=0.05, **lg)
     body = dict(bone='hips')
     m.part('cyl', 0.85, 1.15, 1.2, 14, p=(0, 1.7, 0), color=PURPLE, bevel=0.03, **body)  # royal robe
-    m.part('box', 1.9, 1.6, 1.15, p=(0, 2.95, 0), color=PURPLE2, bevel=0.12, **body)
-    m.part('box', 1.5, 1.2, 0.2, p=(0, 3.0, 0.55), color=GOLD, bevel=0.08, **body)  # breastplate
+    m.part('lathe', [(0.0, 2.15), (0.84, 2.15), (0.92, 2.4), (1.0, 2.85), (1.03, 3.25), (0.93, 3.6), (0.55, 3.8), (0.0, 3.84)], 16, s=(1, 1, 0.6), color=PURPLE2, smooth=True, **body)
+    m.part('ball', 0.72, 2, p=(0, 3.0, 0.42), s=(1, 0.85, 0.32), color=GOLD, **body)  # breastplate
     for k in range(3):
         m.part('box', 1.3 - k * 0.2, 0.06, 0.05, p=(0, 2.6 + k * 0.3, 0.66), color=0xc99a2e, **body)
-    m.part('box', 1.95, 0.24, 1.2, p=(0, 2.2, 0), color=GOLD, bevel=0.04, **body)
+    m.part('cyl', 0.9, 0.9, 0.26, 16, p=(0, 2.2, 0), s=(1, 1, 0.66), color=GOLD, **body)
     m.part('box', 1.8, 2.6, 0.12, p=(0, 2.4, -0.62), r=(-0.08, 0, 0), color=PURPLE, bevel=0.03, **body)  # cape
     for x in (-1.0, 1.0):
         m.part('ball', 0.48, 1, p=(x, 3.65, 0), color=GOLD, **body)
     hd = dict(bone='head')
-    m.part('box', 0.5, 0.3, 0.5, p=(0, 3.95, 0), color=SKIN2, **hd)
-    m.part('box', 0.82, 0.86, 0.8, p=(0, 4.45, 0), color=SKIN2, bevel=0.08, **hd)
-    m.part('box', 0.74, 0.6, 0.28, p=(0, 4.15, 0.4), color=BLACK, bevel=0.06, **hd)
+    m.part('cyl', 0.24, 0.27, 0.32, 12, p=(0, 3.95, 0), color=SKIN2, **hd)
+    m.part('box', 0.82, 0.86, 0.8, p=(0, 4.45, 0), color=SKIN2, soft=0.42, **hd)
+    m.part('box', 0.74, 0.6, 0.3, p=(0, 4.15, 0.38), color=BLACK, soft=0.7, **hd)
     for x in (-0.18, 0.18):
         m.part('box', 0.14, 0.1, 0.04, p=(x, 4.57, 0.41), color=WHITE, **hd)
         m.part('box', 0.07, 0.08, 0.04, p=(x, 4.57, 0.43), color=DARK, **hd)
@@ -680,8 +686,8 @@ def rei():
     m.part('ball', 0.09, 1, p=(0, 5.12, 0.5), color=0xd94a4a, **hd)
     for x, b in ((-1.2, 'arm.L'), (1.2, 'arm.R')):
         a_ = dict(bone=b)
-        m.part('box', 0.45, 1.5, 0.48, p=(x, 2.95, 0), color=PURPLE2, bevel=0.06, **a_)
-        m.part('box', 0.42, 0.34, 0.46, p=(x, 2.1, 0), color=SKIN2, bevel=0.06, **a_)
+        m.part('cyl', 0.25, 0.21, 1.5, 12, p=(x, 2.95, 0), color=PURPLE2, **a_)
+        m.part('ball', 0.25, 1, p=(x, 2.08, 0.02), s=(1, 1.05, 1.1), color=SKIN2, **a_)
         m.part('cyl', 0.26, 0.26, 0.18, 10, p=(x, 2.35, 0), color=GOLD, **a_)
     sh = dict(bone='arm.L')
     m.part('cyl', 0.85, 0.85, 0.16, 16, p=(-1.5, 2.65, 0.25), r=(0, 0, PI / 2), color=GOLD, **sh)
@@ -1125,7 +1131,7 @@ def bricks(m, w, h, d, seed, x=0, y=0, z=0, row=0.38, moss=True, ragged=0.0, alo
             if not (top and ragged and r.random() < ragged):
                 cx, cz = (x, z + u + bw / 2) if alongz else (x + u + bw / 2, z)
                 size = (d - r.random() * 0.06, rh - 0.04, bw - 0.04) if alongz else (bw - 0.04, rh - 0.04, d - r.random() * 0.06)
-                m.part('box', *size, p=(cx, y + rh * (j + 0.5), cz), color=r.choice(pal or SLATE), bevel=0.025, jitter=0.1)
+                m.part('box', *size, p=(cx, y + rh * (j + 0.5), cz), color=r.choice(pal or SLATE), bevel=0.025, jitter=0.1, soft=0.09)  # worn, still bricks
                 if top and moss and r.random() < 0.5:
                     ms = (d * 0.8, 0.06, bw * 0.8) if alongz else (bw * 0.8, 0.06, d * 0.8)
                     m.part('box', *ms, p=(cx, y + rh * (j + 1) + 0.02, cz), color=MOSS, bevel=0.02, jitter=0.15)

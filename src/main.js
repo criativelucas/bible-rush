@@ -5448,7 +5448,7 @@ window.arm = (ids, level = 1) => {
 };
 // Debug: poke at the run from the console, e.g. dev.look(Math.PI) or dev.spawnBoss().
 window.dev = {
-  P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, bossMove, hazards, cfg, scene, ASSETS, profile, saveProfile, world,
+  P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, bossMove, hazards, spawnEnemy, cfg, scene, ASSETS, profile, saveProfile, world,
   look: (y, p = pitch) => { yaw = y; pitch = p; },
   warp: (t) => { time = t; return time; }, // jump the run's clock (tests: guardians, the endless night)
   tick: (n = 1, dt = 1 / 30) => { // run frames by hand, as the loop would (works in a background tab)

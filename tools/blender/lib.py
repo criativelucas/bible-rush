@@ -56,6 +56,7 @@ def _lathe(bm, pts, n):
             if len({v.co.to_tuple(5) for v in q}) >= 3:
                 bm.faces.new(q)
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)  # closed or open, faces point outward
 
 
 def prim(kind, *a, p=(0, 0, 0), r=(0, 0, 0), s=(1, 1, 1), bevel=0.0, seg=1, sub=0, rough=0.0, freq=1.5, seed=0, pre=None, yaw_last=False):
@@ -94,6 +95,12 @@ def prim(kind, *a, p=(0, 0, 0), r=(0, 0, 0), s=(1, 1, 1), bevel=0.0, seg=1, sub=
     return bm
 
 
+# Softness for the models a script builds (assets.py sets it; heroes.py keeps 0): boxes and cylinders get
+# rounded edges (a share of their thinnest side), smooth shading and a faint hand-made wobble, so nothing
+# reads as a pile of cubes. A part can ask for its own softness (soft=0.2) or none (soft=0).
+SOFT = 0.0
+
+
 class Model:
     """Collects coloured primitives into one mesh. swing/pivot feed the game's walk shader;
     bone tags a part for rigid skinning (bosses)."""
@@ -102,6 +109,7 @@ class Model:
         self.name = name
         self.V, self.F, self.C, self.SW, self.SM, self.BONE = [], [], [], [], [], []
         self.rng = random.Random(seed)
+        self.soft = SOFT
 
     def add(self, bm, color, swing=0.0, pivot=0.0, jitter=0.06, smooth=False, bone=None, colors=None):
         base = len(self.V)
@@ -119,7 +127,24 @@ class Model:
         bm.free()
         return self
 
-    def part(self, kind, *a, color=0xffffff, swing=0.0, pivot=0.0, jitter=0.06, smooth=False, bone=None, **kw):
+    def part(self, kind, *a, color=0xffffff, swing=0.0, pivot=0.0, jitter=0.06, smooth=False, bone=None, soft=None, **kw):
+        k = self.soft if soft is None else soft
+        if k and kind in ('box', 'cyl'):
+            sc = kw.get('s', (1, 1, 1))
+            if kind == 'box':
+                thin = min(a[0] * sc[0], a[1] * sc[1], a[2] * sc[2])
+            else:
+                thin = min(max(a[0], a[1]) * 2 * min(sc[0], sc[2]), a[2] * sc[1])
+            if thin >= 0.035:  # tiny bits (eyes, studs, straps) stay as they are: cheaper, and too small to see
+                kw['bevel'] = max(kw.get('bevel', 0.0), k * thin * (1 if kind == 'box' else 0.5))
+                if 'seg' not in kw:
+                    kw['seg'] = 2 if kind == 'box' and thin >= 0.16 else 1
+            if 'rough' not in kw and thin >= 0.18:  # bigger pieces: not quite straight, as if shaped by hand
+                kw.update(rough=0.03 * thin, freq=2.2 / thin, seed=self.rng.randrange(1000))
+            smooth = smooth or kw.get('seg', 1) >= 2 or kind == 'cyl'
+            jitter *= 0.7
+        elif k and kind == 'ball' and 'rough' not in kw:
+            smooth = True
         return self.add(prim(kind, *a, **kw), color, swing, pivot, jitter, smooth, bone)
 
     def build(self, collection=None, light=False):
