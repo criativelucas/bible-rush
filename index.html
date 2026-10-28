@@ -111,6 +111,22 @@
     #boss-name { font: 400 20px/1.2 var(--f-title); letter-spacing: 1px; color: #ffb4a8; text-shadow: 0 2px 0 var(--line); }
     #bossbar .bar { margin-top: 2px; height: 22px; --c1: #f07a6a; --c2: #b52a24; --c3: #6d1418; }
     #stats { top: 12px; right: 12px; display: flex; gap: 14px; padding: 4px 12px; }
+    #minimap { top: 56px; right: 12px; width: 150px; height: 150px; border-radius: 50%; image-rendering: pixelated;
+      box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line), 0 4px 0 6px rgba(10, 5, 2, .35); }
+    @media (max-width: 760px) { #minimap { width: 110px; height: 110px; } }
+    .pause-map { display: grid; grid-template-columns: auto 1fr; gap: 16px; margin-bottom: 12px; }
+    .pause-map[hidden] { display: none; }
+    #bigmap { width: min(420px, 80vw); height: auto; aspect-ratio: 1; image-rendering: pixelated; box-shadow: 0 0 0 3px var(--bronze), 0 0 0 6px var(--line); }
+    .map-legend { font-size: 15px; display: grid; align-content: start; gap: 4px; }
+    .map-legend h3 { margin-top: 0; }
+    .map-legend div { display: flex; align-items: center; gap: 8px; }
+    .map-legend div b { margin-left: auto; }
+    .map-legend i { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--line); }
+    .map-legend i.square { border-radius: 0; }
+    .map-legend i.diamond { border-radius: 0; transform: rotate(45deg); }
+    .map-legend i.ring { background: none !important; box-shadow: inset 0 0 0 2.5px #9fe4ff; }
+    .map-legend p { color: var(--dim); font-size: 14px; }
+    @media (max-width: 760px) { .pause-map { grid-template-columns: 1fr; } }
     #stats div { display: flex; gap: 6px; align-items: center; }
     #stats b { font-size: 22px; font-variant-numeric: tabular-nums; }
     #gold { color: var(--gold2); }
@@ -317,6 +333,7 @@
     .card-tools .btn:disabled { opacity: .45; cursor: default; }
     .card-tools .btn.on { filter: hue-rotate(-20deg) brightness(1.15); }
     #choice.banning .card { outline: 3px dashed #d6453d; outline-offset: 4px; }
+    .card.poor { filter: grayscale(.6) brightness(.85); }
     #choice.banning .card:hover { filter: sepia(.6) hue-rotate(-30deg) saturate(2); }
     .build li small.evo { color: var(--gold); }
     .card.rare::after { content: ''; position: absolute; top: calc(-6 * var(--px)); left: 50%; width: 16px; height: 16px; transform: translateX(-50%) rotate(45deg);
@@ -392,6 +409,11 @@
     .pack .none { font-size: 15px; color: var(--dim); }
     #setup h3 small { font-size: 15px; color: var(--dim); }
     .biome .rec { display: block; font-size: 13px; color: var(--gold); }
+    .map-info { margin-top: 10px; font-size: 16px; }
+    .map-info p { margin: 6px 0 2px; }
+    .map-info small { color: var(--gold); }
+    .map-info .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .map-info .tags i { padding: 0 8px 1px; font: 600 14px/1.4 var(--f-ui); font-style: normal; color: var(--ink-d); background: var(--gold); box-shadow: 0 0 0 2px var(--line); }
     /* End of run: denários and the run report */
     .end-den { margin-top: 12px; padding: 8px 12px; background: #1f120d; box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line); }
     .end-den .tot { display: flex; align-items: center; gap: 8px; font: 400 28px/1 var(--f-title); color: #e8eef4; }
@@ -451,6 +473,7 @@
       <div title="Abates"><img class="ico" src="assets/ui/skull.png" alt="Abates"><b id="kills">0</b></div>
       <div title="Siclos"><img class="ico" src="assets/ui/coin.png" alt="Siclos"><b id="gold">0</b></div>
     </div>
+    <canvas id="minimap" class="hud" width="150" height="150" aria-label="Minimapa"></canvas>
     <div id="fps" class="hud"></div>
     <div id="dock" class="hud">
       <div id="prompt" class="glass"></div>
@@ -509,6 +532,7 @@
       <div id="pack" class="pack"></div>
       <h3>Cenário</h3>
       <div id="biomes" class="pick maps"></div>
+      <div id="map-info" class="map-info"></div>
       <div id="lock-hint" class="lock-hint"></div>
       <div class="row-btns nav"><button id="go" class="btn primary">Começar jornada</button></div>
     </div>
@@ -583,6 +607,18 @@
         <span>Pão, codornizes, óleo, tocha</span><span>Caem de cântaros e inimigos fortes: cura, ímã de maná, Fé e um susto que atordoa a multidão.</span>
         <span>Cada mapa</span><span>Elá esconde cinco pedras lisas no ribeiro; no Mar Vermelho os carros atravessam a ilha; no Vale dos Ossos o vento levanta os mortos.</span>
       </div>
+      <h3>Pelo caminho</h3>
+      <div class="keys">
+        <span>Paredões</span><span>Não dá para subir andando: use as rampas ou a Rocha de Horebe, uma fonte que lança você para o degrau de cima.</span>
+        <span>Veio de prata</span><span>Fique perto um instante para minerar siclos.</span>
+        <span>Árvore com frutos</span><span>Recupera 25% da vida; os frutos crescem de novo em um minuto.</span>
+        <span>Jarro de Gideão</span><span>Encoste para quebrar: a luz atordoa os inimigos em volta.</span>
+        <span>Pilar de Betel</span><span>Unja o pilar para uma bênção de 60 s; vale de novo depois de 2 minutos.</span>
+        <span>Caravana ismaelita</span><span>Vende relíquia, rolo e pão por siclos.</span>
+        <span>Mapa</span><span>O minimapa gira com a câmera; na pausa, o botão Mapa mostra tudo o que você já descobriu.</span>
+      </div>
+      <h3>Mercado e denários</h3>
+      <p>Toda jornada rende denários, mesmo quando você cai: mais tempo, mais pedras e a vitória pagam mais, e cada troféu paga também. No Mercado você compra Treinamento (para sempre), Ferramentas (Renovar <kbd class="k">F</kbd>, Pular <kbd class="k">X</kbd> e Banir <kbd class="k">Z</kbd> nas cartas), armas para o Arsenal e itens para o alforje.</p>
       <h3>Troféus</h3>
       <p>Conquistas ficam salvas neste navegador. Muitas abrem heróis, cenários e relíquias novas: comece com Davi e Sansão no Vale de Elá e no Mar Vermelho e veja a lista em Troféus, no menu.</p>
       <h3>Dicas</h3>
@@ -593,9 +629,11 @@
   <div id="pause" class="screen center dim">
     <div class="panel frame" style="max-width:660px">
       <h2 class="ribbon">Pausado</h2>
+      <div id="pause-map" class="pause-map" hidden><canvas id="bigmap" width="420" height="420"></canvas><div id="map-legend" class="map-legend"></div></div>
       <div id="pause-build" class="build"></div>
       <div class="row-btns nav">
         <button id="resume" class="btn primary">Continuar</button>
+        <button id="map-btn" class="btn">Mapa</button>
         <button class="btn" data-go="settings">Configurações</button>
         <button id="quit" class="btn">Desistir</button>
       </div>

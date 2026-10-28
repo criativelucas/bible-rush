@@ -31,7 +31,8 @@ try { Object.assign(cfg, JSON.parse(localStorage.getItem('otr-cfg') || '{}')); }
 const saveCfg = () => { try { localStorage.setItem('otr-cfg', JSON.stringify(cfg)); } catch {} };
 
 // ---------- Tuning ----------
-const HALF = 100; // grids span [-100, 100] on X and Z
+const HALF = 140; // grids span [-140, 140] on X and Z
+const CLIFF = 1.0; // ground steeper than this (45°) is a rock face: no walking up it
 const MAX_ENEMIES = 1000;
 const MAX_SHOTS = 600;
 const MAX_ESHOTS = 300;
@@ -167,10 +168,14 @@ function obstacleAt(x, z, pad = 0) {
   }
   return null;
 }
-for (let c = 0; c < flow.n * flow.n; c++) { // sea and the world's edge
+// Rock faces by flow cell: enemies path round them (up the ramps) and never step onto one.
+const CLIFFS = new Uint8Array(flow.n * flow.n);
+const steepAt = (x, z) => Math.hypot(...slope(x, z)) > CLIFF;
+for (let c = 0; c < flow.n * flow.n; c++) { // sea, the world's edge and the cliffs
   const x = -HALF + ((c % flow.n) + 0.5) * flow.cell;
   const z = -HALF + (Math.floor(c / flow.n) + 0.5) * flow.cell;
   if (!walkable(x, z)) flow.blocked[c] = 1;
+  else if (steepAt(x, z) || steepAt(x - 0.7, z) || steepAt(x + 0.7, z) || steepAt(x, z - 0.7) || steepAt(x, z + 0.7)) CLIFFS[c] = flow.blocked[c] = 1;
 }
 flow.update(0, 0);
 
@@ -497,6 +502,7 @@ const P = {
   stacks: 0, shotCount: 0, specialCd: 0, dashT: 0, dashX: 0, dashZ: 0, dashSpeed: 0, dashId: 0, harpT: 0, attackT: 0, castT: 0,
   sunT: 0, miracles: 0, conquests: 0, // Josué: the sun standing still, and stones/chests taken
   banned: new Set(), star: false, dmgBy: {}, killsBy: {}, pack: [], // Market: banned cards, Estrela de Jacó; run report
+  bless: null, blessT: 0, // a blessing from the pillar of Bethel
 };
 let dmgSrc = 'other'; // who is dealing damage right now (a weapon id, 'move', 'miracle', 'passive', 'other'): fills P.dmgBy
 let srcSlot = -3; // the same for shots and strikes, kept on them: weapon slot, or -1 miracle, -2 passive, -3 other
@@ -552,6 +558,7 @@ let feReady = false;
 let nextCarrier = 75; // a treasure carrier every 150 s
 let nextEvent = 120; // the map's own event every 150 s
 let melCarrier = Infinity; // Mel silvestre: one more carrier early on
+let seenHoreb = false;
 let challenge = null; // the sealed chest being fought for: { c, t, wave }
 let dustT = 0; // wind over the bones: dust closes in
 let glintsGot = 0;
@@ -670,6 +677,7 @@ function resume() {
 function pause() {
   state = 'pause';
   renderBuild();
+  $('pause-map').hidden = true;
   show('pause');
 }
 $('resume').onclick = resume;
@@ -715,6 +723,9 @@ function renderSetup() {
     ${ab('<kbd class="k">E</kbd>', h.move[0], h.move[1])}
     ${ab('<kbd class="k">Q</kbd>', h.miracle[0], h.miracle[1])}`;
   renderPack();
+  const rec = profile.records[BIOME_ID];
+  $('map-info').innerHTML = `<div class="tags">${B.tags.map((t) => `<i>${t}</i>`).join('')}</div><p>${B.desc}</p>
+    <small>${rec ? `Seu recorde: ${fmt(rec.best)}${rec.fastest ? ` · vitória mais rápida ${fmt(rec.fastest)}` : ''}` : 'Ainda sem recorde neste cenário.'}</small>`;
   $('biomes').replaceChildren(...Object.entries(BIOMES).map(([id, b]) => {
     const el = document.createElement('button');
     const open = isOpen('map', id);
@@ -1175,8 +1186,24 @@ function updatePlayer(dt) {
     }
   }
 
+  // Rock faces: walking up one does nothing (the uphill part of the motion is dropped and the face
+  // pushes you off), and you cannot jump from one. Ramps, the Rocks of Horeb or the long way round lead up.
+  P.onCliff = false;
+  if (p.y - terrainH(p.x, p.z) < 0.5) {
+    const [gx, gz] = slope(p.x + v.x * dt, p.z + v.z * dt);
+    const gl = Math.hypot(gx, gz);
+    if (gl > CLIFF) {
+      const ux = gx / gl;
+      const uz = gz / gl;
+      const up = v.x * ux + v.z * uz;
+      if (up > 0) { v.x -= up * ux; v.z -= up * uz; }
+      v.x -= ux * 10 * dt;
+      v.z -= uz * 10 * dt;
+      P.onCliff = steepAt(p.x, p.z);
+    }
+  }
   const wantJump = P.jumpBuffer > 0 || keys.has('Space'); // holding Space = auto bunny hop
-  if (wantJump && (P.grounded || P.coyote > 0)) {
+  if (wantJump && (P.grounded || P.coyote > 0) && !P.onCliff) {
     v.y = JUMP;
     P.grounded = false;
     P.coyote = 0;
@@ -1195,7 +1222,8 @@ function updatePlayer(dt) {
   p.addScaledVector(v, dt);
 
   // Collider sides push out; low rock tops are floor.
-  for (const o of obstacles) {
+  for (const id of obstaclesNear(p.x, p.z)) {
+    const o = obstacles[id];
     const dx = p.x - o.x;
     const dz = p.z - o.z;
     const d = Math.hypot(dx, dz) || 1e-3;
@@ -1215,7 +1243,8 @@ function updatePlayer(dt) {
   }
 
   let g = terrainH(p.x, p.z);
-  for (const o of obstacles) {
+  for (const id of obstaclesNear(p.x, p.z)) {
+    const o = obstacles[id];
     if (p.y >= o.top - 0.3 && Math.hypot(p.x - o.x, p.z - o.z) < o.r + 0.4) g = Math.max(g, o.top);
   }
   P.ground = g;
@@ -1763,6 +1792,11 @@ function updateEnemies(dt) {
     z += (mz * speed + E.kz[i]) * dt + sz * 0.3;
     E.kx[i] *= decay;
     E.kz[i] *= decay;
+    if (CLIFFS[flow.index(x, z)] && !CLIFFS[flow.index(E.x[i], E.z[i])]) { // a rock face ahead: slide along it
+      if (!CLIFFS[flow.index(x, E.z[i])]) z = E.z[i];
+      else if (!CLIFFS[flow.index(E.x[i], z)]) x = E.x[i];
+      else { x = E.x[i]; z = E.z[i]; }
+    }
 
     for (const id of obstaclesNear(x, z)) {
       const o = obstacles[id];
@@ -2589,6 +2623,75 @@ function updateWorld(dt) {
       chord([392, 494, 587, 784]);
     }
   }
+  for (const pd of world.pads) { // Rocks of Horeb: the spring throws you up onto the step above
+    pd.cd -= dt;
+    if (pd.cd > 0 || Math.hypot(p.x - pd.x, p.z - pd.z) > 1.4 || p.y - pd.y > 0.8) continue;
+    pd.cd = 0.8;
+    P.vel.set(pd.dx * 7, Math.sqrt(2 * GRAVITY * (pd.up + 2.2)), pd.dz * 7);
+    P.grounded = false;
+    P.sliding = false;
+    p.y += 0.1;
+    burst(pd.x, pd.y + 0.5, pd.z, 0x9fe4ff, 24, 4, 0.14, 9);
+    beep(330, 0.25, 'triangle', 0.05, 0, 900);
+    if (!seenHoreb) { seenHoreb = true; toast('Rocha de Horebe (Êx 17:6): a fonte lança você para o alto', '#9fe4ff'); }
+  }
+  for (const t of world.things) {
+    const d = Math.hypot(p.x - t.x, p.z - t.z);
+    if (t.kind === 'vein') { // mine the silver: stand by it a moment
+      if (t.used) continue;
+      if (d > 2.8) { t.p = Math.max(0, t.p - dt); continue; }
+      t.p += dt / 1.2;
+      promptText = `Veio de prata · minerando ${Math.floor(Math.min(1, t.p) * 100)}%`;
+      if (random() < 0.4) burst(t.x, t.y + 1, t.z, 0xe8f2ff, 1, 2, 0.08, 3);
+      if (t.p >= 1) {
+        t.used = true;
+        t.mesh.children.slice(1).forEach((c) => { c.visible = false; });
+        for (let k = 0; k < 16; k++) dropGem(t.x + random() * 3 - 1.5, t.y + 1, t.z + random() * 3 - 1.5, 1, 1);
+        burst(t.x, t.y + 1, t.z, 0xe8f2ff, 24, 5, 0.12, 6);
+        beep(1200, 0.12, 'square', 0.04, 0, 600);
+      }
+    } else if (t.kind === 'fruit') { // figs and pomegranates (dates in the desert): heal, grow back in a minute
+      t.cd -= dt;
+      t.fruit.visible = t.cd <= 0;
+      if (t.cd > 0 || d > 2.8) continue;
+      if (P.hp >= P.st.maxHp) { promptText = 'Árvore com frutos · volte quando precisar de vida'; continue; }
+      t.cd = 60;
+      P.hp = Math.min(P.st.maxHp, P.hp + P.st.maxHp * 0.25);
+      burst(t.x, t.y + 3, t.z, 0xd7303a, 14, 3, 0.14, 3);
+      toast('Frutos da terra: +25% de vida', '#ff9a8a');
+      beep(660, 0.1, 'triangle', 0.04, 0, 880);
+    } else if (t.kind === 'gideon') { // Gideon's jar (Jz 7:20): breaks into a blinding light
+      if (t.used || d > 1.6 || p.y - t.y > 1.5) continue;
+      t.used = true;
+      t.mesh.visible = t.flame.visible = false;
+      dmgSrc = 'other';
+      for (let i = 0; i < E.n; i++) {
+        if (Math.hypot(E.x[i] - t.x, E.z[i] - t.z) > 10) continue;
+        if (!ENEMIES[E.type[i]].boss) E.stun[i] = Math.max(E.stun[i], 3);
+        damage(i, 40);
+      }
+      addFx(ringGeo, 0xfff1b8, t.x, 0.3, t.z, 1, 0.6, { grow: 10, ground: true });
+      burst(t.x, t.y + 1, t.z, 0xfff1b8, 40, 8, 0.16, 6);
+      shake = 0.4;
+      boom(0.5, 0.5, 1800);
+      toast('Jarro de Gideão: “Espada do Senhor e de Gideão!”', '#ffe08f');
+    } else if (t.kind === 'bethel') { // Jacob's pillar (Gn 28:18): a blessing for a minute, again after two
+      t.cd -= dt;
+      t.flame.visible = t.cd <= 0;
+      if (t.cd > 0) { if (d < 3) promptText = `Pilar de Betel · nova bênção em ${Math.ceil(t.cd)} s`; continue; }
+      if (d > 3) { t.p = 0; continue; }
+      t.p += dt / 1.5;
+      promptText = `Ungindo o pilar de Betel · ${Math.floor(Math.min(1, t.p) * 100)}%`;
+      if (t.p >= 1) { t.p = 0; t.cd = 120; bless(); burst(t.x, t.y + 3, t.z, 0xffe08f, 24, 4, 0.12, 6); }
+    } else if (t.kind === 'merchant') { // Ishmaelite traders (Gn 37:25): buy with siclos
+      if (d > 7) t.cd = 0;
+      if (t.cd > 0 || d > 3.2) { if (d < 6 && t.cd > 0) promptText = 'Caravana ismaelita · afaste-se e volte para negociar de novo'; continue; }
+      t.cd = 1;
+      openMerchant(t);
+      return;
+    }
+  }
+  if (P.blessT > 0 && (P.blessT -= dt) <= 0) { P.st[P.bless.stat] -= P.bless.v; toast(`A bênção de Betel passou (${P.bless.name})`, '#c9b18a'); P.bless = null; }
   const rh = world.rahab; // Jericho: the scarlet cord in Rahab's window (Js 2:18-21)
   if (rh && !rh.used && Math.hypot(p.x - rh.x, p.z - rh.z) < 3.5) {
     rh.used = true;
@@ -2651,6 +2754,35 @@ function updateWorld(dt) {
   });
 }
 
+// Bethel: one blessing for 60 s (it does not stack: a new one replaces the old).
+const BLESSINGS = [
+  { name: 'Força de Sansão', stat: 'dmg', v: 0.3, text: '+30% de dano' },
+  { name: 'Pés de corça', stat: 'speed', v: 0.25, text: '+25% de velocidade', ref: 'Sl 18:33' },
+  { name: 'Maná em volta', stat: 'pickup', v: 2, text: 'coleta de muito longe' },
+  { name: 'Fonte de vida', stat: 'regen', v: 3, text: '+3 de vida por segundo' },
+];
+function bless() {
+  if (P.bless) P.st[P.bless.stat] -= P.bless.v;
+  P.bless = BLESSINGS[Math.floor(random() * BLESSINGS.length)];
+  P.st[P.bless.stat] += P.bless.v;
+  P.blessT = 60;
+  banner('assets/ui/flame.png', 'Bênção de Betel · 60 s', P.bless.name, '#ffe08f', P.bless.text, 'Gn 28:18');
+  chord([523, 659, 784, 1046], 'triangle');
+}
+// The caravan: a relic, a scroll and bread for siclos, dearer each time you buy.
+function openMerchant(t) {
+  const up = t.sold * 15;
+  const r = rollRelic(P.st.luck, random, 1, Object.keys(RELICS).filter((id) => isOpen('relic', id)));
+  const ids = Object.keys(SCROLLS).filter((id) => !P.banned.has(id));
+  const offersList = [
+    { kind: 'buy', what: 'relic', relic: r, price: 45 + up, t },
+    { kind: 'buy', what: 'scroll', id: ids[Math.floor(random() * ids.length)], tier: rollRarity(P.st.luck, random, 2), price: 25 + up, t },
+    { kind: 'buy', what: 'heal', price: 12 + up / 3, t },
+    { kind: 'leave' },
+  ];
+  openChoice('Caravana ismaelita', offersList, 'merchant');
+}
+
 // ---------- Choices (level-up cards and altars) ----------
 const cardCount = () => (P.hero === 'debora' ? 4 : 3) + (P.st.cards || 0); // Débora, the prophetess, sees one card more
 const offers = (n = cardCount()) => rollOffers({ weapons: P.weapons, luck: P.st.luck, locked: LOCKED, banned: P.banned }, random, n);
@@ -2705,7 +2837,32 @@ function renderChoice() {
     let text;
     let icon;
     const evoHint = (id) => (EVOLUTIONS[id] ? `<em class="evo">Evolui com ${RELICS[EVOLUTIONS[id].needs].name} no nível ${MAX_LEVEL}</em>` : '');
-    if (o.kind === 'weapon') {
+    if (o.kind === 'buy') {
+      const can = P.gold >= o.price;
+      flag = `${o.price} siclos`;
+      if (o.what === 'relic') {
+        tag = `Relíquia · ${RARITY[o.relic.tier].name}`;
+        name = RELICS[o.relic.id].name;
+        text = `${statText(RELICS[o.relic.id], o.relic.tier)} · ${RELICS[o.relic.id].ref}`;
+        icon = ICON.relic[o.relic.id];
+      } else if (o.what === 'scroll') {
+        tag = `Rolo · ${RARITY[o.tier].name}`;
+        name = SCROLLS[o.id].name;
+        text = `${statText(SCROLLS[o.id], o.tier)}<ul class="delta">${scrollDelta(SCROLLS[o.id], o.tier)}</ul>`;
+        icon = ICON.scrolls[o.id];
+      } else {
+        tag = 'Provisão';
+        name = 'Pão e água';
+        text = 'Recupera metade da vida.';
+        icon = ICON.pickup.pao;
+      }
+      if (!can) { b.classList.add('poor'); text += `<em class="evo">Faltam ${o.price - P.gold} siclos</em>`; }
+    } else if (o.kind === 'leave') {
+      tag = 'Caravana';
+      name = 'Seguir viagem';
+      text = 'Não comprar nada agora. Volte depois: a caravana fica aqui.';
+      icon = 'assets/ui/wing.png';
+    } else if (o.kind === 'weapon') {
       tag = 'Arma';
       flag = 'Nova';
       name = WEAPONS[o.id].name;
@@ -2746,6 +2903,25 @@ function pick(i) {
   if (state !== 'choice' || !choice.offers[i]) return;
   const o = choice.offers[i];
   if (choice.banning) return banOffer(i);
+  if (o.kind === 'leave') { choice = null; return resume(); }
+  if (o.kind === 'buy') {
+    if (P.gold < o.price) { beep(180, 0.12, 'square', 0.03); return toast('Siclos insuficientes', '#ff9a8a'); }
+    P.gold -= o.price;
+    o.t.sold++;
+    if (o.what === 'relic') {
+      applyEntry(P.st, RELICS[o.relic.id], o.relic.tier);
+      P.relics.push(o.relic);
+      relicBanner(o.relic);
+    } else if (o.what === 'scroll') {
+      const before = P.st.maxHp;
+      applyEntry(P.st, SCROLLS[o.id], o.tier);
+      P.hp += P.st.maxHp - before;
+    } else P.hp = Math.min(P.st.maxHp, P.hp + P.st.maxHp * 0.5);
+    refreshWeapons();
+    chord([784, 988, 1175], 'triangle');
+    choice = null;
+    return resume();
+  }
   if (o.kind === 'weapon') P.weapons.push({ id: o.id, level: 1, timer: 0 });
   else if (o.kind === 'upgrade') P.weapons.find((w) => w.id === o.id).level++;
   else {
@@ -3360,6 +3536,176 @@ function updateCompass() {
     setText(el.firstChild, `${Math.round(Math.hypot(dx, dz))}m`);
   });
 }
+// ---------- Maps: the minimap (turns with the camera) and the whole map in the pause screen ----------
+// One picture of the terrain, drawn once from the map's own colours with light from the north-west.
+const MAP_R = B.radius + 4;
+const MAP_PX = 256;
+const mapImg = (() => {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = MAP_PX;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(MAP_PX, MAP_PX);
+  const c = new THREE.Color();
+  const cell = (2 * MAP_R) / MAP_PX;
+  for (let j = 0; j < MAP_PX; j++) {
+    for (let i = 0; i < MAP_PX; i++) {
+      const x = -MAP_R + (i + 0.5) * cell;
+      const z = -MAP_R + (j + 0.5) * cell;
+      const h = terrainH(x, z);
+      const k = (j * MAP_PX + i) * 4;
+      if (h < B.water || Math.hypot(x, z) > B.radius) {
+        c.set(h < B.water ? (B.water2?.shallow ?? 0x5fb0d0) : 0x3a2a1e).multiplyScalar(h < B.water - 2 ? 0.7 : 1);
+      } else {
+        const [gx, gz] = slope(x, z);
+        const ny = 1 / Math.hypot(gx, gz, 1);
+        c.set(B.ground(h, ny, Math.sin(x * 0.31) * Math.cos(z * 0.27), x, z));
+        c.multiplyScalar(clamp(1 + (gx + gz) * -0.35 + h * 0.012, 0.55, 1.35)); // hill shade
+      }
+      img.data[k] = c.r * 255;
+      img.data[k + 1] = c.g * 255;
+      img.data[k + 2] = c.b * 255;
+      img.data[k + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+})();
+// Explored ground (fog of war for the big map): 64 x 64 cells, lit up within 34 m of the hero.
+const FOG_N = 64;
+const explored = new Uint8Array(FOG_N * FOG_N);
+const fogCell = (2 * MAP_R) / FOG_N;
+function explore() {
+  const r = 34;
+  for (let j = Math.max(0, Math.floor((P.pos.z - r + MAP_R) / fogCell)); j <= Math.min(FOG_N - 1, Math.floor((P.pos.z + r + MAP_R) / fogCell)); j++) {
+    for (let i = Math.max(0, Math.floor((P.pos.x - r + MAP_R) / fogCell)); i <= Math.min(FOG_N - 1, Math.floor((P.pos.x + r + MAP_R) / fogCell)); i++) {
+      if (Math.hypot(-MAP_R + (i + 0.5) * fogCell - P.pos.x, -MAP_R + (j + 0.5) * fogCell - P.pos.z) < r) explored[j * FOG_N + i] = 1;
+    }
+  }
+}
+const seen = (x, z) => explored[clamp(Math.floor((z + MAP_R) / fogCell), 0, FOG_N - 1) * FOG_N + clamp(Math.floor((x + MAP_R) / fogCell), 0, FOG_N - 1)] === 1;
+// What the maps show: [thing, colour, shape, name for the legend]. always: shown before it is discovered.
+const THING_NAME = { vein: 'Veio de prata', fruit: 'Árvore com frutos', gideon: 'Jarro de Gideão', bethel: 'Pilar de Betel', merchant: 'Caravana ismaelita' };
+function mapMarks() {
+  const m = [];
+  for (const s of stones) m.push([s, s.done ? '#9a8f80' : '#f2c14e', 'diamond', 'Pedra do Memorial', true]);
+  for (const a of altars) if (!a.used) m.push([a, '#ff8a3d', 'dot', 'Altar de pedras']);
+  for (const w of world.wells) m.push([w, w.cd > 0 ? '#5a7a8a' : '#7fc6ff', 'dot', B.well[0]]);
+  for (const pd of world.pads) m.push([pd, '#9fe4ff', 'ring', 'Rocha de Horebe']);
+  for (const c of chests) if (!c.open) m.push([c, c.challenge ? '#c8243a' : c.free ? '#ffd66b' : '#b0743a', 'square', c.challenge ? 'Baú selado' : 'Baú de cedro']);
+  for (const t of world.things) {
+    if ((t.kind === 'vein' || t.kind === 'gideon') && t.used) continue;
+    m.push([t, { vein: '#dfe7ee', fruit: '#e05050', gideon: '#ffe08f', bethel: '#ffd66b', merchant: '#8fdc7a' }[t.kind], t.kind === 'merchant' ? 'square' : 'dot', THING_NAME[t.kind], t.kind === 'merchant']);
+  }
+  if (world.rahab && !world.rahab.used) m.push([world.rahab, '#e03a50', 'dot', 'Casa de Raabe']);
+  return m;
+}
+function drawMark(ctx, x, y, color, shape, size) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#1a0f0b';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (shape === 'diamond') { ctx.moveTo(x, y - size * 1.4); ctx.lineTo(x + size, y); ctx.lineTo(x, y + size * 1.4); ctx.lineTo(x - size, y); ctx.closePath(); }
+  else if (shape === 'square') ctx.rect(x - size, y - size, size * 2, size * 2);
+  else ctx.arc(x, y, size, 0, Math.PI * 2);
+  if (shape === 'ring') { ctx.lineWidth = 2.5; ctx.strokeStyle = color; ctx.stroke(); return; }
+  ctx.fill();
+  ctx.stroke();
+}
+const mini = $('minimap').getContext('2d');
+let miniT = 0;
+function updateMinimap(dt) {
+  if ((miniT -= dt) > 0) return;
+  miniT = 1 / 20;
+  explore();
+  const W = mini.canvas.width;
+  const VIEW = 60; // metres from the centre to the edge
+  const k = W / 2 / VIEW;
+  mini.save();
+  mini.clearRect(0, 0, W, W);
+  mini.beginPath();
+  mini.arc(W / 2, W / 2, W / 2 - 1, 0, Math.PI * 2);
+  mini.clip();
+  mini.fillStyle = '#2a1a12';
+  mini.fillRect(0, 0, W, W);
+  mini.translate(W / 2, W / 2);
+  mini.rotate(yaw); // the camera's forward is up
+  const px = P.pos.x;
+  const pz = P.pos.z;
+  mini.imageSmoothingEnabled = false;
+  mini.drawImage(mapImg, (-MAP_R - px) * k, (-MAP_R - pz) * k, 2 * MAP_R * k, 2 * MAP_R * k);
+  mini.fillStyle = '#d6453d';
+  for (let i = 0; i < E.n; i++) {
+    const x = (E.x[i] - px) * k;
+    const y = (E.z[i] - pz) * k;
+    if (x * x + y * y < (W / 2) ** 2) mini.fillRect(x - 1, y - 1, E.elite[i] ? 4 : 2, E.elite[i] ? 4 : 2);
+  }
+  for (const [o, color, shape] of mapMarks()) {
+    let x = (o.x - px) * k;
+    let y = (o.z - pz) * k;
+    const d = Math.hypot(x, y);
+    const edge = W / 2 - 7;
+    if (d > edge) { if (shape !== 'diamond') continue; x *= edge / d; y *= edge / d; } // stones stay on the rim, pointing the way
+    drawMark(mini, x, y, color, shape, shape === 'diamond' ? 4.5 : 3.5);
+  }
+  if (boss.idx >= 0) drawMark(mini, (E.x[boss.idx] - px) * k, (E.z[boss.idx] - pz) * k, '#e5534b', 'square', 6);
+  mini.restore();
+  mini.save(); // the hero: an arrow the way they face
+  mini.translate(W / 2, W / 2);
+  mini.rotate(yaw - Math.atan2(P.faceX, P.faceZ) + Math.PI);
+  mini.fillStyle = '#fff1b8';
+  mini.strokeStyle = '#1a0f0b';
+  mini.lineWidth = 2;
+  mini.beginPath();
+  mini.moveTo(0, -7);
+  mini.lineTo(5, 5);
+  mini.lineTo(0, 2);
+  mini.lineTo(-5, 5);
+  mini.closePath();
+  mini.stroke();
+  mini.fill();
+  mini.restore();
+}
+// The whole map (pause): explored ground only, everything found on it, and a legend.
+function renderBigMap() {
+  const cv = $('bigmap');
+  const ctx = cv.getContext('2d');
+  const W = cv.width;
+  const k = W / (2 * MAP_R);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(mapImg, 0, 0, W, W);
+  ctx.fillStyle = 'rgba(26, 15, 11, 0.86)';
+  for (let j = 0; j < FOG_N; j++) for (let i = 0; i < FOG_N; i++) if (!explored[j * FOG_N + i]) ctx.fillRect(Math.floor(i * fogCell * k), Math.floor(j * fogCell * k), Math.ceil(fogCell * k) + 1, Math.ceil(fogCell * k) + 1);
+  const found = {};
+  for (const [o, color, shape, name, always] of mapMarks()) {
+    if (!always && !seen(o.x, o.z)) continue;
+    drawMark(ctx, (o.x + MAP_R) * k, (o.z + MAP_R) * k, color, shape, shape === 'diamond' ? 6 : 4.5);
+    const f = (found[name] ??= { color, shape, n: 0 });
+    f.n++;
+  }
+  const ax = (P.pos.x + MAP_R) * k;
+  const ay = (P.pos.z + MAP_R) * k;
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.rotate(-Math.atan2(P.faceX, P.faceZ) + Math.PI);
+  ctx.fillStyle = '#fff1b8';
+  ctx.strokeStyle = '#1a0f0b';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, -9);
+  ctx.lineTo(6, 6);
+  ctx.lineTo(0, 3);
+  ctx.lineTo(-6, 6);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+  ctx.restore();
+  const pct = Math.round((explored.reduce((a, b) => a + b, 0) / (Math.PI * (B.radius / fogCell) ** 2)) * 100);
+  $('map-legend').innerHTML = `<h3>Descoberto · ${Math.min(100, pct)}% do mapa</h3>${Object.entries(found).map(([name, f]) =>
+    `<div><i style="background:${f.color}" class="${f.shape}"></i>${name}<b>×${f.n}</b></div>`).join('')}
+    <p>Você só vê o que já esteve por perto, menos as Pedras do Memorial e a caravana.</p>`;
+}
+$('map-btn').onclick = () => { $('pause-map').hidden = !$('pause-map').hidden; if (!$('pause-map').hidden) renderBigMap(); };
+
 let fps = 60;
 let slotsKey = '';
 function updateHud() {
@@ -3404,6 +3750,7 @@ function updateHud() {
   hud.hurt.style.opacity = P.hurtT > 0 ? 1 : 0;
   updateCompass();
   updateChestTags();
+  if (runStarted && state === 'play') updateMinimap(1 / 60);
 }
 
 let last = performance.now();
@@ -3471,7 +3818,7 @@ window.arm = (ids, level = 1) => {
 };
 // Debug: poke at the run from the console, e.g. dev.look(Math.PI) or dev.spawnBoss().
 window.dev = {
-  P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, cfg, scene, ASSETS, profile, saveProfile,
+  P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, cfg, scene, ASSETS, profile, saveProfile, world,
   look: (y, p = pitch) => { yaw = y; pitch = p; },
   // Give a relic, e.g. dev.relic('pedras'); open the nearest closed chest as if touched.
   relic: (id, tier = 2) => { const r = { id, tier: RELICS[id].flat ? RELICS[id].tier : tier }; applyEntry(P.st, RELICS[id], r.tier); P.relics.push(r); refreshWeapons(); return P.relics.map((x) => x.id); },

@@ -34,12 +34,40 @@ export function buildWorld(scene, id, random, PROPS) {
   const fadeMat = M.toon(0xffffff, { fade: true, grain: true });
   const placed = []; // landmarks: ruins, trees and rocks keep clear of them
   const obstacles = [];
+  const S = B.radius / 90; // the maps were first laid out ~90 m wide: distances and counts scale with them
+  const n2 = (n) => Math.round(n * S * S); // twice the area, twice the things
   const inside = (x, z, k) => Math.hypot(x, z) < B.radius * k;
-  const dry = (x, z, m) => H(x, z) > B.water + m;
+  const slopeAt = (x, z) => Math.hypot(H(x + 0.3, z) - H(x - 0.3, z), H(x, z + 0.3) - H(x, z - 0.3)) / 0.6;
+  const dry = (x, z, m) => H(x, z) > B.water + m && slopeAt(x, z) < 0.6; // dry, level enough to stand a thing on
   const shallow = (x, z) => H(x, z) < B.water - 0.15 && H(x, z) > B.water - 1.0;
   const clear = (x, z, gap) => placed.every((o) => Math.hypot(o.x - x, o.z - z) > gap)
     && obstacles.every((o) => Math.hypot(o.x - x, o.z - z) > o.r + 1.5);
-  function spot(minD, maxD, gap, test = (x, z) => dry(x, z, 0.5)) {
+  // Ground you can walk to from the start without climbing a rock face (2 m cells): stones, chests,
+  // altars, wells and springs only go there, never on a step that no ramp reaches.
+  const RC = 2;
+  const RN = Math.ceil((2 * B.radius) / RC);
+  const reach = new Uint8Array(RN * RN);
+  {
+    const cellOf = (x, z) => Math.floor((z + B.radius) / RC) * RN + Math.floor((x + B.radius) / RC);
+    const open = (i) => {
+      const x = -B.radius + ((i % RN) + 0.5) * RC;
+      const z = -B.radius + (Math.floor(i / RN) + 0.5) * RC;
+      return Math.hypot(x, z) < B.radius - 2 && H(x, z) > B.water - 0.9 && slopeAt(x, z) < 1.0;
+    };
+    const queue = [cellOf(0, 0)];
+    reach[queue[0]] = 1;
+    while (queue.length) {
+      const i = queue.pop();
+      const cx = i % RN;
+      for (const j of [cx > 0 ? i - 1 : -1, cx < RN - 1 ? i + 1 : -1, i - RN, i + RN]) {
+        if (j < 0 || j >= RN * RN || reach[j]) continue;
+        reach[j] = 2; // seen
+        if (open(j)) { reach[j] = 1; queue.push(j); }
+      }
+    }
+  }
+  const reachable = (x, z) => reach[Math.floor((z + B.radius) / RC) * RN + Math.floor((x + B.radius) / RC)] === 1;
+  function spot(minD, maxD, gap, test = (x, z) => dry(x, z, 0.5) && reachable(x, z)) {
     for (let t = 0; t < 400; t++) {
       const a = random() * Math.PI * 2;
       const r = minD + random() * (maxD - minD);
@@ -63,16 +91,17 @@ export function buildWorld(scene, id, random, PROPS) {
   }
 
   // ---- Terrain height map (water depth), then the terrain itself ----
+  const TH = 176; // the terrain spans [-176, 176] (models.js reads the water depth over the same square)
   const HM = 512;
   const hm = new Uint16Array(HM * HM);
   for (let j = 0; j < HM; j++) {
-    for (let i = 0; i < HM; i++) hm[j * HM + i] = THREE.DataUtils.toHalfFloat(H(-128 + ((i + 0.5) * 256) / HM, -128 + ((j + 0.5) * 256) / HM));
+    for (let i = 0; i < HM; i++) hm[j * HM + i] = THREE.DataUtils.toHalfFloat(H(-TH + ((i + 0.5) * 2 * TH) / HM, -TH + ((j + 0.5) * 2 * TH) / HM));
   }
   const heightTex = new THREE.DataTexture(hm, HM, HM, THREE.RedFormat, THREE.HalfFloatType);
   heightTex.magFilter = heightTex.minFilter = THREE.LinearFilter;
   heightTex.needsUpdate = true;
   {
-    const geo = new THREE.PlaneGeometry(256, 256, 128, 128).rotateX(-Math.PI / 2);
+    const geo = new THREE.PlaneGeometry(2 * TH, 2 * TH, 240, 240).rotateX(-Math.PI / 2); // a vertex every ~1.5 m: crisp cliff edges
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) pos.setY(i, H(pos.getX(i), pos.getZ(i)));
     const g = geo.toNonIndexed();
@@ -116,9 +145,10 @@ export function buildWorld(scene, id, random, PROPS) {
       m.receiveShadow = true;
       waters.push(m);
     };
-    ribbon(-128, 65, waterMat);
-    ribbon(65, 71, M.toon(0xffffff, { vc: false, water: { ...water, fall: true }, transparent: true, side: THREE.DoubleSide }));
-    ribbon(71, 128, waterMat);
+    const lx = B.ledgeX;
+    ribbon(-TH, lx - 3, waterMat);
+    ribbon(lx - 3, lx + 3, M.toon(0xffffff, { vc: false, water: { ...water, fall: true }, transparent: true, side: THREE.DoubleSide }));
+    ribbon(lx + 3, TH, waterMat);
   } else if (B.water > -20) { // the sea, or Jericho's spring pool
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(900, 900).rotateX(-Math.PI / 2), waterMat);
     plane.position.y = B.water;
@@ -140,7 +170,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const cloudGeos = [0, 1, 2].map((k) => geo(`prop_cloud${k}`));
   const clouds = Array.from({ length: 18 }, (_, k) => {
     const m = new THREE.Mesh(cloudGeos[k % 3], cloudMat);
-    m.position.set((random() - 0.5) * 420, 40 + random() * 22, (random() - 0.5) * 420);
+    m.position.set((random() - 0.5) * 560, 40 + random() * 22, (random() - 0.5) * 560);
     m.scale.setScalar(1 + random() * 1.3);
     m.rotation.y = random() * 6;
     scene.add(m);
@@ -154,7 +184,7 @@ export function buildWorld(scene, id, random, PROPS) {
     const a = (k / n) * Math.PI * 2;
     return { a, x: C.x + Math.cos(a) * (C.r + extra), z: C.z + Math.sin(a) * (C.r + extra) };
   };
-  if (C) for (let k = 0; k < 14; k++) placed.push(wallAt(k, 14));
+  if (C) for (let k = 0; k < 20; k++) placed.push(wallAt(k, 20));
   const stones = [];
   const pileGeo = geo('memorial');
   const a0 = random() * Math.PI * 2;
@@ -163,10 +193,10 @@ export function buildWorld(scene, id, random, PROPS) {
     let z = 0;
     for (let t = 0; t < 60; t++) {
       const a = a0 + (k * Math.PI * 2) / 3 + (random() - 0.5) * 0.6;
-      const r = 38 + random() * 14;
+      const r = (38 + random() * 14) * S;
       x = Math.cos(a) * r;
       z = Math.sin(a) * r;
-      if (dry(x, z, 0.8) && Math.abs(z - (B.brookZ?.(x) ?? 1e9)) > 5) break;
+      if (dry(x, z, 0.8) && reachable(x, z) && Math.abs(z - (B.brookZ?.(x) ?? 1e9)) > 5) break;
     }
     const y = H(x, z);
     const pile = new THREE.Mesh(pileGeo, fadeMat);
@@ -185,7 +215,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const altarGeo = geo('altar');
   const flameGeo = geo('flame');
   const flameMat = new THREE.MeshBasicMaterial({ vertexColors: true });
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; k < n2(3); k++) {
     const s = spot(20, B.radius * 0.8, 14);
     if (!s) continue;
     const y = H(s.x, s.z);
@@ -202,7 +232,7 @@ export function buildWorld(scene, id, random, PROPS) {
 
   // Wells (or springs): drink to heal; they fill again after a while.
   const wells = [];
-  for (let k = 0; k < 2; k++) {
+  for (let k = 0; k < 3; k++) {
     const s = B.oasis && k === 0 ? { x: B.oasis.x + 8, z: B.oasis.z + 2 } : spot(18, B.radius * 0.75, 16); // Elisha's spring by the pool
     if (!s) continue;
     const y = H(s.x, s.z);
@@ -213,6 +243,147 @@ export function buildWorld(scene, id, random, PROPS) {
     obstacles.push({ x: s.x, z: s.z, r: 1.25, top: y + 0.95 });
     placed.push(s);
     wells.push({ ...s, y, p: 0, cd: 0 });
+  }
+
+  // Rocks of Horeb (Êx 17:6): a spring at the foot of a cliff; stepping on it throws you up onto the step above.
+  const pads = [];
+  const padMat = new THREE.MeshBasicMaterial({ color: 0x9fe4ff, transparent: true, opacity: 0.55, depthWrite: false });
+  const spoutGeo = new THREE.CylinderGeometry(0.35, 0.55, 2.4, 8, 1, true).translate(0, 1.2, 0);
+  const ringGeoP = new THREE.RingGeometry(0.9, 1.3, 16).rotateX(-Math.PI / 2);
+  for (let k = 0, t = 0; k < Math.round(4 * S * S) && t < 4000; t++) {
+    const a = random() * Math.PI * 2;
+    const r = 14 + random() * (B.radius * 0.88 - 14);
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    if (!dry(x, z, 0.5) || slopeAt(x, z) > 0.3 || !reachable(x, z) || !clear(x, z, 10)) continue;
+    const h0 = H(x, z);
+    let best = 0;
+    let dx = 0;
+    let dz = 0;
+    for (let q = 0; q < 16; q++) { // the highest step within 6 m, and which way it is
+      const b = (q / 16) * Math.PI * 2;
+      const dh = H(x + Math.cos(b) * 6, z + Math.sin(b) * 6) - h0;
+      if (dh > best) { best = dh; dx = Math.cos(b); dz = Math.sin(b); }
+    }
+    if (best < 2.6 || best > 10) continue;
+    const rock = M.solid(geo('prop_sandstone'), fadeMat);
+    rock.position.set(x, h0 - 0.35, z);
+    rock.scale.set(0.95, 0.4, 0.95);
+    const spout = new THREE.Mesh(spoutGeo, padMat);
+    spout.position.set(x, h0 + 0.1, z);
+    const ring = new THREE.Mesh(ringGeoP, padMat);
+    ring.position.set(x, h0 + 0.08, z);
+    scene.add(rock, spout, ring);
+    placed.push({ x, z });
+    pads.push({ x, z, y: h0, dx, dz, up: best, spout, cd: 0 });
+    k++;
+  }
+
+  // ---- Things to use on the way (see updateWorld in main.js) ----
+  // Silver veins to mine for siclos, fruit trees that heal and grow back, Gideon's jars that blind the horde
+  // (Jz 7:20), Jacob's pillar at Bethel that blesses for a minute (Gn 28:18), and a caravan of Ishmaelite
+  // traders who sell for siclos (Gn 37:25).
+  const things = [];
+  const silverMat = M.toon(0xaab6c6);
+  const shineMat = new THREE.MeshBasicMaterial({ color: 0xf2f8ff });
+  for (let k = 0; k < n2(5); k++) {
+    const s = spot(16, B.radius * 0.9, 12);
+    if (!s) continue;
+    const y = H(s.x, s.z);
+    const g = new THREE.Group();
+    g.position.set(s.x, y - 0.2, s.z);
+    g.rotation.y = random() * 6;
+    g.add(M.solid(geo('prop_boulder'), silverMat));
+    for (let q = 0; q < 5; q++) {
+      const c = M.solid(geo('decor_glint'), shineMat);
+      c.position.set((random() - 0.5) * 1.4, 0.5 + random() * 0.7, (random() - 0.5) * 1.4);
+      c.scale.setScalar(1.2 + random());
+      g.add(c);
+    }
+    g.scale.setScalar(1.15);
+    scene.add(g);
+    obstacles.push({ x: s.x, z: s.z, r: 1.1, top: y + 1.2 });
+    placed.push(s);
+    things.push({ kind: 'vein', x: s.x, z: s.z, y, mesh: g, p: 0, used: false });
+  }
+  const fruitGeo = new THREE.IcosahedronGeometry(0.2, 0);
+  const green = !sea && id !== 'ossos';
+  for (let k = 0; k < n2(4); k++) {
+    const s = spot(14, B.radius * 0.88, 12);
+    if (!s) continue;
+    const y = H(s.x, s.z);
+    const tree = M.solid(geo(green ? 'prop_bigTree' : 'prop_palm'), fadeMat);
+    tree.position.set(s.x, y - 0.15, s.z);
+    tree.rotation.y = random() * 6;
+    const fruit = new THREE.Group();
+    const fm = M.toon(green ? (k % 2 ? 0xd7303a : 0x6a3a7a) : 0x8a4a22); // pomegranates and figs; dates on the palms
+    for (let q = 0; q < 9; q++) {
+      const f = new THREE.Mesh(fruitGeo, fm);
+      const a = random() * Math.PI * 2;
+      f.position.set(Math.cos(a) * (0.8 + random() * 1.2), green ? 2.4 + random() * 1.6 : 4.6 + random() * 0.5, Math.sin(a) * (0.8 + random() * 1.2));
+      fruit.add(f);
+    }
+    fruit.position.copy(tree.position);
+    scene.add(tree, fruit);
+    obstacles.push({ x: s.x, z: s.z, r: 0.7, top: y + 6 });
+    placed.push(s);
+    things.push({ kind: 'fruit', x: s.x, z: s.z, y, fruit, cd: 0 });
+  }
+  const gideonMat = M.toon(0xd9a066, { emissive: 0x6a3a10 });
+  for (let k = 0; k < n2(6); k++) {
+    const s = spot(12, B.radius * 0.88, 8);
+    if (!s) continue;
+    const y = H(s.x, s.z);
+    const jar = M.solid(geo('jar'), gideonMat);
+    jar.position.set(s.x, y, s.z);
+    jar.scale.setScalar(1.6);
+    const f = new THREE.Mesh(flameGeo, flameMat);
+    f.position.set(s.x, y + 1.3, s.z);
+    f.scale.setScalar(0.7);
+    scene.add(jar, f);
+    placed.push(s);
+    things.push({ kind: 'gideon', x: s.x, z: s.z, y, mesh: jar, flame: f, used: false });
+  }
+  for (let k = 0; k < 2; k++) {
+    const s = spot(24, B.radius * 0.8, 20);
+    if (!s) continue;
+    const y = H(s.x, s.z);
+    const pillar = M.solid(geo('prop_obelisk'), fadeMat);
+    pillar.position.set(s.x, y - 0.2, s.z);
+    pillar.scale.set(0.55, 0.42, 0.55);
+    const f = new THREE.Mesh(flameGeo, flameMat);
+    f.position.set(s.x, y + 3.1, s.z);
+    scene.add(pillar, f);
+    obstacles.push({ x: s.x, z: s.z, r: 0.7, top: y + 3 });
+    placed.push(s);
+    things.push({ kind: 'bethel', x: s.x, z: s.z, y, flame: f, p: 0, cd: 0 });
+  }
+  {
+    const s = spot(30, B.radius * 0.7, 24);
+    if (s) {
+      const rot = random() * 6;
+      const c = Math.cos(rot);
+      const sn = Math.sin(rot);
+      const at = (lx, lz) => [s.x + lx * c + lz * sn, s.z - lx * sn + lz * c];
+      const tent = M.solid(geo('prop_tentI'), fadeMat);
+      const [tx, tz] = at(0, -2.5);
+      tent.position.set(tx, H(tx, tz) - 0.1, tz);
+      tent.rotation.y = rot;
+      const cart = M.solid(geo('prop_cart'), fadeMat);
+      const [cx, cz] = at(3.2, 0.5);
+      cart.position.set(cx, H(cx, cz) - 0.1, cz);
+      cart.rotation.y = rot + 1.2;
+      scene.add(tent, cart);
+      for (let q = 0; q < 4; q++) {
+        const [jx, jz] = at(-2.2 + (q % 2) * 0.8, 1 + Math.floor(q / 2) * 0.8);
+        const j = M.solid(geo('jar'), fadeMat);
+        j.position.set(jx, H(jx, jz), jz);
+        scene.add(j);
+      }
+      obstacles.push({ x: tx, z: tz, r: 1.5, top: H(tx, tz) + 2.2 }, { x: cx, z: cz, r: 1.2, top: H(cx, cz) + 1 });
+      placed.push(s);
+      things.push({ kind: 'merchant', x: s.x, z: s.z, y: H(s.x, s.z), sold: 0, cd: 0 });
+    }
   }
 
   // Chests: cedar (costs siclos), the champion's (free) and the challenge chest (sealed: opening it
@@ -235,13 +406,13 @@ export function buildWorld(scene, id, random, PROPS) {
     chests.push(c);
     return c;
   }
-  for (let k = 0; k < 8; k++) {
+  for (let k = 0; k < n2(8); k++) {
     const s = spot(12, B.radius * 0.8, 8);
     if (!s) continue;
     placed.push(s);
     addChest(s.x, s.z, false);
   }
-  for (let k = 0; k < 2; k++) {
+  for (let k = 0; k < 3; k++) {
     const s = spot(28, B.radius * 0.8, 16);
     if (!s) continue;
     placed.push(s);
@@ -268,7 +439,7 @@ export function buildWorld(scene, id, random, PROPS) {
   for (const lx of [-1.45, 1.45]) for (const lz of [-1.1, 0, 1.1]) STAIRS.push([lx, lz, 0.35, 1.5]);
   const WALL = [-1.6, -0.55, 0.55, 1.6].map((lx) => [lx, 0, 0.45, 1.4]);
   function scatter(n, key, g, r, height, sMin, sMax, { minD = 10, test, gap = 5 } = {}) {
-    for (let k = 0; k < n; k++) {
+    for (let k = 0; k < n2(n); k++) {
       const p = spot(minD, B.radius * 0.97, gap, test);
       if (!p) continue;
       const s = sMin + random() * (sMax - sMin);
@@ -306,20 +477,20 @@ export function buildWorld(scene, id, random, PROPS) {
     const lx = B.ledgeX;
     const bz = B.brookZ(lx);
     for (const dz of [-7.5, 7.5]) build('cliff', geo('prop_cliff'), lx, bz + dz, Math.PI / 2, [[-3, 0, 2, 8], [0, 0, 2, 8], [3, 0, 2, 8]]);
-    for (let z = bz - 60; z < bz + 60; z += 17) {
+    for (let z = bz - 90; z < bz + 90; z += 17) {
       if (Math.abs(z - bz) < 14) continue;
       build('cliff', geo('prop_cliff'), lx, z + random() * 4, Math.PI / 2 + (random() - 0.5) * 0.3, [[-3, 0, 2, 8], [0, 0, 2, 8], [3, 0, 2, 8]]);
     }
     placed.push({ x: lx, z: bz });
     // Stone bridge over the brook.
-    const bx = -30;
+    const bx = -42;
     const bzb = B.brookZ(bx);
     const deckY = Math.max(H(bx, bzb - 4.5), H(bx, bzb + 4.5)) + 0.1;
     piece('bridge', geo('prop_bridge'), bx, bzb, -Math.atan(0.32 * Math.cos(bx * 0.04)), 1, deckY); // across the brook
     for (let u = -4; u <= 4; u += 1.3) collide(bx, bzb + u, 1.2, deckY + 0.15);
     placed.push({ x: bx, z: bzb });
-    for (let k = 0; k < 4; k++) {
-      const s = spot(14, 70, 22);
+    for (let k = 0; k < n2(4); k++) {
+      const s = spot(14, 70 * S, 22);
       if (s) ruinSite(s.x, s.z);
     }
     scatter(5, 'wall', geo('prop_wall'), 0.9, 1.4, 0.9, 1.1, { gap: 8 });
@@ -331,16 +502,16 @@ export function buildWorld(scene, id, random, PROPS) {
     scatter(18, 'boulder', geo('prop_boulder'), 1.1, 1.1, 0.9, 1.7);
     scatter(14, 'sheep', geo('prop_sheep'), 0.45, 0.8, 0.9, 1.1, { minD: 8 });
     const FENCE = [[-1.5, 0, 0.25, 1], [0, 0, 0.25, 1], [1.5, 0, 0.25, 1]];
-    for (let k = 0; k < 10; k++) { // sheepfolds
-      const s = spot(14, 70, 6);
+    for (let k = 0; k < n2(10); k++) { // sheepfolds
+      const s = spot(14, 70 * S, 6);
       if (s) build('fence', geo('prop_fence'), s.x, s.z, random() * 6.28, FENCE);
     }
-    for (let k = 0; k < 2; k++) {
-      const s = spot(20, 70, 10);
+    for (let k = 0; k < n2(2); k++) {
+      const s = spot(20, 70 * S, 10);
       if (s) build('cart', geo('prop_cart'), s.x, s.z, random() * 6.28, [[0, 0, 1.2, 1.0]]);
     }
     for (let k = 0; k < 5; k++) { // five smooth stones out of the brook (1 Sm 17:40)
-      const x = -62 + k * 28 + (random() - 0.5) * 8;
+      const x = -88 + k * 40 + (random() - 0.5) * 8;
       const z = B.brookZ(x) + (random() - 0.5) * 2;
       const y = H(x, z) + 0.05;
       const m = M.solid(geo('decor_glint'), flatMat);
@@ -349,24 +520,25 @@ export function buildWorld(scene, id, random, PROPS) {
       scene.add(m);
       glints.push({ x, y, z, m, got: false });
     }
-    for (let k = 0; k < 12; k++) { // the two camps on the hills (1 Sm 17:3)
-      const x = -66 + k * 11 + random() * 4;
-      for (const [key, z] of [['tentI', -80 - random() * 6], ['tentP', 80 + random() * 6]]) {
+    for (let k = 0; k < 14; k++) { // the two camps on the hilltops (1 Sm 17:3)
+      const x = -72 + k * 11 + random() * 4;
+      for (const [key, z] of [['tentI', B.brookZ(x) - 104 - random() * 6], ['tentP', B.brookZ(x) + 104 + random() * 6]]) {
+        if (!inside(x, z, 0.96) || slopeAt(x, z) > 0.5) continue;
         piece(key, geo(`prop_${key}`), x, z);
         collide(x, z, 1.5, H(x, z) + 2.2);
       }
     }
   } else if (sea) {
-    for (let k = 0; k < 2; k++) {
-      const s = spot(14, 40, 22);
+    for (let k = 0; k < 3; k++) {
+      const s = spot(14, 40 * S, 22);
       if (s) ruinSite(s.x, s.z);
     }
     // Ruins and sharp rocks standing in the turquoise shallows, each with a ring of foam.
     const foam = [];
     const wet = (x, z) => shallow(x, z);
     const inWater = (n, key, g, r, height, sMin, sMax) => {
-      for (let k = 0; k < n; k++) {
-        const p = spot(58, 84, 6, wet);
+      for (let k = 0; k < n2(n); k++) {
+        const p = spot(82, 116, 6, wet);
         if (!p) continue;
         const s = sMin + random() * (sMax - sMin);
         piece(key, g, p.x, p.z, random() * 6.28, s);
@@ -382,23 +554,23 @@ export function buildWorld(scene, id, random, PROPS) {
     scatter(26, 'palm', geo('prop_palm'), 0.45, 6, 0.85, 1.25);
     scatter(6, 'bigTree', geo('prop_bigTree'), 0.8, 7, 0.9, 1.15, { gap: 8 });
     scatter(5, 'obelisk', geo('prop_obelisk'), 0.9, 7, 0.9, 1.2);
-    scatter(2, 'colossus', geo('prop_colossus'), 1.9, 3.2, 1, 1.1, { minD: 20 });
+    scatter(2, 'colossus', geo('prop_colossus'), 1.9, 3.2, 1, 1.1, { minD: 20 * S });
     scatter(10, 'sandstone', geo('prop_sandstone'), 1.1, 1.0, 0.9, 1.7);
-    for (let k = 0; k < 2; k++) { // sphinxes watching the sea
-      const s = spot(20, 48, 18);
+    for (let k = 0; k < 3; k++) { // sphinxes watching the sea
+      const s = spot(20 * S, 70 * S, 18);
       if (!s) continue;
       build('sphinx', geo('prop_sphinx'), s.x, s.z, Math.atan2(s.x, s.z), [[0, -1.2, 1.2, 1.2], [0, 1.2, 1.1, 3.4], [0, 3.2, 0.7, 0.5]]);
       placed.push(s);
     }
-    for (let k = 0; k < 2; k++) {
-      const s = spot(14, 48, 10);
+    for (let k = 0; k < n2(2); k++) {
+      const s = spot(14, 70 * S, 10);
       if (s) build('cart', geo('prop_cart'), s.x, s.z, random() * 6.28, [[0, 0, 1.2, 1.0]]);
     }
     const pyrMat = M.toon(0xece6f2, { fog: false });
     for (let k = 0; k < 3; k++) {
       const pyr = M.solid(geo('prop_pyramid'), pyrMat);
       const a = 2.2 + k * 0.35;
-      pyr.position.set(Math.cos(a) * (190 + k * 30), B.water - 2, Math.sin(a) * (190 + k * 30));
+      pyr.position.set(Math.cos(a) * (250 + k * 34), B.water - 2, Math.sin(a) * (250 + k * 34));
       pyr.scale.set(70 - k * 15, 55 - k * 12, 70 - k * 15);
       pyr.castShadow = pyr.receiveShadow = false;
       scene.add(pyr);
@@ -406,25 +578,26 @@ export function buildWorld(scene, id, random, PROPS) {
   } else if (C) {
     // Jericho (Js 6): the walled city on its mound, two gates, fallen stretches you can climb, houses inside,
     // Rahab's house built into the wall; palms by the spring (Dt 34:3, "the city of palms"); Israel's camp.
-    const n = 14;
+    const n = 20;
     for (let k = 0; k < n; k++) {
       const w = wallAt(k, n);
       const rot = -w.a - Math.PI / 2; // along the ring
-      if (k === 0 || k === 7) {
+      if (k === 0 || k === 10) {
         build('gate', geo('prop_gate'), w.x, w.z, rot, [[-2.6, 0, 1.25, 6], [2.6, 0, 1.25, 6]]);
         gates.push({ x: C.x + Math.cos(w.a) * (C.r + 4), z: C.z + Math.sin(w.a) * (C.r + 4) });
-      } else if (k === 3 || k === 10 || k === 12) {
+      } else if (k === 4 || k === 14 || k === 17) {
         build('rubble', geo('prop_wallRubble'), w.x, w.z, rot, [[-2, 0, 0.9, 0.8], [0, 0, 0.9, 1.0], [2, 0, 0.9, 0.8]]);
       } else build('cityWall', geo('prop_cityWall'), w.x, w.z, rot, [[-2.2, 0, 1.0, 4.6], [0, 0, 1.0, 4.6], [2.2, 0, 1.0, 4.6]]);
-      if (k === 5) { // Rahab's house against the outside of the wall, its window toward the plain
+      if (k === 7) { // Rahab's house against the outside of the wall, its window toward the plain
         const h = wallAt(k, n, 2.4);
         build('rahab', geo('prop_rahab'), h.x, h.z, Math.atan2(Math.cos(w.a), Math.sin(w.a)), [[0, 0, 1.5, 2.4]]);
         rahab = { x: C.x + Math.cos(w.a) * (C.r + 4.4), z: C.z + Math.sin(w.a) * (C.r + 4.4), used: false };
       }
     }
-    for (let k = 0; k < 6; k++) { // houses inside
-      const a = (k / 6) * Math.PI * 2 + 0.4;
-      const r = 4 + (k % 2) * 3;
+    for (let k = 0; k < 13; k++) { // houses inside, in two rings round a small square, streets between them
+      const ring = k < 5 ? 0 : 1;
+      const a = ring ? ((k - 5) / 8) * Math.PI * 2 + 0.2 : (k / 5) * Math.PI * 2 + 0.6;
+      const r = ring ? 11.5 : 6;
       build('house', geo('prop_house'), C.x + Math.cos(a) * r, C.z + Math.sin(a) * r, -a, [[0, 0, 1.7, 2.6]]);
     }
     placed.push({ x: C.x, z: C.z });
@@ -440,58 +613,58 @@ export function buildWorld(scene, id, random, PROPS) {
     scatter(22, 'palm', geo('prop_palm'), 0.45, 6, 0.85, 1.25);
     scatter(6, 'olive', geo('prop_olive'), 0.6, 6, 0.9, 1.3);
     scatter(10, 'sandstone', geo('prop_sandstone'), 1.1, 1.0, 0.9, 1.7);
-    for (let k = 0; k < 2; k++) {
-      const s = spot(18, 70, 10);
+    for (let k = 0; k < n2(2); k++) {
+      const s = spot(18, 70 * S, 10);
       if (s) build('cart', geo('prop_cart'), s.x, s.z, random() * 6.28, [[0, 0, 1.2, 1.0]]);
     }
-    for (let k = 0; k < 9; k++) { // Israel's camp out on the plain (Js 6:11)
-      const a = 0.7 + k * 0.16;
-      const x = Math.cos(a) * (68 + (k % 2) * 5);
-      const z = Math.sin(a) * (68 + (k % 2) * 5);
+    for (let k = 0; k < 13; k++) { // Israel's camp out on the plain (Js 6:11)
+      const a = 0.62 + k * 0.12;
+      const x = Math.cos(a) * (70 + (k % 2) * 6);
+      const z = Math.sin(a) * (70 + (k % 2) * 6);
       if (!dry(x, z, 0.5)) continue;
       piece('tentI', geo('prop_tentI'), x, z);
       collide(x, z, 1.5, H(x, z) + 2.2);
     }
   } else {
     // Valley of dry bones (Ez 37): ruins, dead trees, great ribcages and skulls, heaps of bones, red rock.
-    for (let k = 0; k < 3; k++) {
-      const s = spot(14, 60, 22);
+    for (let k = 0; k < n2(3); k++) {
+      const s = spot(14, 60 * S, 22);
       if (s) ruinSite(s.x, s.z);
     }
     const RIBS = [];
     for (const lz of [-2.25, -0.75, 0.75, 2.25]) RIBS.push([0, lz, 1.0, 2.7], [-1.6, lz, 0.4, 1.8], [1.6, lz, 0.4, 1.8]);
-    for (let k = 0; k < 6; k++) {
-      const s = spot(16, 72, 14);
+    for (let k = 0; k < n2(6); k++) {
+      const s = spot(16, 72 * S, 14);
       if (!s) continue;
       build('ribcage', geo('prop_ribcage'), s.x, s.z, random() * 6.28, RIBS, 0.9 + random() * 0.4);
       placed.push(s);
     }
-    for (let k = 0; k < 2; k++) {
-      const s = spot(25, 70, 26);
+    for (let k = 0; k < 3; k++) {
+      const s = spot(25, 70 * S, 26);
       if (!s) continue;
       build('skull', geo('prop_skull'), s.x, s.z, Math.atan2(-s.x, -s.z), [[0, 0, 1.9, 2.4]], 1.1); // staring at the valley floor
       placed.push(s);
     }
-    for (let k = 0; k < 16; k++) { // big red boulders fallen from the valley walls
-      const s = spot(62, 84, 8);
+    for (let k = 0; k < n2(16); k++) { // big red boulders fallen from the cliffs
+      const s = spot(30, 112, 8);
       if (!s) continue;
       const sc = 1.8 + random() * 1.2;
       build('sandstone', geo('prop_sandstone'), s.x, s.z, random() * 6.28, [[0, 0, 1.1, 1.0]], sc);
       placed.push(s);
     }
     scatter(22, 'deadTree', geo('prop_deadTree'), 0.4, 4.5, 0.9, 1.4);
-    for (let k = 0; k < 18; k++) { // heaps of bones: the wind makes them stand up (Ez 37:9)
-      const s = spot(10, 76, 6);
+    for (let k = 0; k < n2(18); k++) { // heaps of bones: the wind makes them stand up (Ez 37:9)
+      const s = spot(10, 76 * S, 6);
       if (!s) continue;
       build('bonepile', geo('prop_bonepile'), s.x, s.z, random() * 6.28, [[0, 0, 0.7, 0.7]], 0.9 + random() * 0.6);
       bonePiles.push(s);
     }
-    for (let k = 0; k < 14; k++) {
-      const s = spot(12, 76, 5);
+    for (let k = 0; k < n2(14); k++) {
+      const s = spot(12, 76 * S, 5);
       if (s) build('tomb', geo('prop_tomb'), s.x, s.z, random() * 6.28, [[0, 0.2, 0.7, 0.3], [0, -1, 0.5, 1.3]]);
     }
-    for (let k = 0; k < 3; k++) {
-      const s = spot(14, 70, 10);
+    for (let k = 0; k < n2(3); k++) {
+      const s = spot(14, 70 * S, 10);
       if (s) build('cart', geo('prop_cart'), s.x, s.z, random() * 6.28, [[0, 0, 1.2, 1.0]]);
     }
     scatter(12, 'sandstone', geo('prop_sandstone'), 1.1, 1.0, 0.9, 1.8);
@@ -503,7 +676,7 @@ export function buildWorld(scene, id, random, PROPS) {
 
   // Cântaros (jars): walk into them for siclos.
   const jars = [];
-  for (let k = 0; k < 40; k++) {
+  for (let k = 0; k < n2(40); k++) {
     const s = spot(8, B.radius * 0.85, 3);
     if (s) jars.push({ ...s, y: H(s.x, s.z), broken: false, rot: random() * 6 });
   }
@@ -513,7 +686,7 @@ export function buildWorld(scene, id, random, PROPS) {
   // ---- Ground cover ----
   function decor(g, n, test, sMin = 0.8, sMax = 1.3, y = H) {
     const list = [];
-    for (let k = 0; k < n; k++) {
+    for (let k = 0; k < n2(n); k++) {
       const x = (random() * 2 - 1) * B.radius * 1.1;
       const z = (random() * 2 - 1) * B.radius * 1.1;
       if (test(x, z, H(x, z))) list.push({ x, y: y(x, z), z, s: sMin + random() * (sMax - sMin), rot: random() * 6 });
@@ -522,12 +695,13 @@ export function buildWorld(scene, id, random, PROPS) {
   }
   if (ela) {
     const bank = (x, z) => Math.abs(z - B.brookZ(x));
-    decor(geo('decor_grass'), 3200, (x, z, h) => bank(x, z) > 2.8 && h < 13);
-    decor(geo('decor_leaves'), 1100, (x, z, h) => bank(x, z) > 2.8 && h < 13);
-    for (const k of [0, 1, 2]) decor(geo(`decor_flower${k}`), 130, (x, z, h) => bank(x, z) > 3 && h < 10);
+    const level = (x, z) => slopeAt(x, z) < 0.9; // nothing grows on the rock faces
+    decor(geo('decor_grass'), 3200, (x, z, h) => bank(x, z) > 2.8 && h < 26 && level(x, z));
+    decor(geo('decor_leaves'), 1100, (x, z, h) => bank(x, z) > 2.8 && h < 26 && level(x, z));
+    for (const k of [0, 1, 2]) decor(geo(`decor_flower${k}`), 130, (x, z, h) => bank(x, z) > 3 && h < 24 && level(x, z));
     decor(geo('decor_pebble'), 320, (x, z) => bank(x, z) < 2.2, 0.6, 1.5);
     decor(geo('decor_reed'), 200, (x, z) => bank(x, z) > 2.2 && bank(x, z) < 3.4);
-    decor(geo('decor_lily'), 70, (x, z) => bank(x, z) < 1.8 && x < 64, 0.7, 1.2, (x) => H(x, B.brookZ(x)) + 0.47);
+    decor(geo('decor_lily'), 70, (x, z) => bank(x, z) < 1.8 && x < B.ledgeX - 4, 0.7, 1.2, (x) => H(x, B.brookZ(x)) + 0.47);
   } else if (sea) {
     const w = B.water;
     decor(geo('decor_shrub'), 260, (x, z, h) => h > w + 1);
@@ -546,9 +720,9 @@ export function buildWorld(scene, id, random, PROPS) {
     decor(geo('decor_drygrass'), 600, (x, z, h) => h > B.water + 1 && Math.hypot(x - C.x, z - C.z) > C.r + 3);
     decor(geo('decor_pebble'), 200, () => true, 0.6, 1.4);
   } else {
-    decor(geo('decor_drygrass'), 1600, (x, z, h) => h < 9);
-    decor(geo('decor_bone'), 500, (x, z, h) => h < 6, 0.8, 1.6);
-    decor(geo('decor_skull'), 90, (x, z, h) => h < 6, 0.8, 1.3);
+    decor(geo('decor_drygrass'), 1600, (x, z, h) => h < 20 && slopeAt(x, z) < 0.9);
+    decor(geo('decor_bone'), 500, (x, z, h) => h < 8 && slopeAt(x, z) < 0.9, 0.8, 1.6);
+    decor(geo('decor_skull'), 90, (x, z, h) => h < 8 && slopeAt(x, z) < 0.9, 0.8, 1.3);
     decor(geo('decor_pebble'), 300, (x, z) => Math.abs(x - B.wadi(z)) < 2.2, 0.6, 1.5);
     decor(geo('decor_shrub'), 120, (x, z, h) => h < 8, 0.6, 1.0);
   }
@@ -570,7 +744,9 @@ export function buildWorld(scene, id, random, PROPS) {
       a.flame.scale.set(1 + Math.sin(time * 11 + a.x) * 0.08, 1 + Math.sin(time * 9 + a.z) * 0.2, 1 + Math.cos(time * 10) * 0.08);
     }
     for (const c of chests) c.lid.rotation.x += ((c.open ? -1.9 : 0) - c.lid.rotation.x) * Math.min(1, dt * 8);
+    for (const t of things) if (t.flame) t.flame.scale.setScalar((t.kind === 'gideon' ? 0.7 : 1) * (1 + Math.sin(time * 11 + t.x) * 0.12));
+    for (const p of pads) p.spout.scale.set(1, 0.6 + 0.4 * Math.abs(Math.sin(time * 3 + p.x)) + (p.cd > 0 ? 2 * p.cd : 0), 1);
   }
 
-  return { B, terrainH: H, obstacles, stones, altars, wells, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, gates, rahab, update, horizon: skyMat.uniforms.horizon.value };
+  return { B, terrainH: H, slopeAt, obstacles, stones, altars, wells, pads, things, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, gates, rahab, update, horizon: skyMat.uniforms.horizon.value };
 }

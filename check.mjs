@@ -110,17 +110,26 @@ import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX
 }
 
 // Biomes: spawn and the ring where the memorial stones go are on dry land; the edge of the island is sea.
+// The maps are twice the old area; every one has rock faces to climb round and ramps that are walkable.
 {
+  for (const [id, b] of Object.entries(BIOMES)) {
+    assert.ok(b.radius >= 120, `${id}: map should be twice the old area`);
+    const sl = (x, z) => Math.hypot(b.terrain(x + 0.25, z) - b.terrain(x - 0.25, z), b.terrain(x, z + 0.25) - b.terrain(x, z - 0.25)) / 0.5;
+    let cliffs = 0;
+    for (let x = -b.radius; x < b.radius; x += 3) for (let z = -b.radius; z < b.radius; z += 3) if (Math.hypot(x, z) < b.radius - 4 && sl(x, z) > 1) cliffs++;
+    assert.ok(cliffs > 50, `${id}: no rock faces (${cliffs})`);
+    for (let r = 0; r < 12; r += 1) assert.ok(sl(r, 0) < 0.7, `${id}: spawn should be walkable`);
+  }
   for (const [id, b] of Object.entries(BIOMES)) {
     assert.ok(b.terrain(0, 0) > b.water + 0.5, `${id}: spawn under water`);
     for (let a = 0; a < Math.PI * 2; a += 0.1) {
-      for (const r of [38, 52]) assert.ok(b.terrain(Math.cos(a) * r, Math.sin(a) * r) > b.water + 0.5, `${id}: stone ring under water`);
+      for (const r of [38, 52].map((r) => (r * b.radius) / 90)) assert.ok(b.terrain(Math.cos(a) * r, Math.sin(a) * r) > b.water + 0.5, `${id}: stone ring under water`);
       assert.equal(typeof b.ground(1, 1, 0, Math.cos(a) * 30, Math.sin(a) * 30), 'number');
     }
   }
-  assert.ok(BIOMES.mar.terrain(95, 0) < BIOMES.mar.water, 'island edge should be sea');
+  assert.ok(BIOMES.mar.terrain(BIOMES.mar.radius, 0) < BIOMES.mar.water, 'island edge should be sea');
   for (let a = 0; a < Math.PI * 2; a += 0.2) { // shallows: wadeable ring around the island
-    const h = BIOMES.mar.terrain(Math.cos(a) * 75, Math.sin(a) * 75);
+    const h = BIOMES.mar.terrain(Math.cos(a) * 100, Math.sin(a) * 100);
     assert.ok(h < BIOMES.mar.water && h > BIOMES.mar.water - 0.9, `shallows at ${a.toFixed(1)}: ${h}`);
   }
 }

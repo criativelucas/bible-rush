@@ -353,42 +353,84 @@ export const smooth = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
-const brookZ = (x) => 8 * Math.sin(x * 0.04) + 4;
-const wadi = (z) => 9 * Math.sin(z * 0.045) - 6;
-const CITY = { x: -20, z: -12, r: 12 }; // Jericho: its walls on their mound (a tell)
-const OASIS = { x: 24, z: 18 }; // Elisha's spring (2 Rs 2:21)
+// Terraces: flat steps joined by steep rock faces. sharp: the share of each step that is the face
+// (the rest is flat). Where the ground rises slowly, a small share still makes a wall you cannot walk up.
+export const terrace = (v, step, sharp = 0.26) => {
+  const k = Math.floor(v / step);
+  return (k + smooth(1 - sharp, 1, v / step - k)) * step;
+};
+// 1 on the segment a-b (width w), fading to 0 away from it: ramps cut through the terraces.
+export function along(x, z, ax, az, bx, bz, w) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)));
+  return Math.exp(-((x - ax - dx * t) ** 2 + (z - az - dz * t) ** 2) / (w * w));
+}
+const ramps = (x, z, list, w = 4.2) => list.reduce((m, r) => Math.max(m, along(x, z, ...r, w)), 0);
+// A slope you can climb, and the stepped one you cannot: ramps blend back to the smooth slope.
+const stepped = (v, step, x, z, list) => {
+  const t = terrace(v, step);
+  return t + (v - t) * ramps(x, z, list);
+};
+const brookZ = (x) => 11 * Math.sin(x * 0.028) + 5;
+const wadi = (z) => 12 * Math.sin(z * 0.032) - 8;
+const CITY = { x: -28, z: -17, r: 17 }; // Jericho: its walls on their mound (a tell)
+const OASIS = { x: 34, z: 25 }; // Elisha's spring (2 Rs 2:21)
+const jWadis = (x, z) => Math.max(Math.exp(-((z - 30 * Math.sin(x * 0.02) + 62) ** 2) / 22) * smooth(CITY.r + 10, CITY.r + 20, Math.hypot(x - CITY.x, z - CITY.z)),
+  Math.exp(-((x - 18 * Math.sin(z * 0.03) - 84) ** 2) / 22)); // Jericho's two dry riverbeds
+// Ramps (start x, z → end x, z), from the valley floor up through the steps.
+const ELA_RAMPS = [
+  [-84, -30, -84, -120], [-18, -24, -26, -122], [44, -26, 52, -120], // up to Israel's camp, north
+  [-56, 34, -60, 124], [12, 30, 4, 124], [72, 32, 64, 116], // up to the Philistines, south
+  [58, -12, 58, -46], [-62, 24, -62, 58], // the two lookouts in the valley
+];
+const OSSOS_RAMPS = [[-44, -30, -60, -6], [40, 20, 64, 4], [-70, 40, -90, 62], [70, -44, 92, -62], [8, -62, 24, -84], [-20, 70, -6, 92]];
+const JERICO_RAMPS = [[70, -60, 98, -78], [-84, 50, -104, 66], [20, 92, 26, 118], [-40, -88, -48, -114], [88, 40, 112, 46], [52, -36, 66, -48]];
+const dune = (x, z) => { // windward slope gentle, slip face steep: dunes you climb from one side and slide down the other
+  const u = (x * 0.085 + 1.8 * Math.sin(z * 0.03) + 0.5 * Math.sin(z * 0.09 + x * 0.02)) / Math.PI;
+  const f = u - Math.floor(u);
+  return (f < 0.86 ? (f / 0.86) ** 1.6 : 1 - smooth(0.86, 1, f)) * (0.65 + 0.35 * Math.sin(z * 0.05 + x * 0.013));
+};
 export const BIOMES = {
   ela: {
     name: 'Vale de Elá', ref: '1 Sm 17',
+    tags: ['Vertical', 'Rio', 'Acampamentos'],
     desc: 'Vale verde entre dois montes, cortado por um ribeiro de pedras lisas. Filisteus de um lado, Israel do outro.',
-    radius: 92, water: -50,
+    radius: 130, water: -50,
     sky: { top: 0x7fb8e6, horizon: 0xf1e2c4, nightTop: 0x0b1230, nightHorizon: 0x2b3158 },
     boss: 'Golias', bossIntro: 'Golias desafia os exércitos de Israel!', summon: 'Filisteus, avante!',
     elite: 'Um campeão anaquim apareceu! Ele guarda um baú.', win: 'Golias caiu no Vale de Elá.',
     verse: ['A batalha é do Senhor.', '1 Sm 17:47'],
     bossModel: 'golias', groundKind: 1, death: [0x9c4a32, 0x7d8a4a, 0x8a5a2b, 0xb98560],
     well: ['Poço de Belém', '2 Sm 23:15'], event: 'Os filisteus avançam em fileira!', carrier: 'Um mercador filisteu foge com ouro!',
-    brookZ, ledgeX: 68,
+    brookZ, ledgeX: 96,
     water2: { shallow: 0x7fd6bf, deep: 0x3a8f9e },
     terrain(x, z) {
-      return 1.6 * Math.sin(x * 0.05) * Math.cos(z * 0.045)
-        + 0.8 * Math.sin(x * 0.13 + 1.3) * Math.sin(z * 0.11 + 0.7)
-        + 7 * Math.exp(-((x - 30) ** 2 + (z + 28) ** 2) / 300) // slide hill near spawn
-        + 16 * smooth(50, 95, Math.abs(z)) + 8 * smooth(72, 100, Math.abs(x)) // the two armies' hills
-        + 5 * smooth(66, 70, x) // eastern ledge: the brook falls here
-        - 1.5 * Math.exp(-((z - brookZ(x)) ** 2) / 10); // the brook (1 Sm 17:40)
+      const side = Math.abs(z - brookZ(x));
+      // The two armies' hills (1 Sm 17:3) rise in steps north and south of the brook, plus two lookouts
+      // in the valley; ramps lead up. The east is a ledge the brook falls from.
+      const v = 21 * smooth(24, 118, side) + 9 * smooth(100, 140, Math.abs(x)) * smooth(6, 16, side)
+        + 9 * Math.exp(-((x - 58) ** 2 + (z + 46) ** 2) / 240) + 9 * Math.exp(-((x + 62) ** 2 + (z - 58) ** 2) / 240);
+      return 1.4 * Math.sin(x * 0.035) * Math.cos(z * 0.032) + 0.7 * Math.sin(x * 0.09 + 1.3) * Math.sin(z * 0.08 + 0.7)
+        + stepped(v, 5.2, x, z, ELA_RAMPS)
+        + 6 * Math.exp(-((x - 30) ** 2 + (z + 24) ** 2) / 300) // slide hill near spawn
+        + 5 * smooth(94, 98, x) // eastern ledge: the brook falls here
+        - 1.5 * Math.exp(-(side ** 2) / 10); // the brook (1 Sm 17:40)
     },
     ground(h, ny, n, x, z) {
       if (Math.abs(z - brookZ(x)) < 2.6) return n > 0 ? 0x8a9a7c : 0x7c8b70; // mossy brook bed
-      if (ny < 0.8) return n > 0 ? 0x8b8f96 : 0x7d828c; // slate on steep slopes
-      if (h > 10) return n > 0.3 ? 0xb9ad6e : 0xa89f5e;
+      if (ny < 0.72) return Math.floor(h * 1.4) % 2 ? 0x8b8f96 : 0x767b84; // layered slate on the cliff faces
+      if (ny < 0.85) return n > 0 ? 0x8b8f96 : 0x7d828c; // slate on steep slopes
+      if (h > 17) return n > 0.3 ? 0xb9ad6e : 0xa89f5e; // dry grass on the hilltops
+      if (h > 7) return n > 0.5 ? 0x9cab55 : n > -0.2 ? 0x86a04c : 0x789246; // terraces
       return n > 0.6 ? 0xa3ac58 : n > -0.2 ? 0x8aa04e : 0x7a9446;
     },
   },
   mar: {
     name: 'Mar Vermelho', ref: 'Êx 14',
+    tags: ['Dunas', 'Ilha', 'Ruínas do Egito'],
     desc: 'Praias e ruínas do Egito à beira do mar. Os carros do Faraó estão chegando.',
-    radius: 86, water: -0.3,
+    radius: 122, water: -0.3,
     water2: { shallow: 0x5fd3c9, deep: 0x2a7fc0 },
     sky: { top: 0x5fb0e8, horizon: 0xf6e3c0, nightTop: 0x0a1030, nightHorizon: 0x30305a },
     boss: 'Faraó', bossIntro: 'O Faraó persegue o povo até o mar!', summon: 'Carros do Egito, avante!',
@@ -397,24 +439,30 @@ export const BIOMES = {
     bossModel: 'farao', groundKind: 2, death: [0xf4efe4, 0xf4efe4, 0xe8b84a, 0xd8b98a], summonChariots: true,
     well: ['Fonte de Elim', 'Êx 15:27'], event: 'Os carros do Faraó atravessam a ilha!', carrier: 'Um escriba do Faraó foge com o tesouro!',
     terrain(x, z) {
-      const land = 2.2 + 1.2 * Math.sin(x * 0.06 + z * 0.02) * Math.cos(z * 0.05) + 0.5 * Math.sin(x * 0.15) * Math.sin(z * 0.13)
-        + 7 * Math.exp(-((x - 32) ** 2 + (z + 28) ** 2) / 300) + 5 * Math.exp(-((x + 35) ** 2 + (z - 25) ** 2) / 350);
-      const shelf = -0.75 + 0.3 * Math.sin(x * 0.21) * Math.cos(z * 0.17); // wide turquoise shallows, ankle deep
       const r = Math.hypot(x, z);
-      const t = smooth(50, 64, r);
-      return land * (1 - t) + shelf * t - 7 * smooth(86, 100, r); // then the deep sea
+      // Dunes fill the middle of the island (not the spawn); an Egyptian rock plateau in steps to the west.
+      const dunes = 6.5 * dune(x, z) * smooth(16, 30, r) * smooth(80, 56, r);
+      const plateau = terrace(11 * smooth(30, 14, Math.hypot(x + 54, z + 34)), 5.2, 0.2);
+      const land = 2.2 + 1.1 * Math.sin(x * 0.045 + z * 0.015) * Math.cos(z * 0.035) + 0.5 * Math.sin(x * 0.12) * Math.sin(z * 0.1)
+        + 6 * Math.exp(-((x - 44) ** 2 + (z + 38) ** 2) / 420) + Math.max(dunes, plateau);
+      const shelf = -0.75 + 0.3 * Math.sin(x * 0.21) * Math.cos(z * 0.17); // wide turquoise shallows, ankle deep
+      const t = smooth(78, 94, r);
+      return land * (1 - t) + shelf * t - 7 * smooth(120, 134, r); // then the deep sea
     },
-    ground(h, ny, n) {
+    ground(h, ny, n, x, z) {
       if (h < -0.1) return 0xc9ab7c;
       if (h < 0.35) return 0xf1e6cc;
+      if (ny < 0.72 && Math.hypot(x + 54, z + 34) < 32) return Math.floor(h * 1.3) % 2 ? 0xc89462 : 0xb38052; // banded sandstone plateau
+      if (ny < 0.8) return n > 0 ? 0xd8b47c : 0xcfaa72; // the steep side of a dune
       if (ny < 0.85) return 0xd0a26c;
       return n > 0.4 ? 0xe9d3a0 : n > -0.4 ? 0xe2c993 : 0xd8bd86;
     },
   },
   ossos: {
     name: 'Vale dos Ossos Secos', ref: 'Ez 37',
+    tags: ['Cânion', 'Corredores', 'Mortos que se levantam'],
     desc: 'Um vale de pó e ossos entre paredões de pedra. Quando o vento sopra, os ossos se juntam e se levantam.',
-    radius: 88, water: -50,
+    radius: 124, water: -50,
     sky: { top: 0x9ab0cc, horizon: 0xf0cda2, nightTop: 0x0d0b20, nightHorizon: 0x3b2a44 },
     boss: 'Gogue', bossIntro: 'Gogue, príncipe de Magogue, marcha sobre o vale!', summon: 'Ossos, levantai-vos!',
     elite: 'Um gigante de ossos se ergueu! Ele guarda um baú.', win: 'Gogue caiu no Vale dos Ossos Secos.',
@@ -424,24 +472,29 @@ export const BIOMES = {
     wadi,
     terrain(x, z) {
       const r = Math.hypot(x, z);
-      return 1.1 * Math.sin(x * 0.06 + 0.4) * Math.cos(z * 0.05)
-        + 0.6 * Math.sin(x * 0.15) * Math.sin(z * 0.13 + 1.1)
-        + 6 * Math.exp(-((x + 30) ** 2 + (z - 26) ** 2) / 260) // a knoll to slide down
-        + 4.5 * Math.exp(-((x - 42) ** 2 + (z + 12) ** 2) / 110) // a low mesa
-        + 22 * smooth(60, 96, r) // the valley walls
+      // A canyon: long rock ridges in steps with gaps to pass through, a dry riverbed cutting a gorge
+      // across them, and an open amphitheatre in the middle where the dead rise.
+      const ridge = Math.max(0, Math.sin(x * 0.085 + 1.2 * Math.sin(z * 0.028) + 0.6)) ** 2
+        * smooth(30, 44, r) * smooth(3, 10, Math.abs(x - wadi(z)))
+        * (1 - Math.exp(-((z + 58) ** 2) / 50)) * (1 - Math.exp(-((z - 50) ** 2) / 50));
+      const v = 15 * ridge + 26 * smooth(86, 122, r) + 6 * Math.exp(-((x + 30) ** 2 + (z - 26) ** 2) / 260);
+      return 1.1 * Math.sin(x * 0.045 + 0.4) * Math.cos(z * 0.035) + 0.6 * Math.sin(x * 0.11) * Math.sin(z * 0.09 + 1.1)
+        + stepped(v, 5.5, x, z, OSSOS_RAMPS)
         - 1.6 * Math.exp(-((x - wadi(z)) ** 2) / 14); // a dry riverbed winding through
     },
     ground(h, ny, n, x, z) {
       if (Math.abs(x - wadi(z)) < 2.2) return n > 0 ? 0xcdb894 : 0xc2ad88; // cracked clay
-      if (ny < 0.78) return n > 0 ? 0x9a7258 : 0x8a6650; // red rock walls
+      if (ny < 0.72) return Math.floor(h * 1.2) % 2 ? 0x9a7258 : 0x82604a; // layered red rock walls
+      if (ny < 0.82) return n > 0 ? 0x9a7258 : 0x8a6650;
       if (h > 8) return n > 0.3 ? 0xbf9d72 : 0xb08f68;
       return n > 0.5 ? 0xc4a57a : n > -0.3 ? 0xb39470 : 0xa48663; // dust
     },
   },
   jerico: {
     name: 'Muralhas de Jericó', ref: 'Js 6',
+    tags: ['Cidade murada', 'Oásis', 'Leitos secos'],
     desc: 'A cidade das palmeiras, murada sobre um monte. Ao som das trombetas, as muralhas vão cair.',
-    radius: 90, water: -0.6,
+    radius: 127, water: -0.6,
     water2: { shallow: 0x6fd6c0, deep: 0x2f8f9e },
     sky: { top: 0x78b4e4, horizon: 0xf6dcae, nightTop: 0x0b1230, nightHorizon: 0x34305a },
     boss: 'Rei de Jericó', bossIntro: 'O rei de Jericó abre as portas e sai para a batalha!', summon: 'Guardas da muralha, avante!',
@@ -453,15 +506,20 @@ export const BIOMES = {
     terrain(x, z) {
       const r = Math.hypot(x, z);
       const dc = Math.hypot(x - CITY.x, z - CITY.z);
-      return 1.5 + 0.9 * Math.sin(x * 0.05 + 0.3) * Math.cos(z * 0.06) + 0.4 * Math.sin(x * 0.14) * Math.sin(z * 0.12)
-        + 3.2 * smooth(CITY.r + 6, CITY.r - 1, dc) // the tell under the city
-        + 5 * Math.exp(-((x - 40) ** 2 + (z + 34) ** 2) / 260) // a hill to slide down
-        + 14 * smooth(64, 96, r)
-        - 3.8 * Math.exp(-((x - OASIS.x) ** 2 + (z - OASIS.z) ** 2) / 60); // the spring's pool
+      // Limestone hills in steps all round, one more inside the plain; two dry riverbeds (wadis) cut the plain.
+      const a = Math.atan2(z, x);
+      const v = 18 * smooth(84, 124, r + 9 * Math.sin(3 * a + 1) + 5 * Math.sin(7 * a)) + 10 * Math.exp(-((x - 60) ** 2 + (z + 52) ** 2) / 300);
+      return 2.3 + 0.9 * Math.sin(x * 0.035 + 0.3) * Math.cos(z * 0.042) + 0.4 * Math.sin(x * 0.1) * Math.sin(z * 0.085)
+        + 3.6 * smooth(CITY.r + 8, CITY.r - 1, dc) // the tell under the city
+        + stepped(v, 4.6, x, z, JERICO_RAMPS)
+        - 1.3 * jWadis(x, z) // two dry wadis cut the plain
+        - 4.6 * Math.exp(-((x - OASIS.x) ** 2 + (z - OASIS.z) ** 2) / 60); // the spring's pool
     },
     ground(h, ny, n, x, z) {
       if (h < -0.4) return 0xb8a27a; // pool bed
+      if (jWadis(x, z) > 0.45) return n > 0 ? 0xc2ad88 : 0xb6a07c; // cracked clay in the wadis
       if (Math.hypot(x - OASIS.x, z - OASIS.z) < 13) return n > 0 ? 0x8aa04e : 0x7a9446; // green around the spring
+      if (ny < 0.72 && h > 4.5) return Math.floor(h * 1.3) % 2 ? 0xc9b08a : 0xb59a74; // limestone layers on the hills
       if (ny < 0.82 && h > 6) return n > 0 ? 0xb88a5e : 0xa87c52; // rock only on the far hills, not the city's mound
       if (Math.hypot(x - CITY.x, z - CITY.z) < CITY.r + 2) return n > 0 ? 0xcfb48a : 0xc4a87e; // packed earth in the city
       return n > 0.4 ? 0xd9be8a : n > -0.4 ? 0xcfb27c : 0xc4a670;

@@ -37,6 +37,26 @@ locais e um código para exportar e importar o progresso.
 
 ---
 
+## Andamento
+
+| Fase | Situação |
+|---|---|
+| 0 | Feita |
+| 1 | Feita, com exceções abaixo |
+| 2 | Feita |
+| 3 | Por fazer |
+| 4 | Feita, com exceções abaixo |
+| 5 | Por fazer |
+
+**Ficou de fora da Fase 1:**
+- A Caverna de Adulão: o terreno é um mapa de alturas, que não faz túneis. Pediria um modelo próprio.
+- O mar se abrindo e a tempestade de areia no Mar Vermelho.
+- Forja de Tubalcaim, Balança do Templo, Escriba, Vaso da viúva e a Brasa do altar.
+
+**Ficou de fora da Fase 4:**
+- A tela de detalhe do herói com a linha de evolução: depende da Fase 3.
+- A escolha de dificuldade na tela do mapa: depende da Fase 5.
+
 ## Fase 0 — Preparar a base
 
 1. Sincronizar esta pasta com o GitHub (o Antigravity publicou a animação de derrota em `80a0bf9`).

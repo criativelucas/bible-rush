@@ -96,7 +96,7 @@ if (uFadeOn > 0.5) {
 // Depth comes from a height map of the terrain. FALL turns it into a waterfall (streaks running down).
 const WATER = `
 {
-  float g = texture2D(uHeight, (vWorld.xz + 128.0) / 256.0).r;
+  float g = texture2D(uHeight, (vWorld.xz + 176.0) / 352.0).r; // world.js: the height map spans [-176, 176]
   float depth = vWorld.y - g;
   vec3 col = mix(uShallow, uDeep, smoothstep(0.1, 2.4, depth));
   float wob = sin(vWorld.x * 1.7 + uTime * 1.6) * sin(vWorld.z * 1.3 - uTime * 1.1) * 0.04;

@@ -1,7 +1,8 @@
 # Bible Rush
 
-Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão e Moisés.
-Escolha um herói e um dos três vales, erga as três Pedras do Memorial e derrote o chefe.
+Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão, Moisés, Josué e Débora.
+Escolha um herói e um dos quatro cenários, erga as três Pedras do Memorial e derrote o chefe.
+Cada jornada rende denários para o Mercado: melhorias permanentes, ferramentas para as cartas, armas e itens.
 
 **Jogar:** https://criativelucas.github.io/bible-rush/
 
@@ -11,6 +12,7 @@ Escolha um herói e um dos três vales, erga as três Pedras do Memorial e derro
 - **Espaço**: pular · **Shift**: deslizar
 - **E**: movimento especial · **Q**: milagre (com a Fé cheia)
 - **Mouse** ou **setas**: girar a câmera · **Esc**: pausa
+- Nas cartas de nível: **F** renovar · **X** pular · **Z** banir
 
 ## Rodar no computador
 
