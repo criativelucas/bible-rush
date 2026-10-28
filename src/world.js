@@ -204,7 +204,7 @@ export function buildWorld(scene, id, random, PROPS) {
     pile.position.set(x, y, z);
     pile.castShadow = pile.receiveShadow = true;
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 120, 10, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.2, 2.2), transparent: true, opacity: 0.28, depthWrite: false, fog: false, side: THREE.DoubleSide })); // glows (bloom)
     beam.position.set(x, y + 60, z);
     scene.add(pile, beam);
     obstacles.push({ x, z, r: 1.25, top: y + 1.3 }); // the cairn is solid (stand on top or beside it)
@@ -215,7 +215,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const altars = [];
   const altarGeo = geo('altar');
   const flameGeo = geo('flame');
-  const flameMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+  const flameMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(2.4, 2.4, 2.4) }); // fire glows
   for (let k = 0; k < n2(3); k++) {
     const s = spot(20, B.radius * 0.8, 14);
     if (!s) continue;
@@ -248,7 +248,7 @@ export function buildWorld(scene, id, random, PROPS) {
 
   // Rocks of Horeb (Êx 17:6): a spring at the foot of a cliff; stepping on it throws you up onto the step above.
   const pads = [];
-  const padMat = new THREE.MeshBasicMaterial({ color: 0x9fe4ff, transparent: true, opacity: 0.55, depthWrite: false });
+  const padMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9fe4ff).multiplyScalar(1.6), transparent: true, opacity: 0.55, depthWrite: false });
   const spoutGeo = new THREE.CylinderGeometry(0.35, 0.55, 2.4, 8, 1, true).translate(0, 1.2, 0);
   const ringGeoP = new THREE.RingGeometry(0.9, 1.3, 16).rotateX(-Math.PI / 2);
   for (let k = 0, t = 0; k < Math.round(4 * S * S) && t < 4000; t++) {
@@ -286,7 +286,7 @@ export function buildWorld(scene, id, random, PROPS) {
   // traders who sell for siclos (Gn 37:25).
   const things = [];
   const silverMat = M.toon(0xaab6c6);
-  const shineMat = new THREE.MeshBasicMaterial({ color: 0xf2f8ff });
+  const shineMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xf2f8ff).multiplyScalar(1.8) });
   for (let k = 0; k < n2(5); k++) {
     const s = spot(16, B.radius * 0.9, 12);
     if (!s) continue;
