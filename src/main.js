@@ -988,6 +988,7 @@ function go(id) {
   if (id === 'ranking') renderRanking();
   state = id;
   show(id);
+  syncMapVideo();
   if (id === 'menu') guide('menu', MENU_GUIDE);
   if (id === 'shop') guide('shop', SHOP_GUIDE);
   beep(660, 0.05, 'triangle', 0.03);
@@ -1021,6 +1022,29 @@ function lockedHint(key) {
   $('lock-hint').textContent = `${unlockName(key)} está bloqueado. Para abrir: ${TROPHIES[unlockedBy(key)].desc}`;
   beep(180, 0.12, 'square', 0.03);
 }
+// The map picked on the setup screen. Only one map is built at a time (the page's), so picking another
+// just shows its video; starting the run then loads it.
+let pickMap = BIOME_ID;
+const mapVideos = {};
+function pickMapTo(id) {
+  pickMap = id;
+  if (!diffOpen(profile, id, DIFF_ID)) DIFF = DIFFS[DIFF_ID = 0];
+  syncMapVideo();
+}
+function syncMapVideo() {
+  if (state === 'setup' && !mapVideos.ela) { // first visit: load them all, so switching is instant
+    for (const id in BIOMES) {
+      const v = Object.assign(document.createElement('video'), { muted: true, loop: true, playsInline: true, preload: 'auto', poster: `assets/ui/${id}.jpg`, src: `assets/maps/${id}.mp4` });
+      $('map-videos').append(mapVideos[id] = v);
+    }
+  }
+  for (const [id, v] of Object.entries(mapVideos)) {
+    const on = state === 'setup' && id === pickMap && id !== BIOME_ID;
+    v.classList.toggle('on', on);
+    if (on) v.play().catch(() => {});
+    else v.pause();
+  }
+}
 const playQuery = (biome = BIOME_ID) => ({ biome, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : 'classic', diff: DIFF_ID });
 // Map screen: the maps as tabs, a big view of the chosen one (its hero, its milestones), and the panel to
 // prepare the run (mode, difficulty, saddlebag, records).
@@ -1030,17 +1054,21 @@ function renderSetup() {
   $('biomes').replaceChildren(...Object.entries(BIOMES).map(([id, b]) => {
     const el = document.createElement('button');
     const open = isOpen('map', id);
-    el.className = `map-tab${id === BIOME_ID ? ' sel' : ''}${open ? '' : ' locked'}`;
+    el.className = `map-tab${id === pickMap ? ' sel' : ''}${open ? '' : ' locked'}`;
     el.innerHTML = `<span class="art ${id}"></span><span><b>${b.name}</b><small>${open ? `${b.ref}${id === EVENT_MAP ? ' · desafio do dia' : ''}` : 'Bloqueado'}</small></span>`;
     el.onclick = () => {
       if (!open) return lockedHint(`map:${id}`);
-      if (id !== BIOME_ID) reload(playQuery(id));
+      if (id === pickMap) return;
+      pickMapTo(id);
+      renderSetup();
+      beep(520, 0.04, 'triangle', 0.03);
     };
     return el;
   }));
-  $('map-art').className = `map-art art ${BIOME_ID}`;
-  $('mv-name').textContent = B.name;
-  $('map-info').innerHTML = `<div class="tags">${B.tags.map((t) => `<i>${t}</i>`).join('')}</div><p>${B.desc}</p>`;
+  const PB = BIOMES[pickMap];
+  $('map-art').className = `map-art art ${pickMap}`;
+  $('mv-name').textContent = PB.name;
+  $('map-info').innerHTML = `<div class="tags">${PB.tags.map((t) => `<i>${t}</i>`).join('')}</div><p>${PB.desc}</p>`;
   const h = HEROES[selHero];
   $('mv-face').src = ICON.face[selHero];
   $('mv-face').className = frameClass(selHero);
@@ -1048,18 +1076,18 @@ function renderSetup() {
   $('mv-stage').textContent = STAGES[selHero].names[stageOf(selHero)];
   $('mv-marks').innerHTML = SURV
     ? `<small>Marcos · um guardião a cada 5 minutos</small>${[5, 10, 15, 20, 25, 30].map((m) => `<span class="mk"><b>${m} min</b>Guardião</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>45 min</b>Noite sem fim</span>`
-    : `<small>Objetivo · erga as pedras e o chefe aparece (ou vem furioso aos 10:00)</small>${[1, 2, 3].map((k) => `<span class="mk"><b>Pedra ${k}</b>do Memorial</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>${B.boss}</b>Chefe</span>`;
-  $('pp-map').textContent = B.name;
+    : `<small>Objetivo · erga as pedras e o chefe aparece (ou vem furioso aos 10:00)</small>${[1, 2, 3].map((k) => `<span class="mk"><b>Pedra ${k}</b>do Memorial</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>${PB.boss}</b>Chefe</span>`;
+  $('pp-map').textContent = PB.name;
   $('modes').innerHTML = [['classic', 'Clássico', 'Pedras e chefe'], ['surv', 'Sobrevivência', 'Sem fim, guardiões e alianças']]
     .map(([k, n, d]) => `<button data-mode="${k}" class="${(k === 'surv') === SURV ? 'on' : ''}"><b>${n}</b><small>${d}</small></button>`).join('');
-  $('diffs').innerHTML = DIFFS.map((d, k) => `<button data-diff="${k}" class="${k === DIFF_ID ? 'on' : ''}${diffOpen(profile, BIOME_ID, k) ? '' : ' locked'}"><b>${d.name}</b><small>${k ? `×${d.pay} denários` : 'denários ×1'}</small></button>`).join('');
-  $('diff-note').textContent = diffOpen(profile, BIOME_ID, Math.min(2, DIFF_ID + 1)) || DIFF_ID === 2 ? DIFFS[DIFF_ID].text
+  $('diffs').innerHTML = DIFFS.map((d, k) => `<button data-diff="${k}" class="${k === DIFF_ID ? 'on' : ''}${diffOpen(profile, pickMap, k) ? '' : ' locked'}"><b>${d.name}</b><small>${k ? `×${d.pay} denários` : 'denários ×1'}</small></button>`).join('');
+  $('diff-note').textContent = diffOpen(profile, pickMap, Math.min(2, DIFF_ID + 1)) || DIFF_ID === 2 ? DIFFS[DIFF_ID].text
     : `${DIFFS[DIFF_ID].text} · vença no ${DIFFS[DIFF_ID].name} para abrir o ${DIFFS[DIFF_ID + 1].name}`;
   $('modes').querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => { SURV = b.dataset.mode === 'surv'; renderSetup(); beep(600, 0.05, 'triangle', 0.03); }; });
   $('diffs').querySelectorAll('[data-diff]').forEach((b) => {
     b.onclick = () => {
       const k = Number(b.dataset.diff);
-      if (!diffOpen(profile, BIOME_ID, k)) { $('lock-hint').textContent = `${DIFFS[k].name} está bloqueado: vença ${B.name} no ${DIFFS[k - 1].name}.`; return beep(180, 0.12, 'square', 0.03); }
+      if (!diffOpen(profile, pickMap, k)) { $('lock-hint').textContent = `${DIFFS[k].name} está bloqueado: vença ${PB.name} no ${DIFFS[k - 1].name}.`; return beep(180, 0.12, 'square', 0.03); }
       DIFF_ID = k;
       DIFF = DIFFS[k];
       renderSetup();
@@ -1067,11 +1095,11 @@ function renderSetup() {
     };
   });
   renderPack();
-  const rec = profile.records[BIOME_ID];
-  const srec = profile.records[`surv:${BIOME_ID}`];
+  const rec = profile.records[pickMap];
+  const srec = profile.records[`surv:${pickMap}`];
   $('my-marks').innerHTML = `<div>Clássico · ${rec ? `recorde <b>${fmt(rec.best)}</b>${rec.fastest ? ` · vitória em <b>${fmt(rec.fastest)}</b>` : ''}` : 'sem marca'}</div>
     <div>Sobrevivência · ${srec ? `recorde <b>${fmt(srec.best)}</b>` : 'sem marca'}</div>
-    <div>Vencido até: <b>${(profile.mapWins[BIOME_ID] ?? -1) >= 0 ? DIFFS[profile.mapWins[BIOME_ID]].name : '—'}</b></div>`;
+    <div>Vencido até: <b>${(profile.mapWins[pickMap] ?? -1) >= 0 ? DIFFS[profile.mapWins[pickMap]].name : '—'}</b></div>`;
 }
 $('mv-hero').onclick = () => go('hero-pick');
 
@@ -1127,8 +1155,11 @@ function stepHero(dir) {
 }
 function stepMap(dir) {
   const open = Object.keys(BIOMES).filter((id) => isOpen('map', id));
-  const next = open[(open.indexOf(BIOME_ID) + dir + open.length) % open.length];
-  if (next !== BIOME_ID) reload(playQuery(next));
+  const next = open[(open.indexOf(pickMap) + dir + open.length) % open.length];
+  if (next === pickMap) return;
+  pickMapTo(next);
+  renderSetup();
+  beep(520, 0.04, 'triangle', 0.03);
 }
 
 // Evolution: the three stages, the one reached, time to the next and what it gives.
@@ -1359,7 +1390,7 @@ function renderMenu() {
   $('pp-name').textContent = profile.name || 'Convidado';
   $('pp-title').textContent = titleOf() || (profile.name ? 'Peregrino' : 'Clique para escolher um nome');
   $('play-face').src = ICON.face[selHero];
-  $('play-sub').textContent = `${SURV ? 'Sobrevivência' : 'Clássico'} · ${HEROES[selHero].name} · ${B.name}${DIFF_ID ? ` · ${DIFF.name}` : ''}`;
+  $('play-sub').textContent = `${SURV ? 'Sobrevivência' : 'Clássico'} · ${HEROES[selHero].name} · ${BIOMES[pickMap].name}${DIFF_ID ? ` · ${DIFF.name}` : ''}`;
   const sr = Object.keys(BIOMES).map((b) => profile.records[`surv:${b}`]?.best || 0);
   $('surv-sub').textContent = Math.max(...sr) ? `Sem fim · seu recorde ${fmt(Math.max(...sr))}` : 'Sem fim · um guardião a cada 5 min';
   $('event-sub').textContent = `${BIOMES[EVENT_MAP].name} · +50% de denários hoje`;
@@ -1384,7 +1415,7 @@ function fitSeason() {
 }
 addEventListener('resize', () => { if (state === 'menu') fitSeason(); });
 $('surv-card').onclick = () => { SURV = true; go('setup'); };
-$('event-card').onclick = () => (EVENT_MAP === BIOME_ID ? go('setup') : reload({ biome: EVENT_MAP, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : 'classic' }));
+$('event-card').onclick = () => { pickMapTo(EVENT_MAP); go('setup'); };
 $('fs-btn').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
 $('profile-pill').onclick = () => askName();
 
@@ -1745,6 +1776,7 @@ function applyCfg() {
 }
 
 function startRun() {
+  if (pickMap !== BIOME_ID) return reload({ ...playQuery(pickMap), screen: 'play' }); // build the picked map first
   const h = HEROES[selHero];
   P.hero = selHero;
   P.pack = packed.filter((id) => profile.bag[id] > 0);
@@ -5423,8 +5455,9 @@ renderer.setAnimationLoop((now) => {
 applyCfg();
 syncSettingsForm();
 setHero(selHero);
-if (params.get('screen') === 'setup') {
+if (params.get('screen') === 'setup' || params.get('screen') === 'play') {
   go('setup');
+  if (params.get('screen') === 'play') requestAnimationFrame(() => requestAnimationFrame(() => startRun())); // after a frame has run, like a click
   document.documentElement.classList.remove('boot-setup');
 }
 else {
@@ -5513,4 +5546,38 @@ window.dev = {
       path.endsWith('.jpg') ? 'image/jpeg' : 'image/png', 0.88);
   }),
   skip: (s) => { time += s; },
+  // The setup screen's map preview: a flyover rendered frame by frame (smooth even in a background tab),
+  // swinging back and forth so it loops. Frames go to shots/film/<map>/; tools/make_previews.sh encodes them.
+  film: async (frames = 336, fps = 24, w = 960, h = 540) => {
+    player.visible = false;
+    renderer.setSize(w, h, false);
+    target.setSize(w, h);
+    for (const rt of [...bloomRT, ...dofRT]) rt.setSize(Math.ceil(w / 2), Math.ceil(h / 2));
+    postMat.uniforms.texel.value.set(1 / w, 1 / h);
+    postMat.uniforms.aspect.value = w / h;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    const y0 = terrainH(0, 0);
+    for (let k = 0; k < frames; k++) {
+      const t = 1000 + k / fps;
+      const s = Math.sin((2 * Math.PI * k) / frames);
+      const a = 0.6 + 0.45 * s;
+      camera.position.set(Math.cos(a) * 30, y0 + 13 + 2 * s, Math.sin(a) * 30);
+      camera.lookAt(0, y0 + 2, 0);
+      focus.set(Math.cos(a) * 10, y0, Math.sin(a) * 10);
+      M.shared.uTime.value = t;
+      world.update(1 / fps, t, 0, camera);
+      scene.fog.color.copy(world.horizon);
+      scene.background.copy(world.horizon);
+      sun.position.set(focus.x + 30, focus.y + 60, focus.z + 22);
+      sun.target.position.copy(focus);
+      updateAtmos(1 / fps, t);
+      render();
+      const b = await new Promise((ok) => canvas.toBlob(ok, 'image/jpeg', 0.92));
+      await fetch(`shots/film/${BIOME_ID}/${String(k).padStart(4, '0')}.jpg`, { method: 'PUT', body: b });
+    }
+    player.visible = true;
+    resize();
+    return frames;
+  },
 };

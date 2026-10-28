@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bible Rush</title>
   <script>
-    // Changing map reloads the page straight into the setup screen: keep the main menu from flashing meanwhile.
-    if (new URLSearchParams(location.search).get('screen') === 'setup') document.documentElement.classList.add('boot-setup');
+    // Reloading straight into the setup screen or a run: keep the main menu from flashing meanwhile.
+    if (['setup', 'play'].includes(new URLSearchParams(location.search).get('screen'))) {
+      document.documentElement.classList.add('boot-setup');
+      setTimeout(() => document.documentElement.classList.remove('boot-setup'), 30000); // never stuck on it
+    }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,6 +33,9 @@
       font: 18px/1.35 var(--f-ui); font-synthesis: none; user-select: none; } /* one-weight pixel fonts: no smeared fake bold */
     #view { position: fixed; inset: 0; width: 100vw; height: 100vh; image-rendering: pixelated; }
     #view.smooth { image-rendering: auto; }
+    /* Setup screen: a looping flyover of the map picked (assets/maps), over the live one until you start */
+    #map-videos video { position: fixed; inset: 0; width: 100vw; height: 100vh; object-fit: cover; visibility: hidden; }
+    #map-videos video.on { visibility: visible; }
     button { font: inherit; color: inherit; }
     p { margin: 0 0 8px; }
     img.icon, .ico { image-rendering: pixelated; display: block; }
@@ -781,6 +787,7 @@
   </style>
 </head>
 <body>
+  <div id="map-videos"></div>
   <div id="hud" hidden>
     <div id="hero-panel" class="hud glass">
       <img id="hero-face" class="icon" alt="">
