@@ -58,7 +58,7 @@ export const PIECES = {
     part(ball(1, 1), m(0xf0e6d0), 0, 0.962 * h, -0.008 * h, 0, 0, 0, [0.084 * h, 0.05 * h, 0.086 * h]),
     part(ring(0.072 * h, 0.01 * h), m(0xb8463a), 0, 0.944 * h, -0.008 * h, Math.PI / 2))],
   capuz: ['head', 'head', (h, sx, m) => part(new T.SphereGeometry(1, 10, 8, Math.PI * 0.85, Math.PI * 1.3, 0, Math.PI * 0.6),
-    m(0x7a5634, T.DoubleSide), 0, 0.905 * h, -0.012 * h, 0, 0, 0, [0.083 * h, 0.09 * h, 0.085 * h])],
+    m(0x7a5634, T.DoubleSide), 0, 0.9 * h, -0.016 * h, 0, 0, 0, [0.104 * h, 0.112 * h, 0.104 * h])], // wider than the hair, or it hides inside
   veil: ['head', 'hair', (h, sx, m) => group(
     part(new T.SphereGeometry(1, 10, 8, Math.PI * 0.8, Math.PI * 1.4, 0, Math.PI * 0.66), m(0x7a4a9a, T.DoubleSide),
       0, 0.91 * h, -0.016 * h, 0, 0, 0, [0.084 * h, 0.088 * h, 0.088 * h]),

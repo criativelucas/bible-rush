@@ -742,7 +742,7 @@ const ICON = (() => {
     over?.(ctx, size);
     return cv.toDataURL();
   }
-  const out = { hero: {}, face: {}, card: {}, weapon: {}, relic: {} };
+  const out = { hero: {}, face: {}, plain: {}, card: {}, weapon: {}, relic: {} };
   const item = (name) => M.solid(ASSETS.items[name], M.toon());
   for (const [id, w] of Object.entries(WEAPONS)) { // evolutions: the base weapon with a gold outline and a star
     out.weapon[id] = snap(item(`weapon_${w.from ?? id}`), w.evo
@@ -760,15 +760,33 @@ const ICON = (() => {
   // The 3D model as a 32 px sprite, and the face: the sprite sheet's, or (no sheet, or wearing gear) a
   // close-up of the model's head. Done again after evolving or changing clothes.
   out.redoHero = (id) => {
-    out.hero[id] = snap(HERO_RIGS[id].group, { yaw: 0.42, pitch: 0.1, size: 32 });
-    const tall = new THREE.Box3().setFromObject(HERO_RIGS[id].group).max.y;
-    out.card[id] = snap(HERO_RIGS[id].group, { yaw: 0.5, pitch: 0.06, size: 128, center: new THREE.Vector3(0, tall * 0.5, 0), r: tall * 0.52 }); // the selection card's picture
-    if (SPRITES[id] && !gearIds(id).length) out.face[id] = spriteFace(id);
-    else {
-      const top = new THREE.Box3().setFromObject(HERO_RIGS[id].group).max.y;
-      const head = HERO_RIGS[id].group.getObjectByName('head').getWorldPosition(new THREE.Vector3()).y;
-      out.face[id] = snap(HERO_RIGS[id].group, { yaw: 0.25, pitch: 0.05, size: 32, center: new THREE.Vector3(0, head + 0.19, 0.05), r: 0.34 + (top - head > 0.55 ? 0.06 : 0) });
+    // The hero may be standing in the world (on the terrain, turned, mid-roll): shoot it at the origin.
+    const g = HERO_RIGS[id].group;
+    const parent = g.parent;
+    const pos = g.position.clone();
+    const rot = g.rotation.clone();
+    parent?.remove(g);
+    g.position.set(0, 0, 0);
+    g.rotation.set(0, 0, 0);
+    g.updateMatrixWorld(true);
+    const closeUp = () => {
+      const tall = new THREE.Box3().setFromObject(g).max.y;
+      const head = g.getObjectByName('head').getWorldPosition(new THREE.Vector3()).y;
+      return snap(g, { yaw: 0.25, pitch: 0.05, size: 32, center: new THREE.Vector3(0, head + 0.19, 0.05), r: 0.34 + (tall - head > 0.55 ? 0.06 : 0) });
+    };
+    // Other players in the ranking: the hero as it starts, without your clothes.
+    if (!out.plain[id]) {
+      dress(HERO_RIGS[id], STAGES[id].gear[0]);
+      out.plain[id] = SPRITES[id] && !STAGES[id].gear[0].length ? spriteFace(id) : closeUp();
+      dressHero(id);
     }
+    out.hero[id] = snap(g, { yaw: 0.42, pitch: 0.1, size: 32 });
+    const tall = new THREE.Box3().setFromObject(g).max.y;
+    out.card[id] = snap(g, { yaw: 0.5, pitch: 0.06, size: 128, center: new THREE.Vector3(0, tall * 0.5, 0), r: tall * 0.52 }); // the selection card's picture
+    out.face[id] = SPRITES[id] && !gearIds(id).length ? spriteFace(id) : closeUp();
+    g.position.copy(pos);
+    g.rotation.copy(rot);
+    parent?.add(g);
   };
   for (const id in HEROES) out.redoHero(id);
   out.mob = (name) => snap(M.solid(ASSETS.mobs[name], M.toon()), { yaw: 0.5, pitch: 0.15, size: 32 }); // for the Bestiary
@@ -1377,7 +1395,7 @@ const BOARDS = {
 const boardValue = (board, v) => (board === 'abates' ? Number(v).toLocaleString('pt-BR') : fmt(v));
 function rankRow(r, board) {
   const tier = r.pos <= 3 ? ` p${r.pos}` : '';
-  return `<div class="rk${tier}${r.me ? ' me' : ''}"><span class="n">${r.pos}</span><img src="${ICON.face[r.hero] ?? ICON.face.davi}" class="${r.frame && COSMETICS[r.frame] ? `frame-${r.frame}` : ''}" alt="">
+  return `<div class="rk${tier}${r.me ? ' me' : ''}"><span class="n">${r.pos}</span><img src="${(r.me ? ICON.face : ICON.plain)[r.hero] ?? ICON.plain.davi}" class="${r.frame && COSMETICS[r.frame] ? `frame-${r.frame}` : ''}" alt="">
     <div><b>${esc(r.name)}</b><small>${r.title ? esc(r.title) : HEROES[r.hero]?.name ?? ''}${r.map && BIOMES[r.map] ? ` · ${BIOMES[r.map].name}` : ''}</small></div><span class="v">${boardValue(board, r.value)}</span></div>`;
 }
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -5448,6 +5466,7 @@ window.arm = (ids, level = 1) => {
 };
 // Debug: poke at the run from the console, e.g. dev.look(Math.PI) or dev.spawnBoss().
 window.dev = {
+  icon: () => ICON, dressHero: (id) => { dressHero(id); ICON.redoHero(id); },
   P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, bossMove, hazards, spawnEnemy, cfg, scene, ASSETS, profile, saveProfile, world,
   look: (y, p = pitch) => { yaw = y; pitch = p; },
   warp: (t) => { time = t; return time; }, // jump the run's clock (tests: guardians, the endless night)

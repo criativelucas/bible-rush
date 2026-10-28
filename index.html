@@ -523,11 +523,15 @@
     /* Portrait frames: stage rims, or the wardrobe's */
     .stage-1 { box-shadow: 0 0 0 3px #e09a55, 0 0 0 5px var(--line); }
     .stage-2 { box-shadow: 0 0 0 3px #f2c14e, 0 0 0 5px #fff1b8, 0 0 0 7px var(--line); }
-    .frame-molduraReal { box-shadow: 0 0 0 3px #f2c14e, 0 0 0 6px #9a1f2e, 0 0 0 8px var(--line) !important; }
-    .frame-molduraEla { box-shadow: 0 0 0 3px #8aa04e, 0 0 0 6px #f2c14e, 0 0 0 8px var(--line) !important; }
-    .frame-molduraMar { box-shadow: 0 0 0 3px #5fd3c9, 0 0 0 6px #e9d3a0, 0 0 0 8px var(--line) !important; }
-    .frame-molduraOssos { box-shadow: 0 0 0 3px #e6dcc2, 0 0 0 6px #9a7258, 0 0 0 8px var(--line) !important; }
-    .frame-molduraJerico { box-shadow: 0 0 0 3px #d9be8a, 0 0 0 6px #e03a50, 0 0 0 8px var(--line) !important; }
+    /* Wardrobe frames: two coloured rims, as thick as --fw (thinner on the small portraits) */
+    [class*="frame-moldura"] { box-shadow: 0 0 0 var(--fw, 3px) var(--f1), 0 0 0 calc(2 * var(--fw, 3px)) var(--f2), 0 0 0 calc(2 * var(--fw, 3px) + 2px) var(--line) !important; }
+    .frame-molduraReal { --f1: #f2c14e; --f2: #9a1f2e; }
+    .frame-molduraEla { --f1: #8aa04e; --f2: #f2c14e; }
+    .frame-molduraMar { --f1: #5fd3c9; --f2: #e9d3a0; }
+    .frame-molduraOssos { --f1: #e6dcc2; --f2: #9a7258; }
+    .frame-molduraJerico { --f1: #d9be8a; --f2: #e03a50; }
+    .frame-molduraCampeao { --f1: #fff1b8; --f2: #c9a8ff; }
+    .rk img, .pill.profile img { --fw: 2px; }
     .map-info { margin-top: 10px; font-size: 16px; }
     .map-info p { margin: 6px 0 2px; }
     .map-info small { color: var(--gold); }
@@ -687,7 +691,6 @@
     /* "Esc Voltar" on every panel */
     .panel .btn.back { position: absolute; top: calc(-15 * var(--px)); left: calc(-4 * var(--px)); z-index: 2; gap: 6px; padding: 2px 12px 4px 6px; font-size: 17px; }
     .panel .btn.back kbd.k { margin: 0; min-width: 0; height: 20px; font-size: 13px; }
-    .frame-molduraCampeao { box-shadow: 0 0 0 3px #fff1b8, 0 0 0 6px #c9a8ff, 0 0 0 8px var(--line) !important; }
 
     /* ---------- Play: map and hero screens ---------- */
     .prep-screen, .hero-screen { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 2vw 18px; background: rgba(20, 12, 6, .72); }
