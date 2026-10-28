@@ -207,8 +207,6 @@
     }
 
     /* New journey */
-    #setup { align-items: safe center; background: linear-gradient(90deg, rgba(20, 12, 6, .6), rgba(20, 12, 6, .15) 45%, transparent 70%); }
-    #setup .panel { max-width: 600px; margin: calc(16 * var(--px)) 0 10px 2vw; }
     .pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .pick.two { grid-template-columns: repeat(2, 1fr); }
     .opt { position: relative; padding: 4px 4px 6px; cursor: pointer; text-align: center; background: none; }
@@ -635,7 +633,8 @@
     .frame-molduraCampeao { box-shadow: 0 0 0 3px #fff1b8, 0 0 0 6px #c9a8ff, 0 0 0 8px var(--line) !important; }
 
     /* ---------- Play: map and hero screens ---------- */
-    .prep-screen, .hero-screen { flex-direction: column; gap: 12px; padding: 14px 2vw 18px; background: rgba(20, 12, 6, .72); }
+    .prep-screen, .hero-screen { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 2vw 18px; background: rgba(20, 12, 6, .72); }
+    .prep-screen { background: linear-gradient(90deg, rgba(20, 12, 6, .55), transparent 30%, transparent 62%, rgba(20, 12, 6, .55)); } /* the map itself shows through */
     .sel-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
     .sel-top .btn.back { position: static; gap: 6px; padding: 2px 12px 4px 6px; font-size: 17px; }
     .tag-title { margin: 0; padding: 6px 22px 8px 16px; font: 400 38px/1 var(--f-title); color: #fff8e6; text-shadow: 0 2px 0 var(--line);
@@ -646,22 +645,22 @@
     .map-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .map-tab { position: relative; display: flex; gap: 10px; align-items: center; padding: 4px 10px 4px 4px; border: 0; cursor: pointer; text-align: left; color: var(--ink);
       background: rgba(31, 18, 13, .92); box-shadow: 0 0 0 2px var(--bronze), 0 0 0 4px var(--line); }
-    .map-tab .art { flex: none; width: 64px; height: 44px; background: center / cover no-repeat; box-shadow: 0 0 0 2px var(--line); }
+    .map-tab .art { flex: none; width: 64px; height: 44px; background-position: center; background-size: cover; background-repeat: no-repeat; box-shadow: 0 0 0 2px var(--line); }
     .map-tab b { display: block; font: 400 22px/1 var(--f-title); color: var(--gold2); }
     .map-tab small { color: var(--dim); font-size: 13px; }
     .map-tab.sel { background: var(--gold); box-shadow: 0 0 0 2px var(--gold2), 0 0 0 4px var(--line); }
     .map-tab.sel b, .map-tab.sel small { color: var(--ink-d); }
     .map-tab.locked .art { filter: grayscale(1) brightness(.4); }
     .map-tab.locked::after { content: ''; position: absolute; top: 6px; right: 6px; width: 18px; height: 24px; background: url(assets/ui/lock.png) 0 0 / 100% 100%; image-rendering: pixelated; }
-    .prep { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; min-height: 0; }
-    .map-view { position: relative; overflow: hidden; min-height: 420px; box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--line); }
-    .map-art { position: absolute; inset: 0; background: center / cover no-repeat; }
-    .map-view::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(rgba(20, 12, 6, .55), transparent 35%, transparent 65%, rgba(20, 12, 6, .7)); }
-    .mv-top { position: absolute; top: 14px; left: 18px; right: 260px; z-index: 1; }
+    .prep { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; min-height: 0; }
+    .map-view { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-height: 0; pointer-events: none; }
+    .map-view > * { pointer-events: auto; }
+    .map-art { display: none; } /* the live map behind is the preview */
+    .mv-top { max-width: 500px; }
     .mv-top > small { font-size: 14px; letter-spacing: 2px; text-transform: uppercase; color: #fff1d6; }
     .mv-top h2 { margin: 0; font: 400 64px/1 var(--f-title); color: #fff8e6; text-shadow: 0 3px 0 var(--line), 0 0 18px rgba(0, 0, 0, .5); }
     .mv-top .map-info { max-width: 460px; padding: 8px 12px; background: rgba(31, 18, 13, .85); box-shadow: 0 0 0 2px var(--line); }
-    .mv-hero { position: absolute; top: 14px; right: 14px; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border: 0; cursor: pointer;
+    .mv-hero { display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 6px; border: 0; cursor: pointer;
       color: var(--ink); background: rgba(31, 18, 13, .92); box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--line); text-align: left; }
     .mv-hero img { width: 56px; height: 56px; image-rendering: pixelated; background: #f6e8c6; }
     .mv-hero small { display: block; font-size: 13px; color: var(--dim); }
@@ -669,7 +668,7 @@
     .mv-hero em { font-style: normal; font-size: 13px; color: var(--ink); }
     .mv-hero i { align-self: flex-start; font-style: normal; font-size: 14px; color: #7fc6ff; text-decoration: underline; }
     .mv-hero:hover { filter: brightness(1.15); }
-    .mv-marks { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px;
+    .mv-marks { margin-top: auto; max-width: 640px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px;
       background: rgba(31, 18, 13, .9); box-shadow: 0 0 0 2px var(--line); }
     .mv-marks > small { width: 100%; font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
     .mk { display: grid; justify-items: center; gap: 2px; min-width: 74px; padding: 4px 6px; font-size: 13px; color: var(--ink); background: #2a1810; box-shadow: 0 0 0 2px var(--bronze); }
@@ -688,7 +687,7 @@
     .my-marks b { font: 400 22px/1 var(--f-title); color: #e8eef4; }
     .go-big { margin: 10px 14px 14px; justify-content: center; gap: 12px; font: 400 36px/1 var(--f-title); padding: 10px 16px 12px; }
     .go-big kbd.k { font-size: 14px; }
-    @media (max-width: 900px) { .prep { grid-template-columns: 1fr; } .map-tabs { grid-template-columns: repeat(2, 1fr); } .mv-top { right: 14px; top: 90px; } .mv-top h2 { font-size: 44px; } }
+    @media (max-width: 900px) { .prep { grid-template-columns: 1fr; } .map-tabs { grid-template-columns: repeat(2, 1fr); } .mv-top h2 { font-size: 44px; } }
     .hero-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
     .hcard { position: relative; display: flex; flex-direction: column; padding: 0; border: 0; cursor: pointer; text-align: left; color: var(--ink-d); background: #f6e8c6;
       box-shadow: 0 0 0 3px var(--line), 0 6px 0 2px rgba(10, 5, 2, .4); transition: transform .1s steps(2); }

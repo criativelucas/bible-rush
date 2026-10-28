@@ -4158,7 +4158,7 @@ function updateCamera(dt) {
     const a = 0.35 + Math.sin(t * 0.3) * 0.15;
     const y0 = terrainH(0, 0);
     camera.position.set(Math.sin(a) * 4.6, y0 + 1.7, Math.cos(a) * 4.6);
-    camera.lookAt(-Math.cos(a) * 1.3, y0 + 1.0, Math.sin(a) * 1.3); // hero sits right of the panel
+    camera.lookAt(Math.cos(a) * 0.9, y0 + 1.0, -Math.sin(a) * 0.9); // the hero stands left of centre, the panel docks on the right
     focus.set(0, y0, 0);
   } else {
     const a = t * 0.04;
