@@ -3,13 +3,15 @@
 export const MAX_WEAPONS = 4;
 export const MAX_LEVEL = 5;
 
-// Rarity follows the metals of the statue in Daniel 2, clay to gold.
+// Rarity follows the metals of the statue in Daniel 2, clay to gold. The rarer, the harder to find
+// (odds: the chance of drawing it with no luck), and the more it gives: a scroll or relic is worth `mult`
+// times its base; a weapon card gives that weapon `weapon` more damage for good (added up card by card).
 export const RARITY = [
-  { name: 'Barro', mult: 1, color: '#c2a98a' },
-  { name: 'Ferro', mult: 1.3, color: '#a9bccb' },
-  { name: 'Bronze', mult: 1.7, color: '#e09a55' },
-  { name: 'Prata', mult: 2.2, color: '#eef4fa' },
-  { name: 'Ouro', mult: 3, color: '#f2c14e' },
+  { name: 'Barro', mult: 1, weapon: 0, odds: 0.6, color: '#c2a98a' },
+  { name: 'Ferro', mult: 1.5, weapon: 0.15, odds: 0.25, color: '#a9bccb' },
+  { name: 'Bronze', mult: 2.2, weapon: 0.35, odds: 0.1, color: '#e09a55' },
+  { name: 'Prata', mult: 3.2, weapon: 0.7, odds: 0.04, color: '#cfe3f6' },
+  { name: 'Ouro', mult: 5, weapon: 1.5, odds: 0.01, color: '#f2c14e' },
 ];
 
 // Luck squeezes the roll toward the rare end.
@@ -375,7 +377,7 @@ export function rollOffers({ weapons, luck, locked = new Set(), banned = new Set
   const out = [];
   while (out.length < n && pool.length) {
     const o = pool.splice(pickWeighted(pool.map((p) => p.w), rand), 1)[0];
-    if (o.kind === 'scroll') o.tier = rollRarity(luck, rand);
+    o.tier = rollRarity(luck, rand); // every card has a rarity: scrolls are worth more, weapons hit harder
     out.push(o);
   }
   return out;

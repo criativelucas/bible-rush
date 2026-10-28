@@ -296,9 +296,87 @@ def icons():
     sprite(['..kkkk..', '.kSsSSk.', '.kk..kk.', '.k....k.', 'kkkkkkkk', 'kYYYYYgk', 'kYgkkggk', 'kYggkggk', 'kggggggk', 'kdddddk.'[:8], '.kkkkkk.'], 'lock')
 
 
+# Card frames by rarity (Daniel 2: clay, iron, bronze, silver, gold), each richer than the last.
+# 30x30, slice 13 (corners 13 px, a 4 px middle that repeats along the sides).
+RARE = [  # rim light, mid, dark, deep
+    ((214, 170, 124), (176, 124, 82), (130, 86, 54), (92, 58, 36)),     # barro
+    ((206, 214, 222), (146, 158, 170), (98, 108, 120), (62, 68, 78)),   # ferro
+    ((250, 186, 116), (214, 128, 64), (160, 86, 38), (110, 56, 24)),    # bronze
+    ((255, 255, 255), (214, 226, 240), (150, 168, 190), (100, 114, 138)),  # prata
+    ((255, 241, 184), (246, 210, 122), (217, 164, 65), (138, 90, 20)),  # ouro
+]
+GEMS = [  # light, mid, dark
+    ((232, 198, 160), (178, 126, 84), (110, 70, 44)),
+    ((226, 234, 242), (150, 162, 176), (86, 96, 110)),
+    ((255, 206, 138), (224, 140, 70), (140, 76, 30)),
+    ((206, 234, 255), (88, 150, 232), (36, 66, 150)),
+    ((255, 176, 166), (222, 52, 52), (118, 18, 30)),
+]
+
+
+def gem(img, x0, y0, t, r=2):
+    """A faceted diamond gem (2r+1 wide), lit from the top left."""
+    light, mid, dark = GEMS[t]
+    for dy in range(-r - 1, r + 2):
+        for dx in range(-r - 1, r + 2):
+            d = abs(dx) + abs(dy)
+            if d == r + 1:
+                put(img, x0 + dx, y0 + dy, 'k')
+            elif d <= r:
+                c = light if (dx + dy < 0 and d <= r - 1) else mid if dx + dy <= 0 else dark
+                put(img, x0 + dx, y0 + dy, c)
+    put(img, x0 - r // 2, y0 - r // 2, (255, 255, 255))
+
+
+def rarity_cards():
+    for t, (l1, l2, l3, l4) in enumerate(RARE):
+        img = new(30, 30)
+        fill(img, 0, 'P')
+        ring(img, 0, 'k')
+        rim = [(l1, l3), (l2, l3), (l2, l4)] + ([(l3, l4)] if t >= 2 else [])
+        for k, (a, b) in enumerate(rim):
+            ring(img, 1 + k, a, b)
+        inner = 1 + len(rim)
+        ring(img, inner, 'k')
+        ring(img, inner + 1, 'Q', 'q')
+        ring(img, inner + 2, 'q', 'p')
+        w, h = img.size
+        if t >= 3:  # a dotted line of light runs along the rim
+            for p in range(4, w - 4, 2):
+                for x, y in ((p, 2), (p, h - 3), (2, p), (w - 3, p)):
+                    put(img, x, y, (255, 255, 255) if t == 3 else 'y')
+        if t == 4:  # gold: a braided rope in the middle of the rim
+            for p in range(5, w - 5):
+                c = l1 if p % 2 else l4
+                for x, y in ((p, 3), (p, h - 4), (3, p), (w - 4, p)):
+                    put(img, x, y, c)
+        round_corners(img)
+        corners = ((4, 4), (w - 5, 4), (4, h - 5), (w - 5, h - 5))
+        if t == 1:  # iron rivets
+            for cx, cy in corners:
+                for dx in range(-1, 2):
+                    for dy in range(-1, 2):
+                        put(img, cx + dx, cy + dy, l4 if (dx, dy) != (-1, -1) else l1)
+                put(img, cx, cy, l2)
+        elif t == 2:  # bronze studs
+            for cx, cy in corners:
+                stud(img, cx - 2, cy - 2)
+        elif t >= 3:  # corner gems: sapphires on silver, rubies on gold, set in a bracket
+            for cx, cy in corners:
+                for k in range(-4, 5):
+                    put(img, cx + k, cy - 4 if cy < h // 2 else cy + 4, 'k')
+                    put(img, cx - 4 if cx < w // 2 else cx + 4, cy + k, 'k')
+                gem(img, cx, cy, t, 3)
+        save(img, f'card-r{t}')
+        g = new(13, 13)
+        gem(g, 6, 6, t, 5)
+        save(g, f'gem-r{t}')
+
+
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
     frames()
     buttons()
     icons()
+    rarity_cards()
     print('ui sprites ->', os.path.relpath(OUT))

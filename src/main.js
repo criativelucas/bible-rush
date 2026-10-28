@@ -1767,7 +1767,7 @@ function renderBuild() {
     const has = P.relics.some((r) => r.id === e.needs);
     return `<small class="evo">Evolui: nível ${MAX_LEVEL} ${w.level >= MAX_LEVEL ? '✓' : `(${w.level}/${MAX_LEVEL})`} + ${RELICS[e.needs].name} ${has ? '✓' : ''} → ${WEAPONS[e.into].name}</small>`;
   };
-  const w = P.weapons.map((w) => `<li>${iconImg(ICON.weapon[w.id])}<div>${WEAPONS[w.id].name} · nv ${w.level}<small>${WEAPONS[w.id].desc}</small>${evoLine(w)}</div></li>`).join('');
+  const w = P.weapons.map((w) => `<li>${iconImg(ICON.weapon[w.id])}<div>${WEAPONS[w.id].name} · nv ${w.level}${w.bonus ? ` · dano +${Math.round(w.bonus * 100)}%` : ''}<small>${WEAPONS[w.id].desc}</small>${evoLine(w)}</div></li>`).join('');
   const r = P.relics.map((r) => `<li>${iconImg(ICON.relic[r.id])}<div style="color:${RARITY[r.tier].color}">${RELICS[r.id].name}<small>${statText(RELICS[r.id], r.tier)} · ${RELICS[r.id].ref}</small></div></li>`).join('')
     || '<li><small>Abra baús de cedro para encontrar relíquias.</small></li>';
   $('pause-build').innerHTML = `<div><h3>Armas</h3><ul>${w}</ul><h3>Dano</h3>${dmgRows()}</div><div><h3>Relíquias</h3><ul>${r}</ul></div><div><h3>Atributos</h3>${attrRows()}</div>`;
@@ -3288,7 +3288,7 @@ const evoHinted = new Set();
 function refreshWeapons() {
   for (const w of P.weapons) {
     w.s = weaponStats(w.id, w.level, P.st);
-    w.s.dmg *= 1 + MASTERY.per * masteryOf(profile, w.id); // the Arsenal's mastery
+    w.s.dmg *= (1 + MASTERY.per * masteryOf(profile, w.id)) * (1 + (w.bonus || 0)); // the Arsenal's mastery, the cards' rarity
   }
   for (const w of readyToEvolve(P.weapons, P.relics)) { // tell once: the next chest evolves it
     if (evoHinted.has(w.id)) continue;
@@ -3827,9 +3827,20 @@ function openChest(c) {
 }
 
 let bannerTimer = 0;
+let relicTimer = 0;
+// A relic from a chest: its card spins in, framed by its rarity, and stays a moment.
 function relicBanner(r) {
   const e = RELICS[r.id];
-  banner(ICON.relic[r.id], `Relíquia obtida · ${RARITY[r.tier].name}`, e.name, RARITY[r.tier].color, statText(e, r.tier), e.ref);
+  const el = $('relic-card');
+  el.innerHTML = `<small style="color:${RARITY[r.tier].color}">Relíquia obtida</small><div class="${cardClass(r.tier)}">${cardFace({
+    tier: r.tier, name: e.name, tag: 'Relíquia', rar: e.flat ? RARITY[r.tier].name : rarLine(r.tier), icon: ICON.relic[r.id],
+    text: `${statText(e, r.tier)}<em class="evo">${e.ref}</em>` })}</div>`;
+  el.classList.remove('show');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('show');
+  clearTimeout(relicTimer);
+  relicTimer = setTimeout(() => el.classList.remove('show'), 3400);
+  if (r.tier >= 3) chord(r.tier === 4 ? [784, 988, 1175, 1568] : [659, 880, 1175], 'triangle');
 }
 function banner(icon, small, title, color, line, ref) {
   const el = $('relic');
@@ -4138,28 +4149,57 @@ function scrollDelta(e, tier) {
   return arrow(e.label, pctTxt(1 + v), pctTxt(1 + after));
 }
 const offerKey = (o) => o.id; // what Banir removes: the weapon (new or upgrade) or the scroll
+// ---------- Cards: a pixel-art frame by rarity, name plate, art window, type ribbon, text ----------
+const fmtMult = (m) => String(m).replace('.', ',');
+const cardClass = (tier) => `card ${tier == null ? 'tn' : `t${tier}`}`;
+// The rarity line: what the rarity multiplies (×mult for scrolls and relics, damage for weapons).
+const rarLine = (tier, weapon = false) => (tier == null ? '' : `${RARITY[tier].name}${!tier ? '' : weapon ? ` · dano +${Math.round(RARITY[tier].weapon * 100)}%` : ` ×${fmtMult(RARITY[tier].mult)}`}`);
+function cardFace({ name, tag, text, icon, flag = '', key = '', rar = '' }) {
+  return `${key}${flag ? `<i class="flag">${flag}</i>` : ''}<i class="gem"></i><b class="c-name">${name}</b>
+    <div class="c-art">${iconImg(icon)}</div><small class="c-type"><span>${tag}</span>${rar ? `<em>${rar}</em>` : ''}</small>
+    <span class="c-text">${text}</span><i class="shine"></i>`;
+}
+// Tilts toward the pointer and catches the light where it points; the picture shifts a little the other way.
+const TILT = ['--rx', '--ry', '--mx', '--my', '--ix', '--iy', '--lift'];
+function tiltCard(el) {
+  el.onpointermove = (e) => {
+    const r = el.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width - 0.5;
+    const y = (e.clientY - r.top) / r.height - 0.5;
+    const set = { '--ry': `${x * 24}deg`, '--rx': `${-y * 18}deg`, '--mx': `${(x + 0.5) * 100}%`, '--my': `${(y + 0.5) * 100}%`, '--ix': `${-x * 10}px`, '--iy': `${-y * 7}px`, '--lift': '-10px' };
+    for (const k in set) el.style.setProperty(k, set[k]);
+  };
+  el.onpointerleave = () => { for (const k of TILT) el.style.removeProperty(k); };
+}
 function renderChoice() {
   $('choice-title').textContent = choice.title;
   $('choice').classList.toggle('banning', !!choice.banning);
   $('cards').replaceChildren(...choice.offers.map((o, i) => {
     const b = document.createElement('button');
-    b.className = 'card';
     let tag;
     let flag;
     let name;
     let text;
     let icon;
+    let tier = null;
+    let rar = '';
     const evoHint = (id) => (EVOLUTIONS[id] ? `<em class="evo">Evolui com ${RELICS[EVOLUTIONS[id].needs].name} no nível ${MAX_LEVEL}</em>` : '');
+    const bonusLine = (t) => (t ? `<li>Dano desta arma <ins>+${Math.round(RARITY[t].weapon * 100)}%</ins></li>` : '');
     if (o.kind === 'buy') {
       const can = P.gold >= o.price;
       flag = `${o.price} siclos`;
       if (o.what === 'relic') {
-        tag = `Relíquia · ${RARITY[o.relic.tier].name}`;
-        name = RELICS[o.relic.id].name;
-        text = `${statText(RELICS[o.relic.id], o.relic.tier)} · ${RELICS[o.relic.id].ref}`;
+        const e = RELICS[o.relic.id];
+        tier = o.relic.tier;
+        tag = 'Relíquia';
+        rar = e.flat ? RARITY[tier].name : rarLine(tier);
+        name = e.name;
+        text = `${statText(e, tier)} · ${e.ref}`;
         icon = ICON.relic[o.relic.id];
       } else if (o.what === 'scroll') {
-        tag = `Rolo · ${RARITY[o.tier].name}`;
+        tier = o.tier;
+        tag = 'Rolo';
+        rar = rarLine(tier);
         name = SCROLLS[o.id].name;
         text = `${statText(SCROLLS[o.id], o.tier)}<ul class="delta">${scrollDelta(SCROLLS[o.id], o.tier)}</ul>`;
         icon = ICON.scrolls[o.id];
@@ -4181,28 +4221,35 @@ function renderChoice() {
       text = o.pact ? 'Nenhum poder, nenhum preço.' : 'Não comprar nada agora. Volte depois: a caravana fica aqui.';
       icon = 'assets/ui/wing.png';
     } else if (o.kind === 'weapon') {
+      tier = o.tier ?? 0;
       tag = 'Arma';
+      rar = rarLine(tier, true);
       flag = 'Nova';
       name = WEAPONS[o.id].name;
-      text = `${WEAPONS[o.id].desc}<ul class="delta">${weaponDelta(o.id, 1)}</ul>${evoHint(o.id)}`;
+      text = `${WEAPONS[o.id].desc}<ul class="delta">${weaponDelta(o.id, 1)}${bonusLine(tier)}</ul>${evoHint(o.id)}`;
       icon = ICON.weapon[o.id];
     } else if (o.kind === 'upgrade') {
       const lv = P.weapons.find((w) => w.id === o.id).level + 1;
-      tag = `Arma · nível ${lv - 1} → ${lv}`;
+      tier = o.tier ?? 0;
+      tag = `Nível ${lv - 1} → ${lv}`;
+      rar = rarLine(tier, true);
       flag = 'Melhoria';
       name = WEAPONS[o.id].name;
-      text = `${describeLevel(o.id, lv)}<ul class="delta">${weaponDelta(o.id, lv)}</ul>${evoHint(o.id)}`;
+      text = `${describeLevel(o.id, lv)}<ul class="delta">${weaponDelta(o.id, lv)}${bonusLine(tier)}</ul>${evoHint(o.id)}`;
       icon = ICON.weapon[o.id];
     } else {
-      tag = `Rolo · ${RARITY[o.tier].name}`;
+      tier = o.tier;
+      tag = 'Rolo';
+      rar = rarLine(tier);
       name = SCROLLS[o.id].name;
       text = `${statText(SCROLLS[o.id], o.tier)}<ul class="delta">${scrollDelta(SCROLLS[o.id], o.tier)}</ul>`;
       icon = ICON.scrolls[o.id];
-      b.classList.add('rare');
-      b.style.setProperty('--rar', RARITY[o.tier].color);
     }
-    b.innerHTML = `<kbd class="k">${i + 1}</kbd>${flag ? `<i class="flag">${flag}</i>` : ''}${iconImg(icon)}<small>${tag}</small><b>${name}</b><span>${text}</span>`;
+    b.className = `${cardClass(tier)}${b.classList.contains('poor') ? ' poor' : ''}`;
+    if (tier != null) b.style.setProperty('--rar', RARITY[tier].color);
+    b.innerHTML = cardFace({ name, tag, text, icon, flag, rar, key: `<kbd class="k">${i + 1}</kbd>` });
     b.onclick = () => pick(i);
+    tiltCard(b);
     return b;
   }));
   const level = choice.source === 'level';
@@ -4217,14 +4264,25 @@ function renderChoice() {
   $('choice-hint').textContent = choice.banning ? 'Escolha a carta que nunca mais deve aparecer nesta partida' : `Clique na carta ou tecle 1 a ${choice.offers.length}`;
 }
 
+// The picked card spins toward the player and the others drop away; then it takes effect.
 function pick(i) {
-  if (state !== 'choice' || !choice.offers[i]) return;
+  if (state !== 'choice' || !choice.offers[i] || choice.picking) return;
   const o = choice.offers[i];
   if (choice.banning) return banOffer(i);
+  if (o.kind === 'buy' && P.gold < o.price) { beep(180, 0.12, 'square', 0.03); return toast('Siclos insuficientes', '#ff9a8a'); }
+  choice.picking = true;
+  [...$('cards').children].forEach((c, k) => c.classList.add(k === i ? 'chosen' : 'gone'));
+  const t = o.tier ?? o.relic?.tier ?? 0;
+  if (t >= 3) chord(t === 4 ? [784, 988, 1175, 1568] : [659, 880, 1175], 'triangle');
+  else beep(880, 0.08, 'triangle', 0.04);
+  const c = choice;
+  setTimeout(() => { if (choice === c) takeOffer(o); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420);
+}
+function takeOffer(o) {
+  choice.picking = false;
   if (o.kind === 'leave') { choice = null; return resume(); }
   if (o.kind === 'pact') { applyPact(o.pact); choice = null; return resume(); }
   if (o.kind === 'buy') {
-    if (P.gold < o.price) { beep(180, 0.12, 'square', 0.03); return toast('Siclos insuficientes', '#ff9a8a'); }
     P.gold -= o.price;
     o.t.sold++;
     if (o.what === 'relic') {
@@ -4241,15 +4299,18 @@ function pick(i) {
     choice = null;
     return resume();
   }
-  if (o.kind === 'weapon') P.weapons.push({ id: o.id, level: 1, timer: 0 });
-  else if (o.kind === 'upgrade') P.weapons.find((w) => w.id === o.id).level++;
-  else {
+  const bonus = RARITY[o.tier ?? 0].weapon; // a rare weapon card: that weapon hits harder for good
+  if (o.kind === 'weapon') P.weapons.push({ id: o.id, level: 1, timer: 0, bonus });
+  else if (o.kind === 'upgrade') {
+    const w = P.weapons.find((x) => x.id === o.id);
+    w.level++;
+    w.bonus = (w.bonus || 0) + bonus;
+  } else {
     const before = P.st.maxHp;
     applyEntry(P.st, SCROLLS[o.id], o.tier);
     P.hp += P.st.maxHp - before;
   }
   refreshWeapons();
-  beep(880, 0.08, 'triangle', 0.04);
   nextChoice();
 }
 function nextChoice() {
@@ -4259,7 +4320,7 @@ function nextChoice() {
 }
 
 function reroll() {
-  if (state !== 'choice' || choice.source !== 'level' || P.st.rerolls < 1) return;
+  if (state !== 'choice' || choice.source !== 'level' || P.st.rerolls < 1 || choice.picking) return;
   P.st.rerolls--;
   choice.banning = false;
   choice.offers = offers();
@@ -4268,7 +4329,7 @@ function reroll() {
 }
 // Pular: let this level go and take siclos instead.
 function skip() {
-  if (state !== 'choice' || choice.source !== 'level' || P.st.skips < 1) return;
+  if (state !== 'choice' || choice.source !== 'level' || P.st.skips < 1 || choice.picking) return;
   P.st.skips--;
   const v = 8 + P.level * 2;
   addGold(v);

@@ -348,28 +348,73 @@
     .scroll .back { top: calc(-9 * var(--px)); }
     .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; }
 
-    /* Level-up and altar cards */
-    .cards { display: flex; gap: 14px; justify-content: center; width: min(880px, 100%); }
-    .card { position: relative; flex: 1 1 0; min-width: 0; max-width: 280px; padding: 4px 6px 8px; display: grid; gap: 4px; justify-items: center; text-align: center; cursor: pointer;
-      background: none; color: var(--ink-d); border: calc(7 * var(--px)) solid transparent; image-rendering: pixelated;
-      border-image: url(assets/ui/card.png) 7 fill / calc(7 * var(--px)) repeat; filter: drop-shadow(0 calc(2 * var(--px)) 0 rgba(10, 5, 2, .5));
-      animation: deal .3s steps(3) backwards; transition: transform .1s steps(2); }
+    /* Level-up, altar and caravan cards: a pixel-art frame by rarity (assets/ui/card-r*.png, Daniel 2: clay to gold),
+       a name plate, an art window, a type ribbon and the text. They tilt toward the pointer and catch the light. */
+    .cards { display: flex; gap: 18px; justify-content: center; width: min(940px, 100%); }
+    .card { --cp: 2px; --rar: #c2a98a; --art: linear-gradient(#7a5c40, #4e3826); position: relative; flex: 1 1 0; min-width: 0; max-width: 272px; padding: 2px 0 6px;
+      display: flex; flex-direction: column; gap: 6px; align-items: stretch; text-align: center; cursor: pointer; background: none; color: var(--ink-d);
+      border: calc(13 * var(--cp)) solid transparent; image-rendering: pixelated; border-image: url(assets/ui/card-r0.png) 13 fill / calc(13 * var(--cp)) repeat;
+      filter: drop-shadow(0 calc(3 * var(--cp)) 0 rgba(10, 5, 2, .55));
+      transform: perspective(900px) translateY(var(--lift, 0px)) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+      transition: transform .14s ease-out, filter .14s; animation: deal .6s cubic-bezier(.2, .9, .3, 1.15) backwards; }
+    .card.tn { border-image-source: url(assets/ui/card.png); border-image-slice: 7; border-width: calc(7 * var(--cp)); border-image-width: calc(7 * var(--cp)); --art: linear-gradient(#8a6a4a, #5e4430); }
+    .card.t1 { border-image-source: url(assets/ui/card-r1.png); --art: repeating-linear-gradient(135deg, rgba(255, 255, 255, .05) 0 8px, transparent 8px 16px), linear-gradient(#5e6a78, #323a46); }
+    .card.t2 { border-image-source: url(assets/ui/card-r2.png); --art: repeating-linear-gradient(135deg, rgba(255, 255, 255, .06) 0 10px, transparent 10px 20px), linear-gradient(#77822f, #3c461a); }
+    .card.t3 { border-image-source: url(assets/ui/card-r3.png); --art: repeating-linear-gradient(45deg, rgba(200, 225, 255, .1) 0 2px, transparent 2px 18px), repeating-linear-gradient(-45deg, rgba(200, 225, 255, .1) 0 2px, transparent 2px 18px), linear-gradient(#34558a, #1a2a4e);
+      filter: drop-shadow(0 calc(3 * var(--cp)) 0 rgba(10, 5, 2, .55)) drop-shadow(0 0 8px rgba(160, 205, 255, .45)); }
+    .card.t4 { border-image-source: url(assets/ui/card-r4.png); --art: repeating-linear-gradient(45deg, rgba(242, 193, 78, .16) 0 2px, transparent 2px 18px), repeating-linear-gradient(-45deg, rgba(242, 193, 78, .16) 0 2px, transparent 2px 18px), linear-gradient(#55306f, #2a1642);
+      filter: drop-shadow(0 calc(3 * var(--cp)) 0 rgba(10, 5, 2, .55)) drop-shadow(0 0 10px rgba(242, 193, 78, .6)); }
     @media (max-width: 640px) { .cards { flex-wrap: wrap; } .card { flex-basis: 100%; } }
-    .card:nth-child(2) { animation-delay: .08s; }
-    .card:nth-child(3) { animation-delay: .16s; }
-    @keyframes deal { from { transform: translateY(40px); opacity: 0; } }
-    .card:hover { transform: translateY(calc(-2 * var(--px))); filter: brightness(1.06) drop-shadow(0 calc(4 * var(--px)) 0 rgba(10, 5, 2, .5)); }
-    .card img { width: 96px; height: 96px; }
-    .card kbd.k { position: absolute; top: -4px; left: -4px; }
-    .card small { color: #7a5634; font-size: 15px; font-weight: 600; }
-    .card b { font: 400 30px / 1 var(--f-title); color: var(--wine); }
-    .card span { font-size: 16px; }
-    .card em.evo { display: block; margin-top: 4px; font-style: normal; font-size: 14px; color: #8a5a14; }
-    .card .flag { position: absolute; top: 2px; right: 2px; padding: 0 6px 1px; font: 600 13px/1.2 var(--f-ui); font-style: normal; text-transform: uppercase;
+    .card:nth-child(2) { animation-delay: .09s; }
+    .card:nth-child(3) { animation-delay: .18s; }
+    .card:nth-child(4) { animation-delay: .27s; }
+    @keyframes deal { from { transform: perspective(900px) translateY(60px) rotateY(-110deg) scale(.8); opacity: 0; } 50% { opacity: 1; } }
+    .card:hover { filter: brightness(1.08) drop-shadow(0 calc(6 * var(--cp)) 0 rgba(10, 5, 2, .45)); }
+    .card.t3:hover { filter: brightness(1.08) drop-shadow(0 calc(6 * var(--cp)) 0 rgba(10, 5, 2, .45)) drop-shadow(0 0 12px rgba(160, 205, 255, .6)); }
+    .card.t4:hover { filter: brightness(1.1) drop-shadow(0 calc(6 * var(--cp)) 0 rgba(10, 5, 2, .45)) drop-shadow(0 0 14px rgba(242, 193, 78, .75)); }
+    .card kbd.k { position: absolute; top: calc(-13 * var(--cp) - 4px); left: calc(-13 * var(--cp) - 4px); z-index: 3; }
+    .card .flag { position: absolute; top: calc(-13 * var(--cp) - 4px); right: calc(-13 * var(--cp) - 4px); z-index: 3; padding: 0 6px 1px; font: 600 13px/1.2 var(--f-ui); font-style: normal; text-transform: uppercase;
       color: var(--gold2); background: var(--wine); box-shadow: 0 0 0 2px var(--line); }
-    .card ul.delta { list-style: none; margin: 6px 0 0; padding: 4px 6px; display: grid; gap: 1px; font-size: 15px; background: rgba(122, 86, 52, .14); }
+    .card .gem { position: absolute; z-index: 2; top: calc(-13 * var(--cp) - 13px); left: 50%; width: 26px; height: 26px; transform: translateX(-50%);
+      background: url(assets/ui/gem-r0.png) center / 26px 26px no-repeat; image-rendering: pixelated; }
+    .card.t1 .gem { background-image: url(assets/ui/gem-r1.png); }
+    .card.t2 .gem { background-image: url(assets/ui/gem-r2.png); }
+    .card.t3 .gem { background-image: url(assets/ui/gem-r3.png); }
+    .card.t4 .gem { background-image: url(assets/ui/gem-r4.png); animation: gemPulse 1.4s ease-in-out infinite; }
+    .card.tn .gem { display: none; }
+    @keyframes gemPulse { 50% { filter: brightness(1.35) drop-shadow(0 0 4px #ffd66b); } }
+    .card .c-name { margin: 0 -2px; padding: 4px 6px 5px; font: 400 25px / 1 var(--f-title); color: #fbf4e4; background: linear-gradient(#3a2a22, #241812);
+      box-shadow: 0 0 0 2px var(--line), inset 0 2px 0 rgba(255, 255, 255, .1); text-shadow: 0 2px 0 var(--line); }
+    .card.t4 .c-name { color: #ffe9a8; }
+    .card .c-art { position: relative; height: 120px; display: grid; place-items: center; overflow: hidden; background: var(--art);
+      box-shadow: 0 0 0 2px var(--line), inset 0 0 0 2px rgba(255, 255, 255, .12), inset 0 -16px 20px rgba(0, 0, 0, .3); }
+    .card.t3 .c-art::before, .card.t4 .c-art::before { content: ''; position: absolute; inset: -60%; background: repeating-conic-gradient(rgba(255, 240, 190, .12) 0 8deg, transparent 8deg 18deg);
+      animation: rays 20s linear infinite; }
+    @keyframes rays { to { transform: rotate(1turn); } }
+    .card .c-art::after { content: ''; position: absolute; left: 26%; right: 26%; bottom: 9px; height: 12px; background: radial-gradient(closest-side, rgba(0, 0, 0, .5), transparent); }
+    .card .c-art img { position: relative; z-index: 1; width: 96px; height: 96px; transform: translate(var(--ix, 0px), var(--iy, 0px)); transition: transform .14s ease-out;
+      filter: drop-shadow(0 3px 0 rgba(0, 0, 0, .35)); }
+    .card .c-type { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 8px; margin: 0 -2px; padding: 2px 6px 3px; font: 600 14px/1.25 var(--f-ui); color: #fbe9c8;
+      background: linear-gradient(#a8382f, #7a2a2c); box-shadow: 0 0 0 2px var(--line), inset 0 2px 0 rgba(255, 255, 255, .16), inset 0 -2px 0 rgba(0, 0, 0, .2); }
+    .card .c-type em { font-style: normal; color: var(--rar); text-shadow: 0 1px 0 var(--line); }
+    .card.t0 .c-type em, .card.t1 .c-type em { color: #f6e8c6; }
+    .card .c-text { padding: 0 4px; font-size: 15px; }
+    .card em.evo { display: block; margin-top: 4px; font-style: normal; font-size: 14px; color: #8a5a14; }
+    .card ul.delta { list-style: none; margin: 6px 0 0; padding: 4px 6px; display: grid; gap: 1px; font-size: 15px; background: rgba(122, 86, 52, .14); box-shadow: inset 0 0 0 1px rgba(122, 86, 52, .25); }
     .card ul.delta s { text-decoration: none; color: #8a6a4a; }
     .card ul.delta ins { text-decoration: none; font-weight: 700; color: #2f7a2a; }
+    /* Light on the card: a glare that follows the pointer; silver and gold also carry a foil sheen. */
+    .card .shine { position: absolute; inset: calc(-13 * var(--cp)); z-index: 2; pointer-events: none; opacity: 0; transition: opacity .15s;
+      background: radial-gradient(circle at var(--mx, 50%) var(--my, 20%), rgba(255, 250, 230, .42), rgba(255, 250, 230, 0) 45%); mix-blend-mode: overlay; }
+    .card:hover .shine { opacity: 1; }
+    .card.t3 .shine, .card.t4 .shine { opacity: .85; background: radial-gradient(circle at var(--mx, 50%) var(--my, 20%), rgba(255, 250, 230, .42), rgba(255, 250, 230, 0) 45%),
+      linear-gradient(115deg, transparent 38%, rgba(255, 236, 170, .5) 47%, rgba(170, 220, 255, .38) 53%, transparent 62%) 0 0 / 300% 100%; animation: foil 3.2s linear infinite; }
+    @keyframes foil { from { background-position: 0 0, 130% 0; } to { background-position: 0 0, -130% 0; } }
+    .card.chosen { z-index: 4; animation: chosen .42s ease-in forwards; }
+    .card.gone { animation: gone .32s ease-in forwards; }
+    @keyframes chosen { 40% { transform: perspective(900px) translateY(-26px) rotateY(200deg) scale(1.12); filter: brightness(1.4) drop-shadow(0 0 16px var(--rar)); }
+      to { transform: perspective(900px) translateY(-60px) rotateY(360deg) scale(1.2); filter: brightness(1.8) drop-shadow(0 0 24px var(--rar)); opacity: 0; } }
+    @keyframes gone { to { transform: perspective(900px) translateY(60px) rotateX(35deg) scale(.9); opacity: 0; } }
     .card-tools { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
     .card-tools .btn:disabled { opacity: .45; cursor: default; }
     .card-tools .btn.on { filter: hue-rotate(-20deg) brightness(1.15); }
@@ -377,8 +422,17 @@
     .card.poor { filter: grayscale(.6) brightness(.85); }
     #choice.banning .card:hover { filter: sepia(.6) hue-rotate(-30deg) saturate(2); }
     .build li small.evo { color: var(--gold); }
-    .card.rare::after { content: ''; position: absolute; top: calc(-6 * var(--px)); left: 50%; width: 16px; height: 16px; transform: translateX(-50%) rotate(45deg);
-      background: var(--rar); box-shadow: inset 3px 3px 0 rgba(255, 255, 255, .45), inset -3px -3px 0 rgba(0, 0, 0, .3), 0 0 0 2px var(--line); }
+    /* A relic from a chest: its card spins in under the title, then fades. */
+    #relic-card { top: 15%; left: 50%; width: 214px; display: grid; justify-items: center; gap: 10px; opacity: 0; transform: translateX(-50%); transition: opacity .4s; }
+    #relic-card.show { opacity: 1; }
+    #relic-card > small { font: 400 34px / 1 var(--f-title); letter-spacing: 1px; text-shadow: 0 2px 0 var(--line), 0 0 12px rgba(0, 0, 0, .6); }
+    #relic-card .card { width: 100%; max-width: none; cursor: default; animation: none; }
+    #relic-card .c-art { height: 92px; }
+    #relic-card .c-art img { width: 72px; height: 72px; }
+    #relic-card.show .card { animation: relicIn 1.1s cubic-bezier(.2, .8, .3, 1.1) both; }
+    @keyframes relicIn { from { transform: perspective(900px) translateY(40px) rotateY(-720deg) scale(.3); opacity: 0; }
+      55% { transform: perspective(900px) rotateY(25deg) scale(1.08); opacity: 1; } to { transform: perspective(900px) rotateY(0) scale(1); } }
+    @media (prefers-reduced-motion: reduce) { .card, .card.chosen, .card.gone, .card .c-art::before, .card .shine, .card .gem, #relic-card.show .card { animation: none !important; } }
     #choice { flex-direction: column; align-items: center; justify-content: safe center; gap: 22px; }
     #choice h2 { margin: 0; font: 400 60px / 1 var(--f-title); letter-spacing: 2px; color: var(--gold2);
       text-shadow: 0 var(--px) 0 var(--bronze), 0 calc(2 * var(--px)) 0 var(--bronze), 0 calc(3 * var(--px)) 0 var(--line); }
@@ -754,6 +808,7 @@
     </div>
     <div id="toasts" class="hud"></div>
     <div id="relic" class="hud glass"></div>
+    <div id="relic-card" class="hud"></div>
     <div id="tags" class="hud"></div>
     <div id="dmg" class="hud"></div>
     <div id="hurt" class="hud"></div>
@@ -960,6 +1015,8 @@
         <span><kbd class="k">←</kbd><kbd class="k">→</kbd><kbd class="k">↑</kbd><kbd class="k">↓</kbd></span><span>Girar a câmera pelo teclado</span>
         <span><kbd class="k">Esc</kbd></span><span>Pausa</span>
       </div>
+      <h3>Raridade das cartas</h3>
+      <p>Toda carta de nível, de altar ou da caravana e toda relíquia tem uma raridade, do barro ao ouro (a estátua de Daniel 2): <b>Barro</b>, <b>Ferro</b>, <b>Bronze</b>, <b>Prata</b> e <b>Ouro</b>. A moldura e a gema mostram qual é. Quanto mais rara, mais difícil de sair (o ouro sai 1 vez em 100) e maior o efeito: rolos e relíquias valem ×1, ×1,5, ×2,2, ×3,2 ou ×5; uma arma ganha de vez +15%, +35%, +70% ou +150% de dano. A Sorte aumenta a chance das raras.</p>
       <h3>Evoluções</h3>
       <p>Uma arma no nível 5, com a relíquia certa, evolui ao abrir o próximo baú. A carta de cada arma diz qual relíquia ela pede (Funda + Cinco Pedras Lisas = Pedra do Gigante).</p>
       <h3>No mapa</h3>
