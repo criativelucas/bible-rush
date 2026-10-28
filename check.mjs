@@ -1,7 +1,8 @@
 // Run: node check.mjs — checks the pure logic in src/sim.js and src/content.js.
 import assert from 'node:assert/strict';
 import { FlowField, SpatialHash, rng } from './src/sim.js';
-import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX_LEVEL, baseStats, rollOffers, weaponStats, rollRarity, readyToEvolve, openSet, unlockedBy, migrateProfile, exportCode, importCode, PROFILE_VERSION } from './src/content.js';
+import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX_LEVEL, baseStats, rollOffers, weaponStats, rollRarity, readyToEvolve, openSet, unlockedBy, migrateProfile, exportCode, importCode, PROFILE_VERSION,
+  TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, runDenarios, applyMarket, lockedWeapons, packSize } from './src/content.js';
 
 // Open field: west of the player, arrows point straight east.
 {
@@ -166,7 +167,8 @@ import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX
   assert.deepEqual(p.trophies, v1.trophies);
   assert.deepEqual(p.wins, v1.wins);
   assert.equal(p.denarios, 0);
-  assert.deepEqual(p.unlocked, []);
+  assert.deepEqual(p.unlocked, Object.keys(ARSENAL).map((id) => `weapon:${id}`)); // old players keep the newer weapons
+  assert.deepEqual(migrateProfile({}).unlocked, []); // new players buy them
   for (const junk of [null, 7, 'x', [], { trophies: [], denarios: 'mil' }]) {
     const q = migrateProfile(junk);
     assert.deepEqual(q.trophies, {});
@@ -178,6 +180,42 @@ import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX
   assert.deepEqual(importCode(` ${exportCode(rich).replace(/(.{20})/g, '$1\n')} `), rich); // pasted with line breaks
   for (const bad of ['', 'hello', 'BR2:@@@', 'BR2:' + btoa('[1,2]'), 'BR2:' + btoa('{oops')]) assert.equal(importCode(bad), null);
   assert.ok(openSet(migrateProfile(v1)).has('map:ossos')); // golias opens the Valley of Dry Bones
+}
+
+// Market: costs climb; a run's pay follows the formula; training, tools and supplies reach the run's stats;
+// locked (Arsenal) and banned weapons never show up on cards.
+{
+  for (const t of [...Object.values(TRAINING), ...Object.values(TOOLS)]) {
+    for (let k = 1; k < t.max; k++) assert.ok(levelCost(t.cost, k) > levelCost(t.cost, k - 1));
+    assert.equal(levelCost(t.cost, 0) % 5, 0);
+  }
+  assert.equal(runDenarios({ time: 0, kills: 0, stones: 0, chests: 0, won: false }).total, 0);
+  const lost = runDenarios({ time: 5 * 60 + 30, kills: 200, stones: 1, chests: 2, won: false });
+  assert.equal(lost.total, 15 + 8 + 10 + 10);
+  const won = runDenarios({ time: 9 * 60, kills: 1000, stones: 3, chests: 5, won: true });
+  assert.equal(won.total, 27 + 40 + 30 + 25 + 60);
+  assert.equal(won.lines.reduce((t, [, v]) => t + v, 0), won.total);
+  const prof = migrateProfile({ upgrades: { forca: 3, vigor: 2 }, tools: { renovar: 2, quarta: 1, cordao: 1 } });
+  const st = applyMarket(baseStats(HEROES.davi), prof, ['oleo', 'bolsa']);
+  assert.ok(Math.abs(st.dmg - 0.12) < 1e-9);
+  assert.equal(st.maxHp, HEROES.davi.hp + 16);
+  assert.equal(st.rerolls, 3);
+  assert.equal(st.cards, 1);
+  assert.equal(st.revives, 1);
+  assert.equal(st.xp, 0.25);
+  assert.equal(st.gold, 0.5);
+  assert.equal(packSize(prof), 2);
+  assert.equal(packSize(migrateProfile({ tools: { alforje: 1 } })), 3);
+  const locked = lockedWeapons(migrateProfile({}));
+  assert.deepEqual([...locked].sort(), Object.keys(ARSENAL).sort());
+  assert.equal(lockedWeapons(migrateProfile({ unlocked: ['weapon:fogo'] })).has('fogo'), false);
+  const banned = new Set(['granizo', 'forca']);
+  for (let k = 0; k < 300; k++) {
+    for (const o of rollOffers({ weapons: [{ id: 'funda', level: 1 }], luck: 0, locked, banned }, Math.random, 4)) {
+      assert.ok(!locked.has(o.id) && !banned.has(o.id), `${o.id} should not be offered`);
+    }
+  }
+  for (const it of Object.values(SUPPLIES)) assert.ok(it.cost > 0 && it.name && it.desc);
 }
 
 console.log('ok');

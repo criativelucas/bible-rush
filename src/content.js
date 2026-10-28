@@ -63,7 +63,7 @@ export const HEROES = {
 export function baseStats(hero) {
   return {
     dmg: 0, cd: 0, area: 0, dur: 0, amount: 0, speed: 0, maxHp: hero.hp, regen: 0, armor: 0,
-    pickup: 0, luck: hero.luck || 0, crit: 0.05, xp: 0, burn: 0, airJumps: 0, revives: 0, rerolls: 1,
+    pickup: 0, luck: hero.luck || 0, crit: 0.05, xp: 0, burn: 0, airJumps: 0, revives: 0, rerolls: 1, skips: 1, bans: 1,
     vamp: 0, gold: 0, faith: 0, // life per kill, extra siclos, extra Fé
     critDmg: 0, dodge: 0, // Tábuas da Lei, Escudo de Abraão
   };
@@ -317,18 +317,19 @@ export function describeLevel(id, level) {
 }
 
 // Level-up cards: new weapons (if a slot is free), upgrades for owned weapons, scrolls. No duplicates.
-export function rollOffers({ weapons, luck }, rand, n = 3) {
+// locked: weapons not bought yet (Arsenal); banned: weapons/scrolls the player banished this run.
+export function rollOffers({ weapons, luck, locked = new Set(), banned = new Set() }, rand, n = 3) {
   const owned = new Map(weapons.map((w) => [w.id, w.level]));
   const evolved = new Set(weapons.map((w) => WEAPONS[w.id].from).filter(Boolean));
   const pool = [];
   for (const id in WEAPONS) {
-    if (WEAPONS[id].evo || evolved.has(id)) continue; // evolutions come from chests, not cards
+    if (WEAPONS[id].evo || evolved.has(id) || locked.has(id) || banned.has(id)) continue; // evolutions come from chests, not cards
     const lv = owned.get(id);
     if (lv === undefined) {
       if (weapons.length < MAX_WEAPONS) pool.push({ kind: 'weapon', id, w: 1.2 });
     } else if (lv < MAX_LEVEL) pool.push({ kind: 'upgrade', id, w: 2.5 });
   }
-  for (const id in SCROLLS) pool.push({ kind: 'scroll', id, w: 0.5 });
+  for (const id in SCROLLS) if (!banned.has(id)) pool.push({ kind: 'scroll', id, w: 0.5 });
   const out = [];
   while (out.length < n && pool.length) {
     const o = pool.splice(pickWeighted(pool.map((p) => p.w), rand), 1)[0];
@@ -514,12 +515,14 @@ export function spawnWeights(t) {
 
 // ---------- Save ----------
 // v1 kept only trophies and wins; v2 adds what the shop, hero evolution and tasks will fill (see PLANO.md).
-export const PROFILE_VERSION = 2;
+export const PROFILE_VERSION = 3; // 3: the Arsenal (players from before keep the weapons they already had)
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 export function migrateProfile(raw) {
   const p = isObj(raw) ? raw : {};
   const o = (k) => (isObj(p[k]) ? p[k] : {});
   const a = (k) => (Array.isArray(p[k]) ? p[k] : []);
+  const unlocked = a('unlocked');
+  if ((p.v ?? 1) < 3 && Object.keys(o('trophies')).length) for (const id in ARSENAL) if (!unlocked.includes(`weapon:${id}`)) unlocked.push(`weapon:${id}`);
   return {
     ...p,
     v: PROFILE_VERSION,
@@ -527,7 +530,7 @@ export function migrateProfile(raw) {
     trophies: o('trophies'), claimed: o('claimed'), wins: o('wins'), // wins: hero -> { map: true }
     upgrades: o('upgrades'), tools: o('tools'), bag: o('bag'), heroes: o('heroes'),
     bestiary: o('bestiary'), records: o('records'), seen: o('seen'), tasks: o('tasks'),
-    unlocked: a('unlocked'), owned: a('owned'),
+    unlocked, owned: a('owned'),
   };
 }
 // A text code to carry the save to another browser.
@@ -539,4 +542,64 @@ export function importCode(code) { // the profile, or null when the text is not 
     const p = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
     return isObj(p) ? migrateProfile(p) : null;
   } catch { return null; }
+}
+
+// ---------- Market: denários earned after each run buy strength, tools, weapons and supplies ----------
+export const levelCost = (base, level) => Math.round((base * 1.35 ** level) / 5) * 5; // each level costs more
+// Training: permanent, every hero, every run. icon: [ICON group, key].
+export const TRAINING = {
+  forca: { name: 'Força', stat: 'dmg', per: 0.04, pct: true, label: 'dano', max: 8, cost: 85, icon: ['scrolls', 'forca'] },
+  vigor: { name: 'Vigor', stat: 'maxHp', per: 8, label: 'vida máxima', max: 8, cost: 85, icon: ['scrolls', 'vida'] },
+  ligeireza: { name: 'Ligeireza', stat: 'speed', per: 0.025, pct: true, label: 'velocidade', max: 6, cost: 100, icon: ['scrolls', 'corrida'] },
+  sabedoria: { name: 'Sabedoria', stat: 'xp', per: 0.05, pct: true, label: 'experiência', max: 6, cost: 100, icon: ['scrolls', 'sabedoria'] },
+  bencao: { name: 'Bênção', stat: 'luck', per: 0.04, pct: true, label: 'sorte', max: 6, cost: 120, icon: ['scrolls', 'sorte'] },
+  colheita: { name: 'Colheita', stat: 'pickup', per: 0.1, pct: true, label: 'alcance de coleta', max: 5, cost: 70, icon: ['scrolls', 'alcance'] },
+  mana: { name: 'Fôlego', stat: 'regen', per: 0.2, label: 'vida por segundo', max: 5, cost: 100, icon: ['relic', 'vaso'] },
+  couraca: { name: 'Couraça', stat: 'armor', per: 0.02, pct: true, label: 'armadura', max: 6, cost: 100, icon: ['relic', 'couraca'] },
+  precisao: { name: 'Precisão', stat: 'crit', per: 0.01, pct: true, label: 'crítico', max: 5, cost: 170, icon: ['scrolls', 'precisao'] },
+  prontidao: { name: 'Prontidão', stat: 'cd', per: 0.02, pct: true, label: 'recarga', neg: true, max: 5, cost: 185, icon: ['scrolls', 'prontidao'] },
+  amplidao: { name: 'Amplidão', stat: 'area', per: 0.03, pct: true, label: 'área', max: 5, cost: 170, icon: ['scrolls', 'amplidao'] },
+};
+export const trainingText = (t, levels = 1) => `${t.neg ? '−' : '+'}${t.pct ? `${+(t.per * levels * 100).toFixed(1)}%` : +(t.per * levels).toFixed(1)} de ${t.label}`;
+// Tools: change how a run plays. stat: what each level adds to the run's stats.
+export const TOOLS = {
+  renovar: { name: 'Renovar', desc: '+1 uso de trocar as cartas, por partida.', stat: 'rerolls', max: 5, cost: 100, icon: ['ui', 'die'] },
+  pular: { name: 'Pular', desc: '+1 uso de pular uma subida de nível (rende siclos).', stat: 'skips', max: 5, cost: 70, icon: ['ui', 'wing'] },
+  banir: { name: 'Banir', desc: '+1 uso de tirar uma opção das cartas até o fim da partida.', stat: 'bans', max: 5, cost: 130, icon: ['ui', 'skull'] },
+  quarta: { name: 'Mais uma carta', desc: 'Toda subida de nível mostra uma carta a mais.', stat: 'cards', max: 1, cost: 1000, icon: ['ui', 'book'] },
+  cordao: { name: 'Cordão de reserva', desc: 'Começa toda partida com uma ressurreição.', stat: 'revives', max: 1, cost: 900, icon: ['relic', 'cordao'] },
+  alforje: { name: 'Alforje maior', desc: 'Leve 3 itens do alforje em vez de 2.', stat: 'pack', max: 1, cost: 600, icon: ['ui', 'scroll'] },
+};
+// Arsenal: weapons that only show up on cards and in chests after you buy them here.
+export const ARSENAL = { machado: 150, carros: 200, gafanhotos: 200, fogo: 250 };
+export const lockedWeapons = (profile) => new Set(Object.keys(ARSENAL).filter((id) => !(profile.unlocked || []).includes(`weapon:${id}`)));
+// Supplies: bought in stock, packed before a run (2 slots), used up when it starts.
+export const SUPPLIES = {
+  mana: { name: 'Maná do céu', desc: 'Começa a partida no nível 3.', cost: 60, icon: ['pickup', 'pao'] },
+  oleo: { name: 'Óleo da unção', desc: '+25% de experiência na partida.', cost: 50, icon: ['relic', 'oleo'] },
+  bolsa: { name: 'Bolsa de siclos', desc: '+50% de siclos na partida.', cost: 40, icon: ['ui', 'coin'] },
+  mel: { name: 'Mel silvestre', desc: 'Um carregador de tesouro a mais aparece no primeiro minuto.', cost: 50, icon: ['relic', 'mel'] },
+  estrela: { name: 'Estrela de Jacó', desc: 'O primeiro baú dá uma relíquia de Prata ou melhor.', cost: 70, icon: ['ui', 'star'], ref: 'Nm 24:17' },
+};
+export const packSize = (profile) => 2 + (profile.tools?.alforje || 0);
+
+// Denários earned by a run, line by line. Trophies pay on top when they are won (TROPHY_PAY by tier).
+export const TROPHY_PAY = [25, 60, 120];
+export function runDenarios({ time, kills, stones, chests, won }) {
+  const lines = [
+    ['Tempo de jornada', Math.floor(time / 60) * 3],
+    ['Inimigos derrotados', Math.floor(kills / 25)],
+    ['Pedras do Memorial', stones * 10],
+    ['Baús abertos', chests * 5],
+    ['Vitória', won ? 60 : 0],
+  ].filter(([, v]) => v > 0);
+  return { lines, total: lines.reduce((t, [, v]) => t + v, 0) };
+}
+// Everything a run starts with from the Market: training levels, tools and packed supplies.
+export function applyMarket(st, profile, pack = []) {
+  for (const [id, t] of Object.entries(TRAINING)) st[t.stat] += t.per * (profile.upgrades?.[id] || 0);
+  for (const [id, t] of Object.entries(TOOLS)) st[t.stat] = (st[t.stat] || 0) + (profile.tools?.[id] || 0);
+  if (pack.includes('oleo')) st.xp += 0.25;
+  if (pack.includes('bolsa')) st.gold += 0.5;
+  return st;
 }

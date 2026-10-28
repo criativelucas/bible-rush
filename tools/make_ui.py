@@ -271,6 +271,8 @@ def icons():
     sprite(['...k....', '...kk...', '..kOk...', '..kOOk..', '.kOyOOk.', '.kOyyOk.', 'kOOyyOok', 'kOyyyOok', 'koOyOook', '.kooook.', '..kkkk..'], 'flame')
     sprite(['..kkkk..', '.kYYYgk.', 'kYyYggdk', 'kYYgggdk', 'kYggggdk', 'kgggggdk', '.kgdddk.', '..kkkk..'], 'coin')
     sprite(['.kkkkkk.', 'kwwwwwWk', 'kwkkwkkk', 'kwkkwkkk', 'kwwwkwWk', '.kwwwWk.', '.kwkwkk.', '..kkkk..'], 'skull')
+    # Denário: the silver coin spent in the Market, a laurel wreath stamped on it.
+    sprite(['..kkkkk..', '.kwwwssk.', 'kwwSSSssk', 'kwSwwwSsk', 'kwSwSwSsk', 'kwSwwwSSk', 'kssSSSSSk', '.kssSSSk.', '..kkkkk..'], 'denario')
     sprite(['....k....', '...kYk...', '...kYk...', 'kkkkYgkkk', 'kYyYYYggk', '.kYYYggk.', '.kYgkgdk.', 'kYgk.kgdk', 'kkk...kkk'], 'star')
     sprite(['....O....', '.O.kkk.O.', '..kYyYk..', '.kYyYYgk.', 'OkYYYggkO', '.kYYggdk.', '..kggdk..', '.O.kkk.O.', '....O....'], 'sun')
     sprite(['..kkkk...', '.knnNk...', 'kwnNk....', 'knnk.....', 'knnk.....', 'knnNk....', '.knnNkkk.', '..knnnnk.', '...kkkk..'], 'moon')

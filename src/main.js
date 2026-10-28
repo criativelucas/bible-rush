@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { rng, FlowField, SpatialHash } from './sim.js';
 import {
   HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL, TROPHIES, TIERS, openSet, migrateProfile, exportCode, importCode, unlockedBy,
+  TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
@@ -13,6 +14,7 @@ const PROFILE_KEY = 'bible-rush-profile';
 const profile = migrateProfile((() => { try { return JSON.parse(localStorage.getItem(PROFILE_KEY)); } catch { return null; } })());
 const saveProfile = () => { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch {} };
 let OPEN = openSet(profile);
+let LOCKED = lockedWeapons(profile); // Arsenal weapons not bought yet
 const isOpen = (kind, id) => OPEN.has(`${kind}:${id}`);
 const unlockName = (key) => {
   const [kind, id] = key.split(':');
@@ -186,10 +188,10 @@ const E = pool(MAX_ENEMIES, ['x', 'y', 'z', 'hp', 'maxhp', 'kx', 'kz', 'flash', 
   'st', 't', 'dx', 'dz', 'slow', 'stun', 'burn', 'cd', 'r', 'h', 'mark', 'sw']); // sw: last sweep that hit it
 // ret: boomerang (s until it turns back, 0 = coming back, -1 = not a boomerang); glow: from an evolved weapon
 const S = pool(MAX_SHOTS, ['x', 'y', 'z', 'vx', 'vy', 'vz', 'life', 'bounce', 'pierce', 'last', 'dmg', 'seek', 'speed', 'size', 'crit', 'kind',
-  'ret', 'glow', 'burn']);
+  'ret', 'glow', 'burn', 'src']);
 const EP = pool(MAX_ESHOTS, ['x', 'y', 'z', 'vx', 'vz', 'life', 'graze', 'dmg']);
 const G = pool(MAX_GEMS, ['x', 'y', 'z', 'val', 'pull', 'kind']); // kind 0 = maná (XP), 1 = siclo (gold), 2+ = PICKUPS
-const K = pool(MAX_STRIKES, ['x', 'z', 'r', 'dmg', 't', 't0', 'fire', 'burn']); // falling hail, or fire from heaven
+const K = pool(MAX_STRIKES, ['x', 'z', 'r', 'dmg', 't', 't0', 'fire', 'burn', 'src']); // falling hail, or fire from heaven
 const PT = pool(MAX_PARTS, ['x', 'y', 'z', 'vx', 'vy', 'vz', 'life', 'max', 'size', 'col']);
 const near = new Int32Array(2048);
 
@@ -494,7 +496,11 @@ const P = {
   hp: 100, fe: 0, gold: 0, level: 1, xp: 0, xpNext: 5, kills: 0, iframes: 0, hurtT: 0,
   stacks: 0, shotCount: 0, specialCd: 0, dashT: 0, dashX: 0, dashZ: 0, dashSpeed: 0, dashId: 0, harpT: 0, attackT: 0, castT: 0,
   sunT: 0, miracles: 0, conquests: 0, // Josué: the sun standing still, and stones/chests taken
+  banned: new Set(), star: false, dmgBy: {}, killsBy: {}, pack: [], // Market: banned cards, Estrela de Jacó; run report
 };
+let dmgSrc = 'other'; // who is dealing damage right now (a weapon id, 'move', 'miracle', 'passive', 'other'): fills P.dmgBy
+let srcSlot = -3; // the same for shots and strikes, kept on them: weapon slot, or -1 miracle, -2 passive, -3 other
+const srcName = (code) => (code >= 0 ? P.weapons[code]?.id ?? 'other' : ['other', 'passive', 'miracle'][code + 3]);
 const moveSpeed = () => HEROES[P.hero].speed * (1 + P.st.speed);
 const pickupR = () => 3.5 * (1 + P.st.pickup);
 const globalDmg = () => (1 + P.st.dmg) * (P.hero === 'sansao' ? 1 + P.stacks / 100 : 1)
@@ -527,6 +533,7 @@ let state = 'menu'; // menu | setup | settings | howto | play | pause | choice |
 let prevScreen = 'menu';
 let runStarted = false;
 let selHero = HEROES[params.get('hero')] && isOpen('hero', params.get('hero')) ? params.get('hero') : 'davi';
+let packed = (profile.packSel || []).filter((id) => SUPPLIES[id]); // what goes in the saddlebag (kept for next time)
 let time = 0;
 let night = 0;
 let wasNight = false;
@@ -544,6 +551,7 @@ let chestsOpened = 0;
 let feReady = false;
 let nextCarrier = 75; // a treasure carrier every 150 s
 let nextEvent = 120; // the map's own event every 150 s
+let melCarrier = Infinity; // Mel silvestre: one more carrier early on
 let challenge = null; // the sealed chest being fought for: { c, t, wave }
 let dustT = 0; // wind over the bones: dust closes in
 let glintsGot = 0;
@@ -567,7 +575,7 @@ function turnCamera(dx, dy) {
   camIdle = 0;
 }
 addEventListener('keydown', (e) => {
-  const typing = document.activeElement?.tagName === 'INPUT';
+  const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
   if (!typing) keys.add(e.code);
   if ((e.code === 'Space' || e.code.startsWith('Arrow')) && !typing) e.preventDefault();
   if (state !== 'play' && state !== 'choice' && !typing && e.code.startsWith('Arrow')) navMove(e.code === 'ArrowUp' || e.code === 'ArrowLeft' ? -1 : 1);
@@ -575,7 +583,9 @@ addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (state === 'choice') {
     if (/^Digit[1-4]$/.test(e.code)) pick(Number(e.code.slice(5)) - 1);
-    if (e.code === 'KeyR') reroll();
+    if (e.code === 'KeyR' || e.code === 'KeyF') reroll();
+    if (e.code === 'KeyX') skip();
+    if (e.code === 'KeyZ') toggleBan();
   } else if (state === 'play') {
     if (e.code === 'KeyE') useSpecial();
     if (e.code === 'KeyQ') useMiracle();
@@ -642,8 +652,12 @@ function go(id) {
   }
   if (id === 'setup') renderSetup();
   if (id === 'trophies') renderTrophies();
+  if (id === 'shop') renderShop();
+  if (id === 'menu') renderPurse();
   state = id;
   show(id);
+  if (id === 'menu') guide('menu', MENU_GUIDE);
+  if (id === 'shop') guide('shop', SHOP_GUIDE);
   beep(660, 0.05, 'triangle', 0.03);
 }
 document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => go(b.dataset.go); });
@@ -664,6 +678,8 @@ $('quit').onclick = () => reload({ biome: BIOME_ID });
 $('to-menu').onclick = () => reload({ biome: BIOME_ID });
 $('again').onclick = () => reload({ biome: BIOME_ID, hero: P.hero, screen: 'setup' });
 $('reroll').onclick = () => reroll();
+$('skip').onclick = () => skip();
+$('ban').onclick = () => toggleBan();
 $('go').onclick = () => startRun();
 addEventListener('pointerdown', () => audio(), { once: true });
 
@@ -698,12 +714,15 @@ function renderSetup() {
     ${ab('<img class="ico" src="assets/ui/star.png" alt="">', `Passiva: ${h.passive[0]}`, h.passive[1])}
     ${ab('<kbd class="k">E</kbd>', h.move[0], h.move[1])}
     ${ab('<kbd class="k">Q</kbd>', h.miracle[0], h.miracle[1])}`;
+  renderPack();
   $('biomes').replaceChildren(...Object.entries(BIOMES).map(([id, b]) => {
     const el = document.createElement('button');
     const open = isOpen('map', id);
     el.className = `opt biome well${id === BIOME_ID ? ' sel' : ''}${open ? '' : ' locked'}`;
     el.title = b.desc;
-    el.innerHTML = `<div class="art ${id}"></div><div class="t"><b>${b.name}</b><small>${open ? b.ref : 'Bloqueado'}</small></div>`;
+    const rec = profile.records[id];
+    const recTxt = !open || !rec ? '' : rec.fastest ? `Vencido em ${fmt(rec.fastest)}` : `Recorde ${fmt(rec.best)}`;
+    el.innerHTML = `<div class="art ${id}"></div><div class="t"><b>${b.name}</b><small>${open ? b.ref : 'Bloqueado'}</small><span class="rec">${recTxt}</span></div>`;
     el.onclick = () => {
       if (!open) return lockedHint(`map:${id}`);
       if (id !== BIOME_ID) reload({ biome: id, hero: selHero, screen: 'setup' });
@@ -711,6 +730,156 @@ function renderSetup() {
     return el;
   }));
 }
+
+// The saddlebag: pick up to packSize() supplies you own; they are used up when the run starts.
+function renderPack() {
+  const owned = Object.keys(SUPPLIES).filter((id) => profile.bag[id] > 0);
+  packed = packed.filter((id) => owned.includes(id));
+  $('pack-count').textContent = `${packed.length} de ${packSize(profile)}`;
+  if (!owned.length) { $('pack').innerHTML = '<span class="none">Vazio. Compre itens no Mercado com os denários das suas jornadas.</span>'; return; }
+  $('pack').replaceChildren(...owned.map((id) => {
+    const it = SUPPLIES[id];
+    const b = document.createElement('button');
+    b.className = packed.includes(id) ? 'on' : '';
+    b.title = it.desc;
+    b.innerHTML = `<img src="${iconSrc(it.icon)}" alt="">${it.name} ×${profile.bag[id]}`;
+    b.onclick = () => {
+      if (packed.includes(id)) packed = packed.filter((k) => k !== id);
+      else if (packed.length < packSize(profile)) packed.push(id);
+      else return beep(180, 0.1, 'square', 0.03);
+      profile.packSel = packed;
+      saveProfile();
+      renderPack();
+      beep(600, 0.05, 'triangle', 0.03);
+    };
+    return b;
+  }));
+}
+
+// ---------- Market ----------
+const iconSrc = ([group, key]) => (group === 'ui' ? `assets/ui/${key}.png` : ICON[group][key]);
+const coinImg = '<img class="ico" src="assets/ui/denario.png" alt="denários">';
+function renderPurse() {
+  for (const el of document.querySelectorAll('.purse b')) el.textContent = profile.denarios;
+}
+const SHOP_TABS = {
+  treino: ['Treinamento', 'Melhorias permanentes: valem para todos os heróis em todas as partidas. Cada nível custa mais que o anterior.'],
+  ferramentas: ['Ferramentas', 'Mudam a partida: mais controle sobre as cartas de nível e uma reserva de vida.'],
+  arsenal: ['Arsenal', 'Armas que só aparecem nas cartas de nível depois de compradas aqui.'],
+  alforje: ['Alforje', 'Itens para uma partida. Escolha quais levar em Nova jornada; eles são gastos ao começar.'],
+};
+let shopTab = 'treino';
+function renderShop() {
+  renderPurse();
+  $('shop-tabs').replaceChildren(...Object.entries(SHOP_TABS).map(([id, [name]]) => {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.className = id === shopTab ? 'on' : '';
+    b.setAttribute('role', 'tab');
+    b.onclick = () => { shopTab = id; renderShop(); beep(660, 0.04, 'triangle', 0.03); };
+    return b;
+  }));
+  $('shop-hint').textContent = SHOP_TABS[shopTab][1];
+  const ware = ({ icon, name, text, level, max, cost, buy, note }) => {
+    const el = document.createElement('div');
+    const maxed = max && level >= max;
+    el.className = `ware ${shopTab}${maxed ? ' maxed' : ''}`;
+    const pips = max > 1 ? `<div class="pips">${Array.from({ length: max }, (_, k) => `<i class="${k < level ? 'on' : ''}"></i>`).join('')}</div>` : '';
+    el.innerHTML = `<div class="top"><img src="${icon}" alt=""></div>${note ? `<i class="lv">${note}</i>` : ''}<b>${name}</b><span>${text}</span>${pips}
+      <button class="btn buy">${maxed ? (shopTab === 'arsenal' ? 'Comprada' : 'Completo') : `${coinImg} ${cost}`}</button>`;
+    const btn = el.querySelector('.buy');
+    btn.disabled = maxed || profile.denarios < cost;
+    btn.onclick = () => {
+      if (btn.disabled) return;
+      profile.denarios -= cost;
+      buy();
+      saveProfile();
+      LOCKED = lockedWeapons(profile);
+      chord([784, 988, 1175], 'triangle');
+      renderShop();
+    };
+    return el;
+  };
+  let items = [];
+  if (shopTab === 'treino') {
+    items = Object.entries(TRAINING).map(([id, t]) => {
+      const level = profile.upgrades[id] || 0;
+      return ware({ icon: iconSrc(t.icon), name: t.name, text: `${trainingText(t)} por nível${level ? ` (agora ${trainingText(t, level)})` : ''}`,
+        level, max: t.max, cost: levelCost(t.cost, level), note: `Nv. ${level}/${t.max}`, buy: () => { profile.upgrades[id] = level + 1; } });
+    });
+  } else if (shopTab === 'ferramentas') {
+    items = Object.entries(TOOLS).map(([id, t]) => {
+      const level = profile.tools[id] || 0;
+      return ware({ icon: iconSrc(t.icon), name: t.name, text: t.desc, level, max: t.max, cost: levelCost(t.cost, level),
+        note: t.max > 1 ? `Nv. ${level}/${t.max}` : '', buy: () => { profile.tools[id] = level + 1; } });
+    });
+  } else if (shopTab === 'arsenal') {
+    items = Object.entries(ARSENAL).map(([id, cost]) => {
+      const have = !LOCKED.has(id);
+      return ware({ icon: ICON.weapon[id], name: WEAPONS[id].name, text: WEAPONS[id].desc, level: have ? 1 : 0, max: 1, cost,
+        note: have ? 'No arsenal' : '', buy: () => profile.unlocked.push(`weapon:${id}`) });
+    });
+  } else {
+    items = Object.entries(SUPPLIES).map(([id, it]) => {
+      const n = profile.bag[id] || 0;
+      return ware({ icon: iconSrc(it.icon), name: it.name, text: it.desc, level: 0, max: 0, cost: it.cost, note: `Tem ${n}`,
+        buy: () => { profile.bag[id] = n + 1; } });
+    });
+  }
+  $('shop-grid').replaceChildren(...items);
+}
+
+// ---------- First-visit guide: "Passo 1 de 4" notes next to what they explain ----------
+const MENU_GUIDE = [
+  ['#menu-purse', 'Denários', 'A moeda do Mercado. Você ganha ao fim de cada partida (mais quanto mais longe chegar), ao erguer as pedras, vencer chefes e ganhar troféus.'],
+  ['[data-go="shop"]', 'Mercado', 'Gaste denários em melhorias permanentes, ferramentas para as cartas, armas novas e itens para levar no alforje.'],
+  ['[data-go="trophies"]', 'Troféus', 'Conquistas abrem heróis, cenários e relíquias, e cada uma paga denários.'],
+  ['[data-go="setup"]', 'Nova jornada', 'Escolha o herói, o cenário e o que levar no alforje. Boa jornada!'],
+];
+const SHOP_GUIDE = [
+  ['#shop-tabs', 'Quatro bancas', 'Treinamento deixa todos os heróis mais fortes para sempre. Ferramentas mudam as cartas de nível. Arsenal traz armas novas. Alforje vende itens para uma partida.'],
+  ['#shop-purse', 'Para começar', 'Renovar e Pular são baratos e mudam muito as cartas. Depois, divida entre Força e Vigor.'],
+];
+let coachOn = null;
+function guide(key, steps) {
+  if (profile.seen[key] || coachOn) return;
+  coachOn = { key, steps, at: 0 };
+  showGuide();
+}
+function showGuide() {
+  document.querySelector('.coach-hl')?.classList.remove('coach-hl');
+  const { steps, at } = coachOn;
+  const [sel, title, text] = steps[at];
+  const el = document.querySelector(`.screen.on ${sel}, ${sel}`);
+  $('coach-step').textContent = `Passo ${at + 1} de ${steps.length}`;
+  $('coach-title').textContent = title;
+  $('coach-text').textContent = text;
+  $('coach-back').hidden = at === 0;
+  $('coach-next').textContent = at === steps.length - 1 ? 'Entendi!' : 'Próximo';
+  $('coach').hidden = false;
+  const box = document.querySelector('.coach-box');
+  const r = el?.getBoundingClientRect();
+  if (el) el.classList.add('coach-hl');
+  const bw = box.offsetWidth;
+  const bh = box.offsetHeight;
+  let x = r ? r.left : innerWidth / 2 - bw / 2;
+  let y = r ? r.bottom + 14 : innerHeight / 2 - bh / 2;
+  if (r && y + bh > innerHeight - 8) y = r.top - bh - 14; // no room below: above it
+  if (r && r.right + bw + 16 < innerWidth && r.width < 340 && r.left < innerWidth / 2) { x = r.right + 16; y = r.top; } // beside menu buttons
+  box.style.left = `${clamp(x, 16, innerWidth - bw - 16)}px`;
+  box.style.top = `${clamp(y, 16, innerHeight - bh - 16)}px`;
+}
+function endGuide() {
+  document.querySelector('.coach-hl')?.classList.remove('coach-hl');
+  profile.seen[coachOn.key] = 1;
+  saveProfile();
+  coachOn = null;
+  $('coach').hidden = true;
+}
+$('coach-next').onclick = () => { if (++coachOn.at >= coachOn.steps.length) endGuide(); else showGuide(); beep(660, 0.04, 'triangle', 0.03); };
+$('coach-back').onclick = () => { coachOn.at = Math.max(0, coachOn.at - 1); showGuide(); };
+$('coach-skip').onclick = () => endGuide();
+addEventListener('resize', () => { if (coachOn) showGuide(); });
 
 function renderTrophies() {
   const ids = Object.keys(TROPHIES);
@@ -762,8 +931,14 @@ function applyCfg() {
 function startRun() {
   const h = HEROES[selHero];
   P.hero = selHero;
-  P.st = baseStats(h);
+  P.pack = packed.filter((id) => profile.bag[id] > 0);
+  for (const id of P.pack) profile.bag[id]--;
+  saveProfile();
+  P.st = applyMarket(baseStats(h), profile, P.pack);
   P.hp = P.st.maxHp;
+  if (P.pack.includes('mana')) { P.level = 3; pendingLevels = 2; P.xpNext = Math.round(5 + 2 * 7 + 0.3 * 4); }
+  if (P.pack.includes('mel')) melCarrier = 45;
+  P.star = P.pack.includes('estrela');
   P.weapons = [{ id: h.weapon, level: 1, timer: 0 }];
   refreshWeapons();
   if (!heroRig) setHero(selHero);
@@ -793,7 +968,36 @@ function renderBuild() {
   const w = P.weapons.map((w) => `<li>${iconImg(ICON.weapon[w.id])}<div>${WEAPONS[w.id].name} · nv ${w.level}<small>${WEAPONS[w.id].desc}</small>${evoLine(w)}</div></li>`).join('');
   const r = P.relics.map((r) => `<li>${iconImg(ICON.relic[r.id])}<div style="color:${RARITY[r.tier].color}">${RELICS[r.id].name}<small>${statText(RELICS[r.id], r.tier)} · ${RELICS[r.id].ref}</small></div></li>`).join('')
     || '<li><small>Abra baús de cedro para encontrar relíquias.</small></li>';
-  $('pause-build').innerHTML = `<div><h3>Armas</h3><ul>${w}</ul></div><div><h3>Relíquias</h3><ul>${r}</ul></div>`;
+  $('pause-build').innerHTML = `<div><h3>Armas</h3><ul>${w}</ul><h3>Dano</h3>${dmgRows()}</div><div><h3>Relíquias</h3><ul>${r}</ul></div><div><h3>Atributos</h3>${attrRows()}</div>`;
+}
+// Every stat of the run, with what it does on hover; green when better than the hero's start.
+function attrRows() {
+  const st = P.st;
+  const base = baseStats(HEROES[P.hero]);
+  const pct = (v) => `${Math.round(v * 100)}%`;
+  const rows = [
+    ['Dano', pct(globalDmg()), 'Multiplica o dano de todos os ataques.', st.dmg > base.dmg],
+    ['Recarga', `−${pct(st.cd)}`, 'Encurta o tempo entre os ataques das armas.', st.cd > base.cd],
+    ['Área', `+${pct(st.area)}`, 'Aumenta o alcance de golpes, auras e explosões.', st.area > 0],
+    ['Duração', `+${pct(st.dur)}`, 'Projéteis e efeitos duram mais.', st.dur > 0],
+    ['Projéteis', `+${st.amount}`, 'Projéteis a mais em cada disparo.', st.amount > 0],
+    ['Velocidade', pct(1 + st.speed), 'Velocidade de movimento.', st.speed > 0],
+    ['Vida máx.', Math.round(st.maxHp), 'Vida total.', st.maxHp > base.maxHp],
+    ['Vida/s', numTxt(st.regen), 'Vida recuperada por segundo.', st.regen > 0],
+    ['Vida por abate', numTxt(st.vamp), 'Vida recuperada a cada inimigo derrotado.', st.vamp > 0],
+    ['Armadura', pct(st.armor), 'Reduz o dano recebido.', st.armor > 0],
+    ['Esquiva', pct(st.dodge), 'Chance de não receber um golpe.', st.dodge > 0],
+    ['Crítico', pct(st.crit), 'Chance de um golpe causar dano crítico.', st.crit > base.crit],
+    ['Dano crítico', pct(2 + st.critDmg), 'Quanto vale um golpe crítico.', st.critDmg > 0],
+    ['Sorte', pct(st.luck), 'Melhora a raridade de rolos e relíquias.', st.luck > base.luck],
+    ['Coleta', pct(1 + st.pickup), 'Distância de onde o maná e os siclos vêm até você.', st.pickup > 0],
+    ['Experiência', pct(1 + st.xp), 'Maná vale mais para subir de nível.', st.xp > 0],
+    ['Siclos', pct(1 + st.gold), 'Siclos a mais de cada moeda.', st.gold > 0],
+    ['Fé', pct(1 + st.faith), 'Enche a barra do milagre mais rápido.', st.faith > 0],
+    ['Pulos no ar', st.airJumps, 'Pulos extras sem tocar o chão.', st.airJumps > 0],
+    ['Reviver', st.revives, 'Volta à luta uma vez com metade da vida.', st.revives > 0],
+  ];
+  return `<div class="attrs">${rows.map(([l, v, tip, up]) => `<span title="${tip}">${l}</span><b class="${up ? 'up' : ''}">${v}</b>`).join('')}</div>`;
 }
 
 // ---------- Sound: tiny WebAudio beeps through a master volume ----------
@@ -1081,6 +1285,7 @@ function useSpecial() {
 }
 
 function dashHits() {
+  dmgSrc = 'move';
   if (P.dashT <= 0 || P.hero === 'davi') return;
   if (P.hero === 'debora' && random() < 0.6) burst(P.pos.x, P.pos.y + 0.3, P.pos.z, 0x9fd8ff, 2, 3, 0.14, 2); // the torrent of Kishon
   const n = hash.query(P.pos.x, P.pos.z, 2.2 + MAX_R, near);
@@ -1104,6 +1309,8 @@ function dashHits() {
 
 // Q: Milagre, costs a full Fé bar. Aimed where the camera looks.
 function useMiracle() {
+  srcSlot = -1;
+  dmgSrc = 'miracle';
   if (P.fe < 100) return;
   P.fe = 0;
   feReady = false;
@@ -1186,6 +1393,7 @@ function inRect(m, i, len, halfW) {
 }
 
 function updateMiracles(dt) {
+  dmgSrc = 'miracle';
   if (P.sunT > 0) { // the sun stands still: everyone but the boss is frozen, the boss slowed
     P.sunT -= dt;
     for (let i = 0; i < E.n; i++) {
@@ -1251,6 +1459,7 @@ function updateMiracles(dt) {
 // Moisés: a plague on every level-up.
 const PLAGUES = ['Granizo', 'Trevas', 'Úlceras'];
 function plague() {
+  srcSlot = -2;
   const kind = Math.floor(random() * 3);
   toast(`Praga: ${PLAGUES[kind]}!`, '#9fe8ff');
   for (let i = 0; i < E.n; i++) {
@@ -1269,6 +1478,7 @@ function damage(i, base, kx = 0, kz = 0, knock = 0, forceCrit = false) {
   const crit = forceCrit || random() < P.st.crit;
   if (crit) dmg *= 2 + P.st.critDmg; // Tábuas da Lei
   E.hp[i] -= dmg;
+  P.dmgBy[dmgSrc] = (P.dmgBy[dmgSrc] || 0) + Math.min(dmg, Math.max(0, E.hp[i] + dmg));
   E.flash[i] = 0.1;
   if (knock && type.mass) {
     const d = Math.hypot(kx, kz) || 1;
@@ -1434,6 +1644,7 @@ function director(dt) {
   for (; spawnAcc >= 1; spawnAcc--) if (E.n < cap) spawnEnemy(pickWeighted(spawnWeights(time), random));
   if (elitesSpawned < 2 && time >= 180 * (elitesSpawned + 1)) { elitesSpawned++; spawnElite(); }
   if (!boss.spawned && time >= nextCarrier) { nextCarrier += 150; spawnCarrier(); }
+  if (time >= melCarrier) { melCarrier = Infinity; spawnCarrier(); }
   if (!boss.spawned && time >= nextEvent) { nextEvent += 150; mapEvent(); }
   if (!boss.spawned && time >= RUN_TIME) spawnBoss(true);
 }
@@ -1733,6 +1944,8 @@ function reapEnemies() {
     if (random() < 0.004) dropPickup(x, y + 0.5, z);
     P.hp = Math.min(P.st.maxHp, P.hp + P.st.vamp); // Favo de Mel
     P.kills++;
+    const kt = E.elite[i] ? 'elite' : type.id;
+    P.killsBy[kt] = (P.killsBy[kt] || 0) + 1;
     gainFe(E.elite[i] ? 15 : 0.6);
     if (P.hero === 'sansao') P.stacks = Math.min(100, P.stacks + 1);
     removeAt(E, i);
@@ -1821,6 +2034,7 @@ function fireShot(s, t, spread) {
   if (s.kind === 'boomerang') S.pierce[i] = 999;
   S.glow[i] = s.evo ? 1 : 0;
   S.burn[i] = s.burn || 0;
+  S.src[i] = srcSlot;
   if (P.hero === 'davi' && ++P.shotCount % 5 === 0) { // Pedras Lisas
     S.dmg[i] *= 5;
     S.size[i] *= 1.7;
@@ -1868,6 +2082,8 @@ function updateWeapons(dt) {
   swarmDraw.length = 0;
   for (const w of P.weapons) {
     const s = w.s;
+    srcSlot = P.weapons.indexOf(w);
+    dmgSrc = w.id;
     w.timer -= dt;
     if (s.kind === 'swarm') { updateSwarms(w, s, dt); continue; } // moves every frame, bites on its timer
     if (s.kind === 'shot' || s.kind === 'seeker' || s.kind === 'boomerang') {
@@ -1967,11 +2183,12 @@ function launchChariot(s, k) {
   const mesh = new THREE.Mesh(ASSETS.items.proj_chariot, chariotMat);
   mesh.scale.setScalar(1.15);
   scene.add(mesh);
-  sweeps.push({ x, z, dx, dz, left: 48, id: ++sweepId, s, mesh });
+  sweeps.push({ x, z, dx, dz, left: 48, id: ++sweepId, s, mesh, src: dmgSrc });
 }
 function updateSweeps(dt) {
   for (let k = sweeps.length - 1; k >= 0; k--) {
     const c = sweeps[k];
+    dmgSrc = c.src;
     const step = c.s.speed * dt;
     c.x += c.dx * step;
     c.z += c.dz * step;
@@ -2070,6 +2287,7 @@ function updateShots(dt) {
         const rel = S.y[i] - E.y[j];
         if (dx * dx + dz * dz > rr * rr || rel < -0.3 || rel > E.h[j] + 0.3) continue;
         const head = E.type[j] === BOSS && rel > E.h[j] - 1.1; // the boss's forehead: always critical
+        dmgSrc = srcName(S.src[i]);
         damage(j, S.dmg[i], S.vx[i], S.vz[i], 5, head || S.crit[i] > 0);
         if (S.burn[i]) E.burn[j] = Math.max(E.burn[j], S.burn[i]);
         if (head) addFx(ringGeo, 0xf2c14e, S.x[i], S.y[i], S.z[i], 0.5, 0.3, { grow: 2 });
@@ -2101,6 +2319,7 @@ function addStrike(x, z, r, dmg, delay, fire = 0, burn = 0) {
   K.t[i] = K.t0[i] = delay;
   K.fire[i] = fire;
   K.burn[i] = burn;
+  K.src[i] = srcSlot;
 }
 
 function updateStrikes(dt) {
@@ -2109,6 +2328,7 @@ function updateStrikes(dt) {
     const y = terrainH(K.x[i], K.z[i]);
     const fire = K.fire[i] === 1;
     if (K.fire[i] === 2) burst(K.x[i], y + 0.4, K.z[i], 0xfff1b8, 10, 5, 0.12, 5); // a star lands
+    dmgSrc = srcName(K.src[i]);
     hitArea(K.x[i], y + 0.5, K.z[i], K.r[i], K.dmg[i], 0, K.burn[i]);
     addFx(ringGeo, fire ? 0xff8a3d : 0xdff4ff, K.x[i], 0.2, K.z[i], K.r[i], fire ? 0.5 : 0.25, { grow: 0.5, ground: true });
     burst(K.x[i], y + 0.3, K.z[i], fire ? 0xffb347 : 0xdff4ff, fire ? 14 : 6, fire ? 6 : 4, fire ? 0.18 : 0.12, fire ? 6 : 3);
@@ -2127,6 +2347,8 @@ function addGold(v) {
   P.gold += Math.floor(g) + (random() < g % 1 ? 1 : 0);
 }
 function usePickup(k) {
+  srcSlot = -3;
+  dmgSrc = 'other';
   const p = PICKUPS[k];
   if (p.id === 'pao') P.hp = Math.min(P.st.maxHp, P.hp + P.st.maxHp * 0.3);
   else if (p.id === 'codornizes') {
@@ -2226,7 +2448,8 @@ function openChest(c) {
     dropPickup(c.x, c.y + 0.8, c.z + 1.4);
   }
   const evoW = readyToEvolve(P.weapons, P.relics)[0]; // a weapon ready to evolve takes the chest's gift
-  const r = rollRelic(P.st.luck, random, c.challenge ? 3 : c.free ? 1 : 0, Object.keys(RELICS).filter((id) => isOpen('relic', id)));
+  const r = rollRelic(P.st.luck, random, Math.max(c.challenge ? 3 : c.free ? 1 : 0, P.star && !evoW ? 3 : 0), Object.keys(RELICS).filter((id) => isOpen('relic', id)));
+  if (!evoW) P.star = false;
   const e = RELICS[r.id];
   // The gift rises out of the chest, then flies into the hero: that is when it counts.
   const relic = M.solid(ASSETS.items[evoW ? `weapon_${evoW.id}` : `relic_${r.id}`], M.toon());
@@ -2429,9 +2652,10 @@ function updateWorld(dt) {
 }
 
 // ---------- Choices (level-up cards and altars) ----------
-const cardCount = () => (P.hero === 'debora' ? 4 : 3); // Débora, the prophetess, sees one card more
+const cardCount = () => (P.hero === 'debora' ? 4 : 3) + (P.st.cards || 0); // Débora, the prophetess, sees one card more
+const offers = (n = cardCount()) => rollOffers({ weapons: P.weapons, luck: P.st.luck, locked: LOCKED, banned: P.banned }, random, n);
 function openLevelUp() {
-  openChoice(`Nível ${P.level - pendingLevels + 1}!`, rollOffers({ weapons: P.weapons, luck: P.st.luck }, random, cardCount()), 'level');
+  openChoice(`Nível ${P.level - pendingLevels + 1}!`, offers(), 'level');
 }
 
 function openChoice(title, offers, source) {
@@ -2443,47 +2667,85 @@ function openChoice(title, offers, source) {
   chord([523, 659, 784]);
 }
 
+// Before → after, so each card shows exactly what it changes.
+const pctTxt = (v) => `${Math.round(v * 100)}%`;
+const numTxt = (v) => (v >= 10 ? Math.round(v) : +v.toFixed(1));
+const arrow = (label, a, b) => `<li>${label} <s>${a}</s> → <ins>${b}</ins></li>`;
+function weaponDelta(id, lv) {
+  const a = lv > 1 ? weaponStats(id, lv - 1, P.st) : null;
+  const b = weaponStats(id, lv, P.st);
+  const out = [];
+  if (!a) return `<li>Dano <ins>${numTxt(b.dmg * globalDmg())}</ins> · recarga <ins>${numTxt(b.cd)} s</ins></li>`;
+  if (b.dmg !== a.dmg) out.push(arrow('Dano', numTxt(a.dmg * globalDmg()), numTxt(b.dmg * globalDmg())));
+  if (b.cd !== a.cd) out.push(arrow('Recarga', `${numTxt(a.cd)} s`, `${numTxt(b.cd)} s`));
+  if ((b.count || 0) !== (a.count || 0)) out.push(arrow(WEAPONS[id].unit ? `${WEAPONS[id].unit[0].toUpperCase()}${WEAPONS[id].unit.slice(1)}s` : 'Quantidade', a.count, b.count));
+  if (b.radius && b.radius !== a.radius) out.push(arrow('Alcance', `${numTxt(a.radius)} m`, `${numTxt(b.radius)} m`));
+  if ((b.bounce || 0) !== (a.bounce || 0)) out.push(arrow('Ricochetes', a.bounce || 0, b.bounce));
+  if ((b.pierce || 0) !== (a.pierce || 0)) out.push(arrow('Perfuração', a.pierce || 0, b.pierce));
+  return out.join('');
+}
+function scrollDelta(e, tier) {
+  const v = P.st[e.stat];
+  const after = v + entryValue(e, tier);
+  if (e.stat === 'maxHp') return arrow(e.label, Math.round(v), Math.round(after));
+  if (e.stat === 'cd') return arrow(e.label, `−${pctTxt(v)}`, `−${pctTxt(after)}`);
+  if (e.stat === 'crit' || e.stat === 'luck') return arrow(e.label, pctTxt(v), pctTxt(after));
+  return arrow(e.label, pctTxt(1 + v), pctTxt(1 + after));
+}
+const offerKey = (o) => o.id; // what Banir removes: the weapon (new or upgrade) or the scroll
 function renderChoice() {
   $('choice-title').textContent = choice.title;
+  $('choice').classList.toggle('banning', !!choice.banning);
   $('cards').replaceChildren(...choice.offers.map((o, i) => {
     const b = document.createElement('button');
     b.className = 'card';
     let tag;
+    let flag;
     let name;
     let text;
     let icon;
-    const evoHint = (id) => `<em class="evo">Evolui com ${RELICS[EVOLUTIONS[id].needs].name} no nível ${MAX_LEVEL}</em>`;
+    const evoHint = (id) => (EVOLUTIONS[id] ? `<em class="evo">Evolui com ${RELICS[EVOLUTIONS[id].needs].name} no nível ${MAX_LEVEL}</em>` : '');
     if (o.kind === 'weapon') {
-      tag = 'Nova arma';
+      tag = 'Arma';
+      flag = 'Nova';
       name = WEAPONS[o.id].name;
-      text = `${WEAPONS[o.id].desc}${evoHint(o.id)}`;
+      text = `${WEAPONS[o.id].desc}<ul class="delta">${weaponDelta(o.id, 1)}</ul>${evoHint(o.id)}`;
       icon = ICON.weapon[o.id];
     } else if (o.kind === 'upgrade') {
       const lv = P.weapons.find((w) => w.id === o.id).level + 1;
-      tag = `Arma · nível ${lv}`;
+      tag = `Arma · nível ${lv - 1} → ${lv}`;
+      flag = 'Melhoria';
       name = WEAPONS[o.id].name;
-      text = `${describeLevel(o.id, lv)}${evoHint(o.id)}`;
+      text = `${describeLevel(o.id, lv)}<ul class="delta">${weaponDelta(o.id, lv)}</ul>${evoHint(o.id)}`;
       icon = ICON.weapon[o.id];
     } else {
       tag = `Rolo · ${RARITY[o.tier].name}`;
       name = SCROLLS[o.id].name;
-      text = statText(SCROLLS[o.id], o.tier);
+      text = `${statText(SCROLLS[o.id], o.tier)}<ul class="delta">${scrollDelta(SCROLLS[o.id], o.tier)}</ul>`;
       icon = ICON.scrolls[o.id];
       b.classList.add('rare');
       b.style.setProperty('--rar', RARITY[o.tier].color);
     }
-    b.innerHTML = `<kbd class="k">${i + 1}</kbd>${iconImg(icon)}<small>${tag}</small><b>${name}</b><span>${text}</span>`;
+    b.innerHTML = `<kbd class="k">${i + 1}</kbd>${flag ? `<i class="flag">${flag}</i>` : ''}${iconImg(icon)}<small>${tag}</small><b>${name}</b><span>${text}</span>`;
     b.onclick = () => pick(i);
     return b;
   }));
-  const r = $('reroll');
-  r.hidden = choice.source !== 'level' || P.st.rerolls < 1;
-  r.innerHTML = `<kbd class="k">R</kbd>Rolar de novo (${P.st.rerolls})`;
+  const level = choice.source === 'level';
+  $('card-tools').hidden = !level;
+  $('reroll').disabled = P.st.rerolls < 1;
+  $('reroll').innerHTML = `<kbd class="k">F</kbd>Renovar (${P.st.rerolls})`;
+  $('skip').disabled = P.st.skips < 1;
+  $('skip').innerHTML = `<kbd class="k">X</kbd>Pular (${P.st.skips})`;
+  $('ban').disabled = P.st.bans < 1 && !choice.banning;
+  $('ban').innerHTML = choice.banning ? '<kbd class="k">Z</kbd>Cancelar' : `<kbd class="k">Z</kbd>Banir (${P.st.bans})`;
+  $('ban').classList.toggle('on', !!choice.banning);
+  $('choice-hint').textContent = choice.banning ? 'Escolha a carta que nunca mais deve aparecer nesta partida' : `Clique na carta ou tecle 1 a ${choice.offers.length}`;
 }
 
 function pick(i) {
   if (state !== 'choice' || !choice.offers[i]) return;
   const o = choice.offers[i];
+  if (choice.banning) return banOffer(i);
   if (o.kind === 'weapon') P.weapons.push({ id: o.id, level: 1, timer: 0 });
   else if (o.kind === 'upgrade') P.weapons.find((w) => w.id === o.id).level++;
   else {
@@ -2493,6 +2755,9 @@ function pick(i) {
   }
   refreshWeapons();
   beep(880, 0.08, 'triangle', 0.04);
+  nextChoice();
+}
+function nextChoice() {
   if (choice.source === 'level' && --pendingLevels > 0) return openLevelUp();
   choice = null;
   resume();
@@ -2501,7 +2766,38 @@ function pick(i) {
 function reroll() {
   if (state !== 'choice' || choice.source !== 'level' || P.st.rerolls < 1) return;
   P.st.rerolls--;
-  choice.offers = rollOffers({ weapons: P.weapons, luck: P.st.luck }, random, cardCount());
+  choice.banning = false;
+  choice.offers = offers();
+  beep(620, 0.06, 'triangle', 0.03);
+  renderChoice();
+}
+// Pular: let this level go and take siclos instead.
+function skip() {
+  if (state !== 'choice' || choice.source !== 'level' || P.st.skips < 1) return;
+  P.st.skips--;
+  const v = 8 + P.level * 2;
+  addGold(v);
+  toast(`Pulou: +${Math.round(v * (1 + P.st.gold))} siclos`, '#ffd66b', 'assets/ui/coin.png');
+  beep(440, 0.08, 'triangle', 0.03);
+  nextChoice();
+}
+// Banir: the next card clicked leaves this run's cards for good; a new one takes its place.
+function toggleBan() {
+  if (state !== 'choice' || choice.source !== 'level') return;
+  if (!choice.banning && P.st.bans < 1) return;
+  choice.banning = !choice.banning;
+  renderChoice();
+}
+function banOffer(i) {
+  P.st.bans--;
+  P.banned.add(offerKey(choice.offers[i]));
+  const keep = new Set(choice.offers.map(offerKey));
+  const fresh = offers(12).find((o) => !keep.has(offerKey(o)));
+  if (fresh) choice.offers[i] = fresh;
+  else choice.offers.splice(i, 1);
+  choice.banning = false;
+  beep(160, 0.15, 'sawtooth', 0.04, 0, 90);
+  if (!choice.offers.length) return nextChoice();
   renderChoice();
 }
 
@@ -2512,6 +2808,7 @@ const runTrophies = [];
 function award(id) {
   if (!id || profile.trophies[id] || !runStarted) return;
   profile.trophies[id] = Date.now();
+  profile.denarios += TROPHY_PAY[TROPHIES[id].tier];
   saveProfile();
   OPEN = openSet(profile);
   runTrophies.push(id);
@@ -2547,7 +2844,39 @@ function endScreen(title, text, verse, won = false) {
     const t = TROPHIES[id];
     return `<div class="tro-line"><img class="ico" src="assets/ui/trophy-${t.tier}.png" alt=""><b>${t.name}</b>${t.unlock ? `<small>Desbloqueado: ${unlockName(t.unlock)}</small>` : ''}</div>`;
   }).join('')}` : '';
+  // Denários: the run's pay line by line (trophies were paid as they were won), then the record for this map.
+  const pay = runDenarios({ time, kills: P.kills, stones: stonesDone, chests: chestsOpened, won });
+  const trophyPay = runTrophies.reduce((t, id) => t + TROPHY_PAY[TROPHIES[id].tier], 0);
+  if (trophyPay) pay.lines.push(['Troféus', trophyPay]);
+  profile.denarios += pay.total;
+  const rec = (profile.records[BIOME_ID] ??= { best: 0 });
+  rec.best = Math.max(rec.best, Math.floor(time));
+  if (won) rec.fastest = Math.min(rec.fastest || Infinity, Math.floor(time));
+  saveProfile();
+  $('end-den').innerHTML = `<div class="tot">${coinImg}+${pay.total + trophyPay} denários<small>Agora você tem ${profile.denarios}</small></div>
+    <ul>${pay.lines.map(([l, v]) => `<li>${l}<b>+${v}</b></li>`).join('')}</ul>`;
+  $('end-report').innerHTML = `<div><h3>Dano por ataque</h3>${dmgRows()}</div><div><h3>Inimigos derrotados</h3>${killRows()}</div>`;
   show('end');
+}
+// Run report: who dealt the damage, and what fell.
+const SRC_NAME = { move: () => HEROES[P.hero].move[0], miracle: () => HEROES[P.hero].miracle[0], passive: () => HEROES[P.hero].passive[0], other: () => 'Outros' };
+function dmgRows() {
+  const total = Object.values(P.dmgBy).reduce((a, b) => a + b, 0) || 1;
+  const rows = Object.entries(P.dmgBy).filter(([, v]) => v >= 1).sort((a, b) => b[1] - a[1]);
+  if (!rows.length) return '<small>Nenhum dano ainda.</small>';
+  return rows.map(([id, v]) => {
+    const w = WEAPONS[id];
+    const icon = w ? ICON.weapon[id] : id === 'miracle' ? 'assets/ui/flame.png' : id === 'move' ? 'assets/ui/wing.png' : 'assets/ui/star.png';
+    const lv = P.weapons.find((x) => x.id === id)?.level;
+    return `<div class="dmg-row"><img src="${icon}" alt=""><span>${w ? w.name : SRC_NAME[id]?.() ?? id}${lv ? ` · nv ${lv}` : ''}</span>
+      <small>${Math.round(v).toLocaleString('pt-BR')} · ${Math.round((v / total) * 100)}% · ${numTxt(v / Math.max(1, time))}/s</small>
+      <div class="meter"><i style="width:${(v / total) * 100}%"></i></div></div>`;
+  }).join('');
+}
+const KILL_NAME = { soldado: 'Soldados', fundeiro: 'Atiradores', carro: 'Carros e investidas', gigante: 'Gigantes', elite: 'Campeões e tesoureiros' };
+function killRows() {
+  const rows = Object.entries(P.killsBy).sort((a, b) => b[1] - a[1]);
+  return rows.length ? `<div class="kills">${rows.map(([k, n]) => `<span>${KILL_NAME[k] ?? k}</span><b>${n}</b>`).join('')}</div>` : '<small>Nenhum.</small>';
 }
 function revive() {
   P.st.revives--;
@@ -3102,7 +3431,11 @@ applyCfg();
 syncSettingsForm();
 setHero(selHero);
 if (params.get('screen') === 'setup') go('setup');
-else setCur(document.querySelector('#menu .nav .btn'));
+else {
+  setCur(document.querySelector('#menu .nav .btn'));
+  renderPurse();
+  guide('menu', MENU_GUIDE);
+}
 
 // Debug: run `bench()` in the console. Steps + renders frames back to back with N enemies
 // and reports ms per frame (works even in a background tab). Leaves the run invulnerable.
@@ -3138,7 +3471,7 @@ window.arm = (ids, level = 1) => {
 };
 // Debug: poke at the run from the console, e.g. dev.look(Math.PI) or dev.spawnBoss().
 window.dev = {
-  P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, cfg, scene, ASSETS,
+  P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, cfg, scene, ASSETS, profile, saveProfile,
   look: (y, p = pitch) => { yaw = y; pitch = p; },
   // Give a relic, e.g. dev.relic('pedras'); open the nearest closed chest as if touched.
   relic: (id, tier = 2) => { const r = { id, tier: RELICS[id].flat ? RELICS[id].tier : tier }; applyEntry(P.st, RELICS[id], r.tier); P.relics.push(r); refreshWeapons(); return P.relics.map((x) => x.id); },
@@ -3151,7 +3484,7 @@ window.dev = {
   event: () => mapEvent(),
   carrier: () => spawnCarrier(),
   // Show a choice of cards, e.g. dev.choice([{ kind: 'scroll', id: 'sorte', tier: 2 }]).
-  choice: (offers = rollOffers({ weapons: P.weapons, luck: P.st.luck }, random, cardCount()), title = 'Nível 2!') => openChoice(title, offers, 'level'),
+  choice: (list = offers(), title = 'Nível 2!') => openChoice(title, list, 'level'),
   // Renders one w×h frame and saves it through serve.py (PUT, shots/ or assets/ui/ only), optionally
   // from cam = [[x, y, z], [lookX, lookY, lookZ]], e.g. dev.shot('shots/a.png', 640, 360).
   shot: (path, w = 640, h = 360, cam) => new Promise((ok, fail) => {
