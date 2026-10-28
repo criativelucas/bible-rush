@@ -1022,8 +1022,8 @@ function lockedHint(key) {
   $('lock-hint').textContent = `${unlockName(key)} está bloqueado. Para abrir: ${TROPHIES[unlockedBy(key)].desc}`;
   beep(180, 0.12, 'square', 0.03);
 }
-// The map picked on the setup screen. Only one map is built at a time (the page's), so picking another
-// just shows its video; starting the run then loads it.
+// The map picked on the setup screen. Only one map is built at a time (the page's), so the setup screen
+// shows every map, the loaded one too, as its video; starting the run loads the picked one if it is another.
 let pickMap = BIOME_ID;
 const mapVideos = {};
 function pickMapTo(id) {
@@ -1039,7 +1039,7 @@ function syncMapVideo() {
     }
   }
   for (const [id, v] of Object.entries(mapVideos)) {
-    const on = state === 'setup' && id === pickMap && id !== BIOME_ID;
+    const on = state === 'setup' && id === pickMap;
     v.classList.toggle('on', on);
     if (on) v.play().catch(() => {});
     else v.pause();
