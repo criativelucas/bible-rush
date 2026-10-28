@@ -323,7 +323,11 @@ function updateFx(dt) {
 
 // Rigged model (hero or boss): toon material, shadows, an animation mixer and its clips. Heroes carry
 // their sprite sheet as a texture (crisp pixels); bosses use vertex colours.
+// The exporter writes every bone into every clip, so an attack would also pin the legs and hips in its
+// pose (with weight 2 over the walk: a stiff, stuck stride). Attacks and miracles keep the upper body only.
+const UPPER_BODY = /^(chest|head|upperarm|forearm|cape|hair)/;
 function makeRig({ scene: root, clips }) {
+  for (const n of ['attack', 'cast']) if (clips[n]) clips[n].tracks = clips[n].tracks.filter((t) => UPPER_BODY.test(t.name));
   let map = null;
   root.traverse((o) => { if (o.isMesh && o.material.map) map = o.material.map; });
   if (map) {
