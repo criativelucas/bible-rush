@@ -45,7 +45,8 @@ export async function claimName(profile, name) {
 export async function submitRun(profile, run) {
   if (!onlineOn()) return 'offline';
   const body = { p_player: profile.pid, p_name: profile.name || '', p_title: run.title || '', p_frame: run.frame || '', p_map: run.map, p_mode: run.mode,
-    p_diff: run.diff, p_hero: run.hero, p_kills: run.kills, p_seconds: run.seconds, p_won: run.won };
+    p_diff: run.diff, p_hero: run.hero, p_kills: run.kills, p_seconds: run.seconds, p_won: run.won,
+    ...(run.floor ? { p_floor: run.floor } : {}) }; // the Tower of Babel: the floor reached (tools/ranking.sql)
   if (!profile.name) {
     (profile.pending ??= []).push(body);
     return 'sem_nome';
@@ -73,7 +74,7 @@ export async function flushPending(profile) {
   }
 }
 
-// board: 'abates' | 'relogio' | 'sobrevivencia'; map: a map id or null for all. Rows: pos, me, name, title,
+// board: 'abates' | 'relogio' | 'sobrevivencia' | 'torre'; map: a map id or null for all. Rows: pos, me, name, title,
 // frame, hero, map, value, runs. Cached for a minute.
 const cache = new Map();
 export async function leaderboard(board, season, map, profile, limit = 50) {

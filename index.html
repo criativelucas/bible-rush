@@ -763,6 +763,16 @@
     .my-marks b { font: 400 22px/1 var(--f-title); color: #e8eef4; }
     .go-big { margin: 10px 14px 14px; justify-content: center; gap: 12px; font: 400 36px/1 var(--f-title); padding: 10px 16px 12px; }
     .go-big kbd.k { font-size: 14px; }
+    /* The tower's own screen: brick and lapis instead of the live map */
+    .tower-screen { background: linear-gradient(90deg, rgba(20, 12, 6, .72), rgba(20, 12, 6, .25) 40%, rgba(20, 12, 6, .6)), url(assets/ui/babel.jpg) center / cover; }
+    .babel-title { background: repeating-linear-gradient(-45deg, #2f5f9a 0 14px, #3e6ea8 14px 28px); }
+    .tw-head { background: repeating-linear-gradient(-45deg, #8a4a2a 0 12px, #9a5a34 12px 24px); }
+    .tw-rules { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 15px; color: var(--ink); }
+    .tw-rules b { color: var(--gold2); }
+    .tw-board { width: min(460px, 100%); display: grid; gap: 4px; padding: 8px 10px; background: rgba(31, 18, 13, .9); box-shadow: 0 0 0 2px var(--line); }
+    .tw-board:empty { display: none; }
+    .tw-board h3 { margin: 0 0 4px; }
+    .tw-board .off { font-size: 14px; color: var(--dim); }
     @media (max-width: 900px) { .prep { grid-template-columns: 1fr; } .map-tabs { grid-template-columns: repeat(2, 1fr); } .mv-top h2 { font-size: 44px; } }
     .hero-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
     .hcard { position: relative; display: flex; flex-direction: column; padding: 0; border: 0; cursor: pointer; text-align: left; color: var(--ink-d); background: #f6e8c6;
@@ -938,6 +948,40 @@
           <div id="lock-hint" class="lock-hint"></div>
         </div>
         <button id="go" class="btn primary go-big">Começar!<kbd class="k">Enter</kbd></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tower" class="screen prep-screen tower-screen">
+    <div class="sel-top"><button class="btn back" data-go="menu"><kbd class="k">Esc</kbd>Voltar</button><h2 class="tag-title babel-title">Torre de Babel<small>Gn 11:1-9</small></h2>
+      <span class="keys-hint"><kbd class="k">Enter</kbd> subir</span></div>
+    <div class="prep">
+      <div class="map-view">
+        <div class="mv-top"><small>Modo de subida</small><h2>Torre de Babel</h2>
+          <div class="map-info"><div class="tags"><i>Andares</i><i>Portais</i><i>Confusão das Línguas</i></div>
+            <p>“Vinde, edifiquemos uma cidade e uma torre cujo cume toque nos céus” (Gn 11:4). Suba andar por andar: cada sala de tijolos tem a sua horda, o seu tempo e uma porta que só abre quando todos caem.</p></div></div>
+        <button id="tw-hero" class="mv-hero"><img id="tw-face" alt=""><span><small>Seu herói</small><b id="tw-hero-name"></b><em id="tw-stage"></em></span><i>Trocar</i></button>
+        <div class="mv-marks"><small>A subida</small>
+          <span class="mk"><b>Andar 1</b>a horda</span><i>›</i><span class="mk"><b>Porta</b>e portais</span><i>›</i><span class="mk"><b>Andar 4</b>Línguas</span><i>›</i>
+          <span class="mk"><b>Andar 5</b>Guardião</span><i>›</i><span class="mk big"><b>Andar 10</b>Ninrode</span><i>›</i><span class="mk"><b>11+</b>sem fim</span></div>
+        <div id="tw-board" class="tw-board"></div>
+      </div>
+      <div class="prep-panel">
+        <div class="pp-head tw-head"><b>Preparar a subida</b><small id="tw-best"></small></div>
+        <div class="pp-body">
+          <h3>Regras</h3>
+          <ul class="tw-rules">
+            <li>Derrote toda a horda que sai dos 8 portais <b>antes do tempo acabar</b>, ou a torre desaba.</li>
+            <li>Com todos caídos, o tempo para: junte o maná e suba pela <b>porta ao norte</b>.</li>
+            <li>Na porta, escolha o caminho: <b>armas</b>, <b>relíquias</b> ou, a cada 3 andares, a <b>caravana</b>.</li>
+            <li>Segure <b>Espaço</b> encostado para escalar qualquer estrutura.</li>
+          </ul>
+          <h3>Dificuldade</h3><div id="tw-diffs" class="diffs"></div>
+          <h3>Alforje <small id="tw-pack-count"></small></h3><div id="tw-pack" class="pack"></div>
+          <h3>Salmo</h3><div id="tw-psalm-pick" class="wardrobe"></div>
+          <h3>Suas marcas</h3><div id="tw-marks" class="my-marks"></div>
+        </div>
+        <button id="tw-go" class="btn primary go-big">Subir!<kbd class="k">Enter</kbd></button>
       </div>
     </div>
   </div>

@@ -962,7 +962,9 @@ addEventListener('keydown', (e) => {
   } else if (state === 'pause' && e.code === 'Escape') resume();
   else if (e.code === 'Escape' && !typing && !$('name-dlg').open && BACK[state]) { coachOn && endGuide(); go(BACK[state] === 'prev' ? prevScreen : BACK[state]); }
   else if (e.code === 'Enter' && state === 'menu' && !typing && !coachOn && document.activeElement === document.body) go('setup');
-  else if (state === 'setup' && !typing && !coachOn) {
+  else if (state === 'tower' && !typing && !coachOn) {
+    if (e.code === 'Enter' && document.activeElement === document.body) { BABEL = true; startRun(); }
+  } else if (state === 'setup' && !typing && !coachOn) {
     if (e.code === 'Enter' && document.activeElement === document.body) startRun();
     if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') stepMap(e.code === 'ArrowLeft' ? -1 : 1);
   } else if (state === 'hero-pick' && !typing) {
@@ -1028,7 +1030,9 @@ function go(id) {
     if (state !== 'settings' && state !== 'howto') prevScreen = state;
     syncSettingsForm();
   }
-  if (id === 'setup') renderSetup();
+  if (id === 'hero-pick' && (state === 'tower' || state === 'setup')) heroBack = state; // where the hero screen goes back to
+  if (id === 'tower') { BABEL = true; SURV = false; renderTower(); }
+  if (id === 'setup') { BABEL = false; renderSetup(); }
   if (id === 'hero-pick') renderHeroPick();
   if (id === 'trophies') renderTrophies();
   if (id === 'shop') renderShop();
@@ -1130,8 +1134,8 @@ function renderSetup() {
     ? `<small>Marcos · um guardião a cada 5 minutos</small>${[5, 10, 15, 20, 25, 30].map((m) => `<span class="mk"><b>${m} min</b>Guardião</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>45 min</b>Noite sem fim</span>`
     : `<small>Objetivo · erga as pedras e o chefe aparece (ou vem furioso aos 10:00)</small>${[1, 2, 3].map((k) => `<span class="mk"><b>Pedra ${k}</b>do Memorial</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>${PB.boss}</b>Chefe</span>`;
   $('pp-map').textContent = PB.name;
-  const mode = BABEL ? 'babel' : SURV ? 'surv' : 'classic';
-  $('modes').innerHTML = [['classic', 'Clássico', 'Pedras e chefe'], ['surv', 'Sobrevivência', 'Sem fim, guardiões e alianças'], ['babel', 'Torre de Babel', 'Andares, portais e Ninrode']]
+  const mode = SURV ? 'surv' : 'classic';
+  $('modes').innerHTML = [['classic', 'Clássico', 'Pedras e chefe'], ['surv', 'Sobrevivência', 'Sem fim, guardiões e alianças']]
     .map(([k, n, d]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}"><b>${n}</b><small>${d}</small></button>`).join('');
   $('diffs').innerHTML = DIFFS.map((d, k) => `<button data-diff="${k}" class="${k === DIFF_ID ? 'on' : ''}${diffOpen(profile, pickMap, k) ? '' : ' locked'}"><b>${d.name}</b><small>${k ? `×${d.pay} denários` : 'denários ×1'}</small></button>`).join('');
   $('diff-note').textContent = diffOpen(profile, pickMap, Math.min(2, DIFF_ID + 1)) || DIFF_ID === 2 ? DIFFS[DIFF_ID].text
@@ -1197,7 +1201,7 @@ function renderHeroPick() {
 }
 function confirmHero() {
   beep(784, 0.08, 'triangle', 0.04);
-  go('setup');
+  go(heroBack);
 }
 $('hero-ok').onclick = confirmHero;
 function stepHero(dir) {
@@ -1250,12 +1254,12 @@ function renderWardrobe() {
 }
 
 // The saddlebag: pick up to packSize() supplies you own; they are used up when the run starts.
-function renderPack() {
+function renderPack(pre = '') { // pre: 'tw-' for the tower's own screen
   const owned = Object.keys(SUPPLIES).filter((id) => profile.bag[id] > 0);
   packed = packed.filter((id) => owned.includes(id));
-  $('pack-count').textContent = `${packed.length} de ${packSize(profile)}`;
-  if (!owned.length) { $('pack').innerHTML = '<span class="none">Vazio. Compre itens no Mercado com os denários das suas jornadas.</span>'; return; }
-  $('pack').replaceChildren(...owned.map((id) => {
+  $(`${pre}pack-count`).textContent = `${packed.length} de ${packSize(profile)}`;
+  if (!owned.length) { $(`${pre}pack`).innerHTML = '<span class="none">Vazio. Compre itens no Mercado com os denários das suas jornadas.</span>'; return; }
+  $(`${pre}pack`).replaceChildren(...owned.map((id) => {
     const it = SUPPLIES[id];
     const b = document.createElement('button');
     b.className = packed.includes(id) ? 'on' : '';
@@ -1267,24 +1271,59 @@ function renderPack() {
       else return beep(180, 0.1, 'square', 0.03);
       profile.packSel = packed;
       saveProfile();
-      renderPack();
+      renderPack(pre);
       beep(600, 0.05, 'triangle', 0.03);
     };
     return b;
   }));
 }
 
+// The tower's own screen (apart from the map selection): the hero, difficulty, saddlebag, Psalm, your
+// record and the season's top climbers.
+function renderTower() {
+  const h = HEROES[selHero];
+  $('tw-face').src = ICON.face[selHero];
+  $('tw-face').className = frameClass(selHero);
+  $('tw-hero-name').textContent = h.name;
+  $('tw-stage').textContent = STAGES[selHero].names[stageOf(selHero)];
+  if (!diffOpen(profile, 'babel', DIFF_ID)) DIFF = DIFFS[DIFF_ID = 0];
+  $('tw-diffs').innerHTML = DIFFS.map((d, k) => `<button data-diff="${k}" class="${k === DIFF_ID ? 'on' : ''}${diffOpen(profile, 'babel', k) ? '' : ' locked'}"><b>${d.name}</b><small>${k ? `×${d.pay} denários` : 'denários ×1'}</small></button>`).join('');
+  $('tw-diffs').querySelectorAll('[data-diff]').forEach((b) => {
+    b.onclick = () => {
+      const k = Number(b.dataset.diff);
+      if (!diffOpen(profile, 'babel', k)) { toast(`${DIFFS[k].name} está bloqueado: vença Ninrode (andar 10) no ${DIFFS[k - 1].name}.`, '#ff9a8a'); return beep(180, 0.12, 'square', 0.03); }
+      DIFF = DIFFS[DIFF_ID = k];
+      renderTower();
+      beep(600, 0.05, 'triangle', 0.03);
+    };
+  });
+  renderPack('tw-');
+  renderPsalmPick('tw-');
+  const best = profile.records.babel?.best || 0;
+  $('tw-best').textContent = best ? `Recorde: andar ${best}` : 'Primeira subida';
+  $('tw-marks').innerHTML = `<div>Andar mais alto · <b>${best || '—'}</b></div><div>Ninrode · ${profile.trophies?.babel ? '<b>vencido</b>' : 'ainda de pé'}</div>`;
+  const board = $('tw-board');
+  if (!onlineOn()) { board.innerHTML = ''; return; }
+  board.innerHTML = '<div class="off">Carregando o ranking da Torre…</div>';
+  leaderboard('torre', seasonKey(), null, profile, 5).then((rows) => {
+    if (state !== 'tower') return;
+    board.innerHTML = `<h3>Ranking da Torre · ${seasonName(seasonKey())}</h3>${rows.length ? rows.map((r) => rankRow(r, 'torre')).join('') : '<div class="off">Ninguém subiu ainda nesta temporada. Seja o primeiro!</div>'}`;
+  }).catch(() => { board.innerHTML = '<div class="off">Sem conexão com o ranking.</div>'; });
+}
+$('tw-hero').onclick = () => go('hero-pick');
+$('tw-go').onclick = () => { BABEL = true; SURV = false; startRun(); };
+
 // The Psalm to take along (bought in the Market): one per run, or none.
-function renderPsalmPick() {
+function renderPsalmPick(pre = '') {
   const owned = Object.keys(PSALMS).filter((id) => profile.owned.includes(`psalm:${id}`));
-  const el = $('psalm-pick');
+  const el = $(`${pre}psalm-pick`);
   if (!owned.length) { el.innerHTML = '<span class="none">Nenhum ainda: compre Salmos no Mercado.</span>'; return; }
   el.replaceChildren(...[null, ...owned].map((id) => {
     const b = document.createElement('button');
     b.className = (profile.psalmSel ?? null) === id ? 'on' : '';
     b.title = id ? PSALMS[id].text : 'Sem Salmo nesta jornada';
     b.innerHTML = id ? `<small>${PSALMS[id].ref}</small>${PSALMS[id].name}` : '<small>—</small>Nenhum';
-    b.onclick = () => { profile.psalmSel = id; saveProfile(); renderPsalmPick(); beep(600, 0.05, 'triangle', 0.03); };
+    b.onclick = () => { profile.psalmSel = id; saveProfile(); renderPsalmPick(pre); beep(600, 0.05, 'triangle', 0.03); };
     return b;
   }));
 }
@@ -1442,7 +1481,8 @@ $('coach-skip').onclick = () => endGuide();
 addEventListener('resize', () => { if (coachOn) showGuide(); });
 
 // ---------- Title hub ----------
-const BACK = { setup: 'menu', 'hero-pick': 'setup', shop: 'menu', trophies: 'menu', tasks: 'menu', bestiary: 'menu', ranking: 'menu', settings: 'prev', howto: 'prev' };
+let heroBack = 'setup';
+const BACK = { setup: 'menu', tower: 'menu', get 'hero-pick'() { return heroBack; }, shop: 'menu', trophies: 'menu', tasks: 'menu', bestiary: 'menu', ranking: 'menu', settings: 'prev', howto: 'prev' };
 // Today's challenge: one open map pays 50% more denários all day (the same map for everyone).
 const EVENT_MAP = (() => { const open = Object.keys(BIOMES).filter((id) => isOpen('map', id)); return open[hashStr(`evento${dayKey()}`) % open.length]; })();
 const makeUUID = () => {
@@ -1492,7 +1532,8 @@ function fitSeason() {
 }
 addEventListener('resize', () => { if (state === 'menu') fitSeason(); });
 $('surv-card').onclick = () => { SURV = true; BABEL = false; go('setup'); };
-$('babel-card').onclick = () => { SURV = false; BABEL = true; go('setup'); };
+$('babel-card').onclick = () => go('tower');
+document.querySelector('#hero-pick .btn.back').onclick = () => go(heroBack);
 $('event-card').onclick = () => { BABEL = false; pickMapTo(EVENT_MAP); go('setup'); };
 $('fs-btn').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
 $('profile-pill').onclick = () => askName();
@@ -1500,12 +1541,13 @@ $('profile-pill').onclick = () => askName();
 const BOARDS = {
   abates: ['Abates', 'abates acumulados em qualquer modo'],
   sobrevivencia: ['Sobrevivência', 'maior tempo de pé no Sobrevivência'],
+  torre: ['Torre', 'andar mais alto na Torre de Babel'],
 };
-const boardValue = (board, v) => (board === 'abates' ? Number(v).toLocaleString('pt-BR') : fmt(v));
+const boardValue = (board, v) => (board === 'abates' ? Number(v).toLocaleString('pt-BR') : board === 'torre' ? `Andar ${v}` : fmt(v));
 function rankRow(r, board) {
   const tier = r.pos <= 3 ? ` p${r.pos}` : '';
   return `<div class="rk${tier}${r.me ? ' me' : ''}"><span class="n">${r.pos}</span><img src="${(r.me ? ICON.face : ICON.plain)[r.hero] ?? ICON.plain.davi}" class="${r.frame && COSMETICS[r.frame] ? `frame-${r.frame}` : ''}" alt="">
-    <div><b>${esc(r.name)}</b><small>${r.title ? esc(r.title) : HEROES[r.hero]?.name ?? ''}${r.map && BIOMES[r.map] ? ` · ${BIOMES[r.map].name}` : ''}</small></div><span class="v">${boardValue(board, r.value)}</span></div>`;
+    <div><b>${esc(r.name)}</b><small>${r.title ? esc(r.title) : HEROES[r.hero]?.name ?? ''}${r.map && BIOMES[r.map] ? ` · ${BIOMES[r.map].name}` : r.map === 'babel' ? ' · Torre de Babel' : ''}</small></div><span class="v">${boardValue(board, r.value)}</span></div>`;
 }
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 let seasonTab = 'abates';
@@ -1559,7 +1601,7 @@ async function renderRanking() {
   claimSeasonPrize();
   const ask = ++rankAsk;
   try {
-    const rows = await leaderboard(rankTab, seasonKey(), rankMap || null, profile, 50);
+    const rows = await leaderboard(rankTab, seasonKey(), rankTab === 'torre' ? null : rankMap || null, profile, 50);
     if (ask !== rankAsk) return;
     const top = rows.filter((r) => r.pos <= 50);
     const mine = rows.find((r) => r.me && r.pos > 50);
@@ -4912,10 +4954,10 @@ function endScreen(title, text, verse, won = false) {
   $('end-report').innerHTML = `<div><h3>Dano por ataque</h3>${dmgRows()}</div><div><h3>Inimigos derrotados</h3>${killRows()}</div>`;
   // The season's ranking: this run goes online (or waits for the network).
   const online = $('end-online');
-  if (!onlineOn() || BABEL) online.textContent = ''; // the season's boards are for the four maps
+  if (!onlineOn()) online.textContent = '';
   else {
     const lookF = heroRec(P.hero).look.frame;
-    const runData = { map: BIOME_ID, mode: SURV ? 'surv' : 'classic', diff: DIFF_ID, hero: P.hero, kills: P.kills, seconds: Math.floor(time), won,
+    const runData = { map: BIOME_ID, mode: BABEL ? 'babel' : SURV ? 'surv' : 'classic', diff: DIFF_ID, hero: P.hero, kills: P.kills, seconds: Math.floor(time), won, floor: BABEL ? tower.n : 0,
       title: titleOf(), frame: lookF && hasCosmetic(lookF) ? lookF : '' };
     if (!profile.name) {
       online.innerHTML = '<button id="end-pick-name" style="color:var(--gold);text-decoration:underline;cursor:pointer;background:none;border:none;font:inherit;font-weight:bold">Escolha um nome</button> para esta partida contar na temporada!';
@@ -6076,7 +6118,7 @@ applyCfg();
 syncSettingsForm();
 setHero(selHero);
 if (params.get('screen') === 'setup' || params.get('screen') === 'play') {
-  go('setup');
+  go(BABEL ? 'tower' : 'setup');
   if (params.get('screen') === 'play') requestAnimationFrame(() => requestAnimationFrame(() => startRun())); // after a frame has run, like a click
   document.documentElement.classList.remove('boot-setup');
 }

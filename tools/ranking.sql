@@ -32,6 +32,8 @@ create table if not exists public.runs (
   created_at timestamptz not null default now()
 );
 create index if not exists runs_board_idx on public.runs (season, map, mode);
+-- The Tower of Babel (mode 'babel', map 'babel'): the floor reached. 0 for every other run.
+alter table public.runs add column if not exists floor smallint not null default 0;
 
 alter table public.players enable row level security;
 alter table public.runs enable row level security;
@@ -66,9 +68,11 @@ begin
   return v_name;
 end $$;
 
+-- Before the tower, submit_run had no p_floor; that version goes (a new parameter makes a new function).
+drop function if exists public.submit_run(uuid, text, text, text, text, text, integer, text, integer, integer, boolean);
 create or replace function public.submit_run(
   p_player uuid, p_name text, p_title text, p_frame text, p_map text, p_mode text, p_diff integer,
-  p_hero text, p_kills integer, p_seconds integer, p_won boolean
+  p_hero text, p_kills integer, p_seconds integer, p_won boolean, p_floor integer default 0
 ) returns text
 language plpgsql security definer set search_path = public as $$
 declare
@@ -76,15 +80,20 @@ declare
   v_name text := btrim(coalesce(p_name, ''));
 begin
   if v_name !~ '^[A-Za-zÀ-ÖØ-öø-ÿ0-9 _.-]{2,16}$' then raise exception 'nome inválido'; end if;
-  if p_map not in ('ela', 'mar', 'ossos', 'jerico') or p_mode not in ('classic', 'surv') or p_diff not between 0 and 2
-     or p_hero not in ('davi', 'sansao', 'moises', 'josue', 'debora') then
+  if not ((p_map in ('ela', 'mar', 'ossos', 'jerico') and p_mode in ('classic', 'surv') and coalesce(p_floor, 0) = 0)
+          or (p_map = 'babel' and p_mode = 'babel' and p_floor between 1 and 500))
+     or p_diff not between 0 and 2 or p_hero not in ('davi', 'sansao', 'moises', 'josue', 'debora') then
     raise exception 'dados inválidos';
   end if;
+  -- The tower: no floor is cleared in under 15 seconds.
+  if p_mode = 'babel' and p_seconds < (p_floor - 1) * 15 then raise exception 'números impossíveis'; end if;
   -- The horde grows with time (about 1 + t/40 enemies a second): no run kills more than could have come.
   if p_seconds not between 0 and 21600 or p_kills < 0 or p_kills > p_seconds + p_seconds * p_seconds / 70 + 300 then
     raise exception 'números impossíveis';
   end if;
-  if p_won and (p_mode <> 'classic' or p_seconds < 120 or p_seconds > 1500) then raise exception 'vitória impossível'; end if;
+  if p_won and not ((p_mode = 'classic' and p_seconds between 120 and 1500) or (p_mode = 'babel' and p_floor > 10)) then
+    raise exception 'vitória impossível';
+  end if;
   if exists (select 1 from players where lower(name) = lower(v_name) and id <> p_player) then raise exception 'nome já em uso'; end if;
   if exists (select 1 from players where id = p_player
              and last_run > now() - make_interval(secs => greatest(20, p_seconds * 0.8))) then
@@ -93,12 +102,13 @@ begin
   insert into players (id, name, title, frame, last_run)
   values (p_player, v_name, left(coalesce(p_title, ''), 40), left(coalesce(p_frame, ''), 24), now())
   on conflict (id) do update set name = excluded.name, title = excluded.title, frame = excluded.frame, last_run = now();
-  insert into runs (player, season, map, mode, diff, hero, kills, seconds, won)
-  values (p_player, v_season, p_map, p_mode, p_diff, p_hero, p_kills, p_seconds, p_won);
+  insert into runs (player, season, map, mode, diff, hero, kills, seconds, won, floor)
+  values (p_player, v_season, p_map, p_mode, p_diff, p_hero, p_kills, p_seconds, p_won, coalesce(p_floor, 0));
   return v_season;
 end $$;
 
--- p_board: 'abates' (kills summed over the season), 'relogio' (fastest win), 'sobrevivencia' (longest survival).
+-- p_board: 'abates' (kills summed over the season), 'relogio' (fastest win), 'sobrevivencia' (longest survival),
+-- 'torre' (highest floor of the Tower of Babel; on a tie, the faster climb).
 -- p_map: one map, or null for all of them. Returns the top p_limit (100 at most) and, when p_player is
 -- given, that player's own row too (me = true). Player ids are never returned.
 create or replace function public.leaderboard(
@@ -108,16 +118,17 @@ language sql stable security definer set search_path = public as $$
   with mine as (
     select r.* from runs r
     where r.season = p_season and (p_map is null or r.map = p_map)
-      and case p_board when 'abates' then true when 'relogio' then r.won else r.mode = 'surv' end
+      and case p_board when 'abates' then true when 'relogio' then r.won when 'torre' then r.mode = 'babel' else r.mode = 'surv' end
   ), scored as (
     select m.player,
-      case p_board when 'abates' then sum(m.kills) when 'relogio' then min(m.seconds) else max(m.seconds) end::bigint as value,
-      (array_agg(m.hero order by case p_board when 'relogio' then m.seconds when 'sobrevivencia' then -m.seconds else 0 end, m.created_at desc))[1] as hero,
-      (array_agg(m.map order by case p_board when 'relogio' then m.seconds when 'sobrevivencia' then -m.seconds else 0 end, m.created_at desc))[1] as map,
+      case p_board when 'abates' then sum(m.kills) when 'relogio' then min(m.seconds) when 'torre' then max(m.floor) else max(m.seconds) end::bigint as value,
+      (array_agg(m.seconds order by -m.floor, m.seconds))[1]::bigint as tie, -- the tower: the fastest climb to the best floor
+      (array_agg(m.hero order by case p_board when 'relogio' then m.seconds when 'sobrevivencia' then -m.seconds when 'torre' then -m.floor * 100000 + m.seconds else 0 end, m.created_at desc))[1] as hero,
+      (array_agg(m.map order by case p_board when 'relogio' then m.seconds when 'sobrevivencia' then -m.seconds when 'torre' then -m.floor * 100000 + m.seconds else 0 end, m.created_at desc))[1] as map,
       count(*) as runs
     from mine m group by m.player
   ), ranked as (
-    select rank() over (order by case when p_board = 'relogio' then s.value else -s.value end) as pos, s.*
+    select rank() over (order by case when p_board = 'relogio' then s.value else -s.value end, case when p_board = 'torre' then s.tie else 0 end) as pos, s.*
     from scored s
   )
   select k.pos, coalesce(k.player = p_player, false), p.name, p.title, p.frame, k.hero, k.map, k.value, k.runs
@@ -126,9 +137,9 @@ language sql stable security definer set search_path = public as $$
   order by k.pos
 $$;
 
-revoke all on function public.submit_run(uuid, text, text, text, text, text, integer, text, integer, integer, boolean) from public;
+revoke all on function public.submit_run(uuid, text, text, text, text, text, integer, text, integer, integer, boolean, integer) from public;
 revoke all on function public.leaderboard(text, text, text, uuid, integer) from public;
 revoke all on function public.claim_name(uuid, text) from public;
 grant execute on function public.claim_name(uuid, text) to anon, authenticated;
-grant execute on function public.submit_run(uuid, text, text, text, text, text, integer, text, integer, integer, boolean) to anon, authenticated;
+grant execute on function public.submit_run(uuid, text, text, text, text, text, integer, text, integer, integer, boolean, integer) to anon, authenticated;
 grant execute on function public.leaderboard(text, text, text, uuid, integer) to anon, authenticated;
