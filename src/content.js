@@ -666,6 +666,17 @@ export const TONGUES = {
   inacabada: { name: 'Torre inacabada', text: 'O chão afunda debaixo de quem fica parado mais de 3 segundos.' },
 };
 export const floorGoal = (n) => 25 + n * 8; // kills to clear a floor
+
+// Psalms: chosen once a run (the first Memorial stone, 2:00 in Survival, floors 1 and 6 of the tower),
+// each changes how the whole build plays.
+export const PSALMS = {
+  s23: { name: 'Salmo 23', ref: 'Sl 23:5', text: 'O cálice transborda: com a vida cheia, a cada 4 s uma luz sagrada fere a horda ao seu redor.' },
+  s144: { name: 'Salmo 144', ref: 'Sl 144:1', text: 'Mãos adestradas para a peleja: todo projétil seu ricocheteia mais uma vez.' },
+  s91: { name: 'Salmo 91', ref: 'Sl 91:7', text: 'Mil cairão ao teu lado: a cada 12 s um escudo anula o próximo golpe.' },
+  s18: { name: 'Salmo 18', ref: 'Sl 18:29', text: 'Com o meu Deus salto uma muralha: um pulo a mais no ar.' },
+  s103: { name: 'Salmo 103', ref: 'Sl 103:5', text: 'A mocidade se renova como a da águia: recupera 1,5 de vida por segundo.' },
+  s46: { name: 'Salmo 46', ref: 'Sl 46:1', text: 'Deus é o nosso refúgio: abaixo de 30% da vida, empurra a horda e fica intocável por 2 s (a cada 30 s).' },
+};
 // Hidden bosses. Each map has one that shows up in 10% of runs, at some moment of the run, and the
 // Serpent can show up on any map in 1% of runs: the hardest fight in the game. They are much tougher
 // than the map's boss (hp: times its health; k: quicker, harder blows) and pay denários when beaten.

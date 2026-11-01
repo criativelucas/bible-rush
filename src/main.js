@@ -5,7 +5,7 @@ import {
   TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
   STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, RESEARCH_KINDS, researchOf, MASTERY, masteryOf,
   TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES, hashStr, MOB_TYPES, BEAST_TYPE,
-  SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS, TOWER, FLOOR_MAPS, TOWER_LAYOUTS, TONGUES, floorGoal,
+  SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS, TOWER, FLOOR_MAPS, TOWER_LAYOUTS, TONGUES, floorGoal, PSALMS,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
@@ -451,7 +451,8 @@ for (const t of MOB_TYPES) enemyMeshes[t] = instanced(ASSETS.mobs[`mob_${t}_${BA
 const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca'];
 const shotMeshes = PROJ.map((k) => instanced(ASSETS.items[`proj_${k}`], M.toon(), MAX_SHOTS, true));
 const eshotMesh = instanced(new THREE.IcosahedronGeometry(0.25, 0), hdr(new THREE.MeshBasicMaterial({ color: 0xff3fb4 }), 2), MAX_ESHOTS);
-const manaMesh = instanced(ASSETS.items.proj_mana, hdr(new THREE.MeshBasicMaterial({ vertexColors: true }), 1.7), MAX_GEMS);
+const manaMesh = instanced(ASSETS.items.proj_mana, hdr(new THREE.MeshBasicMaterial({ vertexColors: true }), 1.7), MAX_GEMS, true);
+const MANA_TIER = [new THREE.Color(1, 1, 1), new THREE.Color(0.6, 1.7, 0.7), new THREE.Color(2.2, 1.6, 0.45)]; // fused maná: green, then gold
 const coinMesh = instanced(ASSETS.items.proj_coin, M.toon(), MAX_GEMS);
 const orbMesh = instanced(ASSETS.items.proj_wheel, M.toon(), MAX_ORBS, false, true);
 const strikeMesh = instanced(new THREE.RingGeometry(0.8, 1, 20).rotateX(-Math.PI / 2), hdr(new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.7, depthWrite: false }), 1.8), MAX_STRIKES);
@@ -834,6 +835,7 @@ const P = {
   goldGot: 0, veins: 0, jars: 0, chests: 0, hits: 0, lastHit: -99, guardians: 0, // for tasks and trophies
   mods: { espd: 1, spawn: 1, chest: 1 }, endless: false, // survival: the prices of the alliances
   netT: 0, // caught in a climber's net
+  psalms: [], wardAt: 0, refugeAt: 0, cupT: 0, grazes: 0, grazeAt: -9, // the Psalms; the graze streak
 };
 let dmgSrc = 'other'; // who is dealing damage right now (a weapon id, 'move', 'miracle', 'passive', 'other'): fills P.dmgBy
 let srcSlot = -3; // the same for shots and strikes, kept on them: weapon slot, or -1 miracle, -2 passive, -3 other
@@ -892,6 +894,7 @@ let melCarrier = Infinity; // Mel silvestre: one more carrier early on
 let seenHoreb = false;
 let nextGuardian = GUARDIAN_EVERY; // survival: a guardian every 5 minutes
 let wallsFell = false; // Jericó: the wall gives way at 5:00
+let psalmAt = Infinity; // when the Psalm choice opens (classic: the first stone; survival: 2:00; the tower: floor 1)
 let bossWait = 0; // classic: the map's boss waits for a hidden boss to fall
 // Hidden bosses: rolled when the run starts (content.js SECRET_BOSSES, SERPENT); paid at the end.
 const SECRET = SECRET_BOSSES[BIOME_ID];
@@ -1867,7 +1870,12 @@ function renderBuild() {
   const w = P.weapons.map((w) => `<li>${iconImg(ICON.weapon[w.id])}<div>${WEAPONS[w.id].name} · nv ${w.level}${w.bonus ? ` · dano +${Math.round(w.bonus * 100)}%` : ''}<small>${WEAPONS[w.id].desc}</small>${evoLine(w)}</div></li>`).join('');
   const r = P.relics.map((r) => `<li>${iconImg(ICON.relic[r.id])}<div style="color:${RARITY[r.tier].color}">${RELICS[r.id].name}<small>${statText(RELICS[r.id], r.tier)} · ${RELICS[r.id].ref}</small></div></li>`).join('')
     || '<li><small>Abra baús de cedro para encontrar relíquias.</small></li>';
-  $('pause-build').innerHTML = `<div><h3>Armas</h3><ul>${w}</ul><h3>Dano</h3>${dmgRows()}</div><div><h3>Relíquias</h3><ul>${r}</ul></div><div><h3>Atributos</h3>${attrRows()}</div>`;
+  // The grimoire: every evolution you have made, as a recipe.
+  const seen = Object.entries(EVOLUTIONS).filter(([, e]) => profile.bestiary.w?.[e.into] || P.weapons.some((x) => x.id === e.into));
+  const g = seen.map(([from, e]) => `<li>${iconImg(ICON.weapon[e.into])}<div>${WEAPONS[e.into].name}<small>${WEAPONS[from].name} nv ${MAX_LEVEL} + ${RELICS[e.needs].name}</small></div></li>`).join('')
+    || '<li><small>Evolua uma arma (nível máximo + a relíquia dela, num baú) e a receita fica aqui.</small></li>';
+  const ps = P.psalms.map((id) => `<li><div>${PSALMS[id].name}<small>${PSALMS[id].text}</small></div></li>`).join('');
+  $('pause-build').innerHTML = `<div><h3>Armas</h3><ul>${w}</ul><h3>Dano</h3>${dmgRows()}</div><div><h3>Relíquias</h3><ul>${r}</ul>${ps ? `<h3>Salmos</h3><ul>${ps}</ul>` : ''}<h3>Grimório <small>${seen.length} de ${Object.keys(EVOLUTIONS).length}</small></h3><ul>${g}</ul></div><div><h3>Atributos</h3>${attrRows()}</div>`;
 }
 // Every stat of the run, with what it does on hover; green when better than the hero's start.
 function attrRows() {
@@ -2193,10 +2201,40 @@ function updatePlayer(dt) {
     burst(p.x - v.x * 0.03, p.y + 0.15, p.z - v.z * 0.03, P.trail, 1, 0.6, 0.11, 1.5);
   }
   P.hp = Math.min(P.st.maxHp, P.hp + (P.st.regen + (P.harpT > 0 ? 6 : 0)) * dt);
+  psalmTick(dt);
+}
+function psalmTick(dt) {
+  if (P.psalms.includes('s23') && P.hp >= P.st.maxHp - 0.01 && (P.cupT -= dt) <= 0) { // Salmo 23: the cup runs over
+    P.cupT = 4;
+    const R = 5;
+    dmgSrc = 'passive';
+    for (let i = 0; i < E.n; i++) if ((E.x[i] - P.pos.x) ** 2 + (E.z[i] - P.pos.z) ** 2 < R * R) damage(i, 25 + P.level * 3);
+    addFx(ringGeo, 0xfff1b8, P.pos.x, P.pos.y + 0.3, P.pos.z, 1, 0.4, { grow: R, ground: true });
+    flash(P.pos.x, P.pos.y, P.pos.z, 0xfff1b8, 50, 0.4);
+  }
+  if (P.psalms.includes('s46') && P.hp < P.st.maxHp * 0.3 && time >= P.refugeAt) { // Salmo 46: a refuge
+    P.refugeAt = time + 30;
+    P.iframes = 2;
+    for (let i = 0; i < E.n; i++) {
+      const dx = E.x[i] - P.pos.x;
+      const dz = E.z[i] - P.pos.z;
+      const d = Math.hypot(dx, dz) || 1;
+      if (d < 9 && !ENEMIES[E.type[i]].boss) { E.kx[i] += (dx / d) * 25; E.kz[i] += (dz / d) * 25; E.stun[i] = 1; }
+    }
+    addFx(ringGeo, 0x9fe4ff, P.pos.x, P.pos.y + 0.3, P.pos.z, 1, 0.5, { grow: 9, ground: true });
+    toast('Deus é o nosso refúgio (Sl 46:1)', '#9fe4ff');
+  }
 }
 
 function hurt(dmg, fromX, fromZ) {
   if (P.iframes > 0 || state !== 'play') return;
+  if (P.psalms.includes('s91') && time >= P.wardAt) { // Salmo 91: the shield takes the blow
+    P.wardAt = time + 12;
+    P.iframes = 0.4;
+    burst(P.pos.x, P.pos.y + 1, P.pos.z, 0xfff1b8, 16, 4, 0.12, 4);
+    beep(1046, 0.12, 'triangle', 0.04);
+    return;
+  }
   if (random() < P.st.dodge) { // Escudo de Abraão
     P.iframes = 0.3;
     burst(P.pos.x, P.pos.y + 1, P.pos.z, 0xf2c14e, 8, 3, 0.1, 3);
@@ -2610,6 +2648,8 @@ function spawnBoss(enraged, guardian = false, foe = MAP_FOE) {
 // calmer gaps between them to raise stones and pray at altars. The alive cap keeps the screen readable.
 const WAVE = 45;
 function director(dt) {
+  if (SURV && psalmAt === Infinity && !P.psalms.length && time >= 120) psalmAt = time;
+  if (time >= psalmAt && state === 'play') { psalmAt = -1; openPsalms(); return; }
   if (BABEL) return towerDirector(dt);
   const wave = 0.55 + 0.45 * (0.5 - 0.5 * Math.cos((time / WAVE) * Math.PI * 2));
   const k = (1 + night * 0.25) * (boss.spawned ? 0.5 : 1) * wave;
@@ -3523,8 +3563,14 @@ function updateEnemyShots(dt) {
     } else if (!dead && !EP.graze[i] && d < 1.6 && Math.abs(dy) < 1.5 && P.iframes <= 0) {
       EP.graze[i] = 1; // near miss: skill feeds Fé
       gainFe(4);
-      burst(EP.x[i], EP.y[i], EP.z[i], 0xffe08f, 3, 2, 0.08);
-      beep(1400, 0.03, 'sine', 0.03);
+      P.grazes = time - P.grazeAt < 2 ? P.grazes + 1 : 0; // a streak of near misses climbs in pitch
+      P.grazeAt = time;
+      for (let k = 0; k <= 4; k++) { // a golden spark from the shot to the hero
+        const f = k / 4;
+        burst(EP.x[i] + (P.pos.x - EP.x[i]) * f, EP.y[i] + (P.pos.y + 1 - EP.y[i]) * f, EP.z[i] + (P.pos.z - EP.z[i]) * f, 0xffe08f, 1, 1, 0.07, 2);
+      }
+      beep(1200 * 1.06 ** Math.min(P.grazes, 14), 0.05, 'sine', 0.035);
+      if (P.grazes >= 4) dmgNumber(P.pos.x, P.pos.y + 2.2, P.pos.z, 0, false, `Raspão ×${P.grazes + 1}`);
     }
     if (dead) removeAt(EP, i);
     else i++;
@@ -3670,7 +3716,7 @@ function fireShot(s, t, spread) {
     S.vz[i] = vx * sn + S.vz[i] * c;
   }
   S.life[i] = s.life;
-  S.bounce[i] = s.bounce || 0;
+  S.bounce[i] = (s.bounce || 0) + (P.psalms.includes('s144') ? 1 : 0); // Salmo 144
   S.pierce[i] = s.pierce || 0;
   S.last[i] = -1;
   S.dmg[i] = s.dmg;
@@ -4066,13 +4112,32 @@ function updateGems(dt) {
     }
     if (G.pull[i] > 0 || d < pr) {
       G.pull[i] += dt;
-      const step = Math.min(d, (8 + G.pull[i] * 40) * dt);
+      const step = G.pull[i] < 0.1 ? -3 * dt : Math.min(d, (8 + G.pull[i] * 40) * dt); // a little start back first, then in
       G.x[i] += (dx / d) * step;
       G.y[i] += (dy / d) * step;
       G.z[i] += (dz / d) * step;
     }
     i++;
   }
+  if ((gemMergeT -= dt) <= 0) mergeGems();
+}
+// Too much maná lying far off: neighbours fuse into one worth all of them (bigger, and green, then gold).
+let gemMergeT = 1;
+const gemCells = new Map();
+function mergeGems() {
+  gemMergeT = 1;
+  let n = 0;
+  for (let i = 0; i < G.n; i++) if (!G.kind[i]) n++;
+  if (n < 120) return;
+  gemCells.clear();
+  for (let i = 0; i < G.n; i++) {
+    if (G.kind[i] || G.pull[i] > 0 || (G.x[i] - P.pos.x) ** 2 + (G.z[i] - P.pos.z) ** 2 < 400) continue;
+    const k = (Math.floor(G.x[i] / 3) + 512) * 1024 + Math.floor(G.z[i] / 3) + 512;
+    const j = gemCells.get(k);
+    if (j === undefined) gemCells.set(k, i);
+    else { G.val[j] += G.val[i]; G.val[i] = 0; }
+  }
+  for (let i = G.n - 1; i >= 0; i--) if (!G.kind[i] && !G.val[i]) removeAt(G, i);
 }
 
 function gainXp(v) {
@@ -4138,6 +4203,29 @@ function openChest(c) {
   burst(c.x, c.y + 1, c.z, 0xf2c14e, 24, 4, 0.12, 6);
   flash(c.x, c.y, c.z, 0xffd66b, 60, 0.8);
   chord([523, 659, 784, 1046], 'square');
+  if (c.free || c.challenge) luckyChest(c);
+}
+// The boss's and the ambush's chests roll your luck: three gifts (Bênção tripla) or five (Arca transbordante).
+function luckyChest(c) {
+  const k5 = 0.05 + P.st.luck * 0.2;
+  const k3 = 0.2 + P.st.luck * 0.5;
+  const roll = random();
+  const extra = roll < k5 ? 4 : roll < k5 + k3 ? 2 : 0;
+  if (!extra) return;
+  const ids = Object.keys(RELICS).filter((id) => isOpen('relic', id));
+  const names = [];
+  for (let k = 0; k < extra; k++) {
+    const r = rollRelic(P.st.luck, random, 1, ids);
+    applyEntry(P.st, RELICS[r.id], r.tier);
+    P.relics.push(r);
+    names.push(RELICS[r.id].name);
+  }
+  refreshWeapons();
+  for (let k = 0; k < 20; k++) dropGem(c.x + random() * 4 - 2, c.y + 0.6, c.z + random() * 4 - 2, 2, k % 2);
+  burst(c.x, c.y + 1.5, c.z, 0xfff1b8, 60, 8, 0.2, 10);
+  flash(c.x, c.y, c.z, 0xfff1b8, 90, 1.2);
+  chord([523, 659, 784, 1046, 1318, 1568], 'triangle');
+  banner('assets/ui/gem.png', names.join(' · '), extra === 4 ? 'Arca transbordante! +4 relíquias' : 'Bênção tripla! +2 relíquias', '#fff1b8', 'Ml 3:10');
 }
 
 let bannerTimer = 0;
@@ -4190,6 +4278,7 @@ function updateWorld(dt) {
         s.done = true;
         stonesDone++;
         P.conquests++;
+        if (stonesDone === 1) psalmAt = time + 0.5; // the first stone: a Psalm
         if (stonesDone === 3) award('memorial');
         s.beam.scale.set(0.3, 1, 0.3);
         s.beam.material.color.copy(STONE_DONE);
@@ -4499,7 +4588,12 @@ function renderChoice() {
     let rar = '';
     const evoHint = (id) => (EVOLUTIONS[id] ? `<em class="evo">Evolui com ${RELICS[EVOLUTIONS[id].needs].name} no nível ${MAX_LEVEL}</em>` : '');
     const bonusLine = (t) => (t ? `<li>Dano desta arma <ins>+${Math.round(RARITY[t].weapon * 100)}%</ins></li>` : '');
-    if (o.kind === 'portal') {
+    if (o.kind === 'psalm') {
+      tag = `Salmo · ${PSALMS[o.id].ref}`;
+      name = PSALMS[o.id].name;
+      text = PSALMS[o.id].text;
+      icon = 'assets/ui/book.png';
+    } else if (o.kind === 'portal') {
       const [pn, pt, pi] = PORTALS[o.path];
       tag = 'Portal';
       name = pn;
@@ -4602,6 +4696,7 @@ function takeOffer(o) {
   choice.picking = false;
   if (o.kind === 'leave') { choice = null; return resume(); }
   if (o.kind === 'pact') { applyPact(o.pact); choice = null; return resume(); }
+  if (o.kind === 'psalm') { takePsalm(o.id); return nextChoice(); }
   if (o.kind === 'portal') { // up the stairs: the next floor, then this portal's reward
     choice = null;
     towerFloorStart(tower.n + 1);
@@ -4640,8 +4735,24 @@ function takeOffer(o) {
   refreshWeapons();
   nextChoice();
 }
+let psalmPending = false;
+function openPsalms() {
+  const ids = Object.keys(PSALMS).filter((id) => !P.psalms.includes(id));
+  const list = [];
+  while (list.length < 3 && ids.length) list.push({ kind: 'psalm', id: ids.splice(Math.floor(random() * ids.length), 1)[0] });
+  if (list.length) openChoice('Escolha um Salmo', list, 'psalm');
+  else resume();
+}
+function takePsalm(id) {
+  P.psalms.push(id);
+  if (id === 's103') P.st.regen += 1.5;
+  if (id === 's18') { P.st.airJumps += 1; P.airJumps += 1; }
+  burst(P.pos.x, P.pos.y + 1.5, P.pos.z, 0xfff1b8, 30, 5, 0.14, 8);
+  chord([523, 784, 1046], 'triangle');
+}
 function nextChoice() {
   if (choice.source === 'level' && --pendingLevels > 0) return openLevelUp();
+  if (psalmPending) { psalmPending = false; return openPsalms(); }
   choice = null;
   resume();
 }
@@ -4932,6 +5043,8 @@ function towerFloorStart(n) {
     loadBossRig(model).then(() => spawnBoss(false, false, { model, name: 'Guardião da Torre', ref: 'Gn 11:4', intro: 'O guardião da torre barra a escada!', summon: 'Construtores, avante!', hp: 0.6, k: 1.1, pay: 0, tower: true }));
   }
   if (!tower.boss && n >= 3 && n % 2) spawnElite();
+  if (n === 6) psalmPending = true; // after this floor's reward
+  if (n === 1) psalmAt = time + 2.5;
   const names = { anfiteatro: 'Anfiteatro', zigurate: 'Zigurate', pontes: 'Pontes sobre o fogo', espiral: 'Espiral quebrada', trono: 'Sala do trono' };
   banner('assets/ui/star.png', tower.boss ? (tower.boss === 'ninrode' ? 'O cume de Sinar' : 'Guardião da torre') : `Derrote ${tower.goal} inimigos`, `Andar ${n} · ${names[tower.layout]}`, '#ffd66b',
     tower.tongue ? `${TONGUES[tower.tongue].name}: ${TONGUES[tower.tongue].text}` : 'Gn 11:4');
@@ -4983,6 +5096,7 @@ function towerReward(path) {
     P.hp = Math.min(P.st.maxHp, P.hp + P.st.maxHp * 0.3);
     addGold(30 + tower.n * 6);
     toast('A caravana de Ismael: pão, água e prata', '#ffd66b');
+    if (psalmPending) { psalmPending = false; return openPsalms(); }
     return resume();
   }
   let list;
@@ -5420,9 +5534,13 @@ function syncMeshes(dt) {
       }
     }
     else if (kind) coinMesh.setMatrixAt(nc++, dummy.matrix);
-    else manaMesh.setMatrixAt(nm++, dummy.matrix);
+    else {
+      manaMesh.setColorAt(nm, MANA_TIER[G.val[i] >= 40 ? 2 : G.val[i] >= 8 ? 1 : 0]);
+      manaMesh.setMatrixAt(nm++, dummy.matrix);
+    }
   }
   manaMesh.count = nm;
+  if (manaMesh.instanceColor) manaMesh.instanceColor.needsUpdate = true;
   coinMesh.count = nc;
   manaMesh.instanceMatrix.needsUpdate = coinMesh.instanceMatrix.needsUpdate = true;
   pickMeshes.forEach((m, k) => { m.count = np[k]; m.instanceMatrix.needsUpdate = true; });
@@ -5952,7 +6070,7 @@ window.arm = (ids, level = 1) => {
 };
 // Debug: poke at the run from the console, e.g. dev.look(Math.PI) or dev.spawnBoss().
 window.dev = {
-  tower: () => tower, floor: (n) => towerFloorStart(n),
+  tower: () => tower, floor: (n) => towerFloorStart(n), gems: () => G, drop: (x, y, z, v, k = 0) => dropGem(x, y, z, v, k),
   icon: () => ICON, dressHero: (id) => { dressHero(id); ICON.redoHero(id); },
   P, E, EP, boss, stones, altars, chests, obstacles, miracles, spawnBoss, bossMove, hazards, spawnEnemy, cfg, scene, ASSETS, profile, saveProfile, world,
   look: (y, p = pitch) => { yaw = y; pitch = p; },

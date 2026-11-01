@@ -175,7 +175,14 @@ A cada 3 andares entra um modificador que vale até o fim do bloco:
 
 | Passo | O quê | Situação |
 |---|---|---|
-| 1 | Mira 3D e tiro em arco (seção 1) + os estados `fly` e `climb` | A fazer |
-| 2 | Os 8 inimigos novos (seção 2) e as peças verticais dos mapas (seção 3) | A fazer |
-| 3 | Torre de Babel (seção 4) | A fazer |
-| 4 | Polimento (seção 5) | A fazer |
+| 1 | Mira 3D e tiro em arco (seção 1) + os estados `fly` e `climb` | Feito |
+| 2 | Os 8 inimigos novos (seção 2) e as peças verticais dos mapas (seção 3) | Feito |
+| 3 | Torre de Babel (seção 4) | Feito |
+| 4 | Polimento (seção 5) | Feito |
+
+**Como ficou (diferenças do plano):**
+- Pontes e passarelas são blocos maciços com colisão por cima (o terreno é mapa de alturas e as colisões são círculos): não dá para passar por baixo delas.
+- O "fundo do ribeiro" de Elá não foi rebaixado; no lugar, torres de vigia, ruína com rampa de pilares e mais altura nos mapas.
+- O escorpião é mais rápido em vez de causar dano contínuo; o Salmo 23 virou uma explosão a cada 4 s com a vida cheia.
+- Torre de Babel: as colunas da sala do trono não quebram; a Subida Infinita (andar 11+) existe, mas ainda não vai para o ranking da temporada (o servidor só aceita os 4 mapas: precisa mudar `tools/ranking.sql`).
+- Números de dano continuam em elementos reaproveitados (o teste com 500 inimigos ficou em ~3 ms por quadro).
