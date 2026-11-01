@@ -636,6 +636,36 @@ export const BIOMES = {
   },
 };
 export const BOSS = 4;
+
+// ---------- The Tower of Babel (mode 'babel', PLANO.md 4) ----------
+// A round arena high in the clouds; each floor brings its own layout of brick (world.js towerFloor),
+// the enemies of one of the four maps, and from floor 4 on the Confusion of Tongues (Gn 11:7).
+export const TOWER = {
+  name: 'Torre de Babel', ref: 'Gn 11', tower: true,
+  tags: ['Andares', 'Portais', 'Confusão das Línguas'],
+  desc: 'Uma arena no alto da torre, cercada de nuvens. Cada andar é uma sala nova: vença a horda, escolha um portal e suba.',
+  radius: 34, water: -60,
+  water2: { shallow: 0x6fd6c0, deep: 0x2f8f9e },
+  sky: { top: 0x6a8ed0, horizon: 0xf4c89a, nightTop: 0x0b1230, nightHorizon: 0x3a2f5a },
+  boss: 'Ninrode', bossIntro: 'Ninrode, o poderoso caçador, defende o alto da torre!', summon: 'Construtores de Babel, avante!',
+  elite: 'Um capataz de Babel apareceu! Ele guarda um baú.', win: 'Ninrode caiu no alto de Babel.',
+  verse: ['Vinde, edifiquemos uma cidade e uma torre cujo cume toque nos céus.', 'Gn 11:4'],
+  flyer: 'swoop', climber: 'net', // changed floor by floor to the tricks of that floor's map
+  bossModel: 'ninrode', groundKind: 2, death: [0xb8734a, 0x9a5a3a, 0x8a5a2b, 0xc08a3e],
+  well: ['Fonte', 'Gn 11'], event: '', carrier: 'Um construtor foge com ouro!',
+  terrain(x, z) { return -70 * smooth(37, 41, Math.hypot(x, z)); }, // flat, then the drop into the clouds
+  ground(h, ny, n, x, z) { return n > 0.3 ? 0xc98a5a : n > -0.3 ? 0xb8784a : 0xa86a40; },
+};
+export const FLOOR_MAPS = ['ela', 'mar', 'ossos', 'jerico']; // whose enemies come up on each floor, in turn
+export const TOWER_LAYOUTS = ['anfiteatro', 'zigurate', 'pontes', 'espiral']; // and the throne room on floors 5 and 10
+// The Confusion of Tongues: from floor 4, every three floors, one of these holds until the next.
+export const TONGUES = {
+  fogo: { name: 'Língua de fogo', text: 'Todo inimigo deixa uma brasa ao morrer; suas armas ganham +30% de área.' },
+  vento: { name: 'Vento de Sinar', text: 'Gravidade 35% menor, mas os voadores causam o dobro de dano.' },
+  pressa: { name: 'Pressa dos construtores', text: 'Inimigos e você 40% mais rápidos; a recarga do E cai pela metade.' },
+  inacabada: { name: 'Torre inacabada', text: 'O chão afunda debaixo de quem fica parado mais de 3 segundos.' },
+};
+export const floorGoal = (n) => 25 + n * 8; // kills to clear a floor
 // Hidden bosses. Each map has one that shows up in 10% of runs, at some moment of the run, and the
 // Serpent can show up on any map in 1% of runs: the hardest fight in the game. They are much tougher
 // than the map's boss (hp: times its health; k: quicker, harder blows) and pay denários when beaten.
@@ -701,6 +731,7 @@ export const TROPHIES = {
   incansavel: { name: 'Incansável', desc: 'Resista 20 minutos na Sobrevivência.', tier: 1, cat: 'sobrevivencia' },
   eterno: { name: 'Sobrevivente Eterno', desc: 'Resista 45 minutos na Sobrevivência.', tier: 2, cat: 'sobrevivencia', title: 'Sobrevivente eterno' },
   secreto: { name: 'O Inimigo Escondido', desc: 'Derrote um chefe secreto.', tier: 2, cat: 'mapas', title: 'Caçador de gigantes' },
+  babel: { name: 'O Cume de Sinar', desc: 'Vença Ninrode no andar 10 da Torre de Babel.', tier: 2, cat: 'desafios', title: 'Escalador de Babel' },
   serpente: { name: 'A Cabeça da Serpente', desc: 'Derrote a Antiga Serpente (Gn 3:15).', tier: 2, cat: 'mapas', title: 'Esmagador da serpente' },
   alianca: { name: 'Aliança', desc: 'Faça uma aliança depois de um guardião na Sobrevivência.', tier: 0, cat: 'sobrevivencia' },
 };

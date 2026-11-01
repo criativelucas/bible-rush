@@ -1,6 +1,6 @@
 // Builds one biome: terrain, water, sky, clouds, landmarks, ruins/trees/rocks (colliders) and ground cover.
 import * as THREE from 'three';
-import { BIOMES } from './content.js';
+import { BIOMES, TOWER } from './content.js';
 import * as M from './models.js';
 
 const o3 = new THREE.Object3D();
@@ -26,7 +26,8 @@ void main() {
 }`;
 
 export function buildWorld(scene, id, random, PROPS) {
-  const B = BIOMES[id];
+  const B = id === 'babel' ? TOWER : BIOMES[id];
+  const T = !!B.tower; // the Tower of Babel: an arena, its floors built by towerFloor()
   const H = (x, z) => B.terrain(x, z);
   const ela = id === 'ela';
   const sea = id === 'mar';
@@ -118,7 +119,7 @@ export function buildWorld(scene, id, random, PROPS) {
       for (let k = 0; k < 3; k++) c.toArray(colors, (t + k) * 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    const ground = new THREE.Mesh(g, M.toon(0xffffff, { ground: B.groundKind, pave: B.city ? [B.city.x, B.city.z, B.city.r - 1] : null }));
+    const ground = new THREE.Mesh(g, M.toon(0xffffff, { ground: B.groundKind, pave: B.city ? [B.city.x, B.city.z, B.city.r - 1] : T ? [0, 0, 40] : null }));
     ground.receiveShadow = true;
     scene.add(ground);
   }
@@ -189,7 +190,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const stones = [];
   const pileGeo = geo('memorial');
   const a0 = random() * Math.PI * 2;
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; k < (T ? 0 : 3); k++) {
     let x = 0;
     let z = 0;
     for (let t = 0; t < 60; t++) {
@@ -216,7 +217,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const altarGeo = geo('altar');
   const flameGeo = geo('flame');
   const flameMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(2.4, 2.4, 2.4) }); // fire glows
-  for (let k = 0; k < n2(3); k++) {
+  for (let k = 0; k < (T ? 0 : n2(3)); k++) {
     const s = spot(20, B.radius * 0.8, 14);
     if (!s) continue;
     const y = H(s.x, s.z);
@@ -233,7 +234,7 @@ export function buildWorld(scene, id, random, PROPS) {
 
   // Wells (or springs): drink to heal; they fill again after a while.
   const wells = [];
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; k < (T ? 0 : 3); k++) {
     const s = B.oasis && k === 0 ? { x: B.oasis.x + 8, z: B.oasis.z + 2 } : spot(18, B.radius * 0.75, 16); // Elisha's spring by the pool
     if (!s) continue;
     const y = H(s.x, s.z);
@@ -251,7 +252,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const padMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9fe4ff).multiplyScalar(1.6), transparent: true, opacity: 0.55, depthWrite: false });
   const spoutGeo = new THREE.CylinderGeometry(0.35, 0.55, 2.4, 8, 1, true).translate(0, 1.2, 0);
   const ringGeoP = new THREE.RingGeometry(0.9, 1.3, 16).rotateX(-Math.PI / 2);
-  for (let k = 0, t = 0; k < Math.round(4 * S * S) && t < 4000; t++) {
+  for (let k = 0, t = 0; k < (T ? 0 : Math.round(4 * S * S)) && t < 4000; t++) {
     const a = random() * Math.PI * 2;
     const r = 14 + random() * (B.radius * 0.88 - 14);
     const x = Math.cos(a) * r;
@@ -287,7 +288,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const things = [];
   const silverMat = M.toon(0xaab6c6);
   const shineMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xf2f8ff).multiplyScalar(1.8) });
-  for (let k = 0; k < n2(5); k++) {
+  for (let k = 0; k < (T ? 0 : n2(5)); k++) {
     const s = spot(16, B.radius * 0.9, 12);
     if (!s) continue;
     const y = H(s.x, s.z);
@@ -309,7 +310,7 @@ export function buildWorld(scene, id, random, PROPS) {
   }
   const fruitGeo = new THREE.IcosahedronGeometry(0.2, 0);
   const green = !sea && id !== 'ossos';
-  for (let k = 0; k < n2(4); k++) {
+  for (let k = 0; k < (T ? 0 : n2(4)); k++) {
     const s = spot(14, B.radius * 0.88, 12);
     if (!s) continue;
     const y = H(s.x, s.z);
@@ -331,7 +332,7 @@ export function buildWorld(scene, id, random, PROPS) {
     things.push({ kind: 'fruit', x: s.x, z: s.z, y, fruit, cd: 0 });
   }
   const gideonMat = M.toon(0xd9a066, { emissive: 0x6a3a10 });
-  for (let k = 0; k < n2(6); k++) {
+  for (let k = 0; k < (T ? 0 : n2(6)); k++) {
     const s = spot(12, B.radius * 0.88, 8);
     if (!s) continue;
     const y = H(s.x, s.z);
@@ -345,7 +346,7 @@ export function buildWorld(scene, id, random, PROPS) {
     placed.push(s);
     things.push({ kind: 'gideon', x: s.x, z: s.z, y, mesh: jar, flame: f, used: false });
   }
-  for (let k = 0; k < 2; k++) {
+  for (let k = 0; k < (T ? 0 : 2); k++) {
     const s = spot(24, B.radius * 0.8, 20);
     if (!s) continue;
     const y = H(s.x, s.z);
@@ -360,7 +361,7 @@ export function buildWorld(scene, id, random, PROPS) {
     things.push({ kind: 'bethel', x: s.x, z: s.z, y, flame: f, p: 0, cd: 0 });
   }
   {
-    const s = spot(30, B.radius * 0.7, 24);
+    const s = T ? null : spot(30, B.radius * 0.7, 24);
     if (s) {
       const rot = random() * 6;
       const c = Math.cos(rot);
@@ -406,13 +407,13 @@ export function buildWorld(scene, id, random, PROPS) {
     chests.push(c);
     return c;
   }
-  for (let k = 0; k < n2(8); k++) {
+  for (let k = 0; k < (T ? 0 : n2(8)); k++) {
     const s = spot(12, B.radius * 0.8, 8);
     if (!s) continue;
     placed.push(s);
     addChest(s.x, s.z, false);
   }
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; k < (T ? 0 : 3); k++) {
     const s = spot(28, B.radius * 0.8, 16);
     if (!s) continue;
     placed.push(s);
@@ -454,6 +455,136 @@ export function buildWorld(scene, id, random, PROPS) {
       list?.push(s);
     }
   }
+
+  // ---- The Tower of Babel: the arena's wall with eight portals, then one layout of brick per floor ----
+  const BRICKC = [0xc98a5a, 0xb8784a, 0xd49a68];
+  const GLAZE = 0x2f5f9a; // the glazed blue of Babylon's gates
+  const brickMats = {};
+  const brickMat = (c) => (brickMats[c] ??= M.toon(c, { vc: false, grain: true, fade: true }));
+  const portals = [];
+  const box = (w, h, d, y = 0) => new THREE.BoxGeometry(w, h, d).translate(0, y + h / 2, 0);
+  function towerShell() {
+    const g = new THREE.Group();
+    const R = 35.5;
+    for (let k = 0; k < 28; k++) {
+      const a = (k / 28) * Math.PI * 2;
+      for (const [geom, c] of [[box(8.2, 3.2, 1.6, -0.2), BRICKC[k % 3]], [box(8.3, 0.3, 1.7, 2.8), GLAZE], [box(1.2, 0.8, 1.6, 3.0), BRICKC[(k + 1) % 3]]]) {
+        const m = new THREE.Mesh(geom, brickMat(c));
+        m.position.set(Math.cos(a) * R, 0, Math.sin(a) * R);
+        m.rotation.y = -a + Math.PI / 2;
+        m.receiveShadow = true;
+        g.add(m);
+      }
+    }
+    const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 0.9, 2.4), transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false });
+    for (let k = 0; k < 8; k++) { // portals in the wall: the horde comes through them
+      const a = (k / 8) * Math.PI * 2 + Math.PI / 16;
+      const p = new THREE.Group();
+      p.position.set(Math.cos(a) * (R - 1.2), 0, Math.sin(a) * (R - 1.2));
+      p.rotation.y = -a - Math.PI / 2;
+      for (const x of [-1.7, 1.7]) {
+        const pil = new THREE.Mesh(box(0.9, 4.4, 0.9), brickMat(GLAZE));
+        pil.position.x = x;
+        p.add(pil);
+      }
+      const lintel = new THREE.Mesh(box(4.4, 0.8, 1.0, 4.3), brickMat(0xe8b84a));
+      const veil = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 4.2).translate(0, 2.1, 0), glow);
+      p.add(lintel, veil);
+      g.add(p);
+      portals.push({ x: Math.cos(a) * (R - 3.5), z: Math.sin(a) * (R - 3.5) });
+    }
+    const clouds = new THREE.Mesh(new THREE.RingGeometry(39, 340, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xf6eef2 }));
+    clouds.position.y = -9;
+    g.add(clouds);
+    scene.add(g);
+  }
+  let floorGroup = null;
+  let shellN = 0;
+  // Builds a floor's layout (main.js calls it on every new floor): bricks with colliders, and springs.
+  function towerFloor(layout) {
+    if (floorGroup) {
+      scene.remove(floorGroup);
+      floorGroup.traverse((o) => o.geometry?.dispose());
+    } else shellN = obstacles.length;
+    obstacles.length = shellN;
+    pads.length = 0;
+    floorGroup = new THREE.Group();
+    const block = (x, z, w, d, h, rot = 0) => {
+      const c = BRICKC[Math.abs(Math.round(x * 7 + z * 3)) % 3];
+      for (const [geom, col] of [[box(w, h - 0.12, d, -0.1), c], [box(w + 0.12, 0.3, d + 0.12, h - 0.32), GLAZE]]) { // brick, then the glazed band on top
+        const m = new THREE.Mesh(geom, brickMat(col));
+        m.position.set(x, 0, z);
+        m.rotation.y = rot;
+        m.castShadow = m.receiveShadow = true;
+        floorGroup.add(m);
+      }
+      const long = Math.max(w, d);
+      const short = Math.min(w, d);
+      const n = Math.max(1, Math.ceil((long - short) / (short * 0.8)) + 1);
+      const [ux, uz] = w >= d ? [Math.cos(rot), -Math.sin(rot)] : [Math.sin(rot), Math.cos(rot)];
+      for (let k = 0; k < n; k++) {
+        const off = n === 1 ? 0 : -(long - short) / 2 + (k * (long - short)) / (n - 1);
+        obstacles.push({ x: x + ux * off, z: z + uz * off, r: (short / 2) * 1.08, top: h - 0.02 });
+      }
+    };
+    const ring = (r, n, depth, h, skip = () => false) => {
+      for (let k = 0; k < n; k++) {
+        if (skip(k)) continue;
+        const a = (k / n) * Math.PI * 2;
+        block(Math.cos(a) * r, Math.sin(a) * r, ((2 * Math.PI * r) / n) * 0.94, depth, h, Math.atan2(-Math.cos(a), -Math.sin(a)));
+      }
+    };
+    const spring = (x, z, up) => { // a Rock of Horeb throwing you toward the middle
+      const d = Math.hypot(x, z) || 1;
+      const spout = new THREE.Mesh(spoutGeo, padMat);
+      spout.position.set(x, 0.1, z);
+      const rg = new THREE.Mesh(ringGeoP, padMat);
+      rg.position.set(x, 0.08, z);
+      floorGroup.add(spout, rg);
+      pads.push({ x, z, y: 0, dx: -x / d, dz: -z / d, up, spout, cd: 0 });
+    };
+    let fire = false;
+    if (layout === 'anfiteatro') { // low middle, two rings of benches round it
+      ring(20, 14, 3.4, 1.5, (k) => k % 7 === 0);
+      ring(26, 18, 3.4, 3.0);
+      spring(0, 23, 1.5);
+      spring(0, -23, 1.5);
+    } else if (layout === 'zigurate') { // a three-step pyramid in the middle, springs on each side
+      block(0, 0, 10, 10, 1.5);
+      block(0, 0, 7, 7, 3.0);
+      block(0, 0, 4, 4, 4.5);
+      spring(15, 0, 4.5);
+      spring(-15, 0, 4.5);
+    } else if (layout === 'pontes') { // four pillars and a middle joined high over a burning floor
+      block(0, 0, 6, 6, 5.5);
+      for (let k = 0; k < 4; k++) {
+        const a = (k * Math.PI) / 2;
+        const ux = Math.round(Math.cos(a));
+        const uz = Math.round(Math.sin(a));
+        block(ux * 13, uz * 13, 4, 4, 5.5);
+        block(ux * 8, uz * 8, ux ? 6.2 : 1.8, ux ? 1.8 : 6.2, 5.5); // the bridge
+        for (let s = 1; s <= 3; s++) block(ux * (15 + s * 2.1), uz * (15 + s * 2.1), 2, 2, 5.5 - s * 1.35); // steps up
+      }
+      fire = true;
+    } else if (layout === 'espiral') { // a broken ramp round the edge up to a platform hung in the middle
+      const n = 18;
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 1.7;
+        block(Math.cos(a) * 27, Math.sin(a) * 27, 5.4, 3, 0.8 + k * 0.4, Math.atan2(-Math.cos(a), -Math.sin(a)));
+      }
+      const a = Math.PI * 1.7 * ((n - 1) / n);
+      const top = 0.8 + (n - 1) * 0.4;
+      block(0, 0, 6, 6, top);
+      block(Math.cos(a) * 15, Math.sin(a) * 15, 21, 1.8, top, -a);
+      spring(Math.cos(a + 0.6) * 8, Math.sin(a + 0.6) * 8, top - 1);
+    } else { // the throne room: wide, four columns to hide behind
+      for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) block(x, z, 2.4, 2.4, 7);
+      block(0, -24, 10, 4, 1.2);
+      block(0, -25, 3, 1.5, 3.2);
+    }
+    scene.add(floorGroup);
+    return { fire };
+  }
   const STAIRS = [];
   for (let k = 0; k < 5; k++) for (const lx of [-0.6, 0.6]) STAIRS.push([lx, -1.1 + k * 0.55, 0.75, 0.25 * (k + 1)]);
   for (const lx of [-1.45, 1.45]) for (const lz of [-1.1, 0, 1.1]) STAIRS.push([lx, lz, 0.35, 1.5]);
@@ -493,7 +624,8 @@ export function buildWorld(scene, id, random, PROPS) {
   const gates = [];
   let rahab = null;
   const fallingWalls = [];
-  if (ela) {
+  if (T) towerShell();
+  else if (ela) {
     // Waterfall: the brook drops off the eastern ledge between two cliffs; more cliffs line the ledge.
     const lx = B.ledgeX;
     const bz = B.brookZ(lx);
@@ -761,7 +893,7 @@ export function buildWorld(scene, id, random, PROPS) {
 
   // Cântaros (jars): walk into them for siclos.
   const jars = [];
-  for (let k = 0; k < n2(40); k++) {
+  for (let k = 0; k < (T ? 0 : n2(40)); k++) {
     const s = spot(8, B.radius * 0.85, 3);
     if (s) jars.push({ ...s, y: H(s.x, s.z), broken: false, rot: random() * 6 });
   }
@@ -804,7 +936,7 @@ export function buildWorld(scene, id, random, PROPS) {
     decor(geo('decor_shrub'), 240, (x, z, h) => h > B.water + 1 && Math.hypot(x - C.x, z - C.z) > C.r + 3);
     decor(geo('decor_drygrass'), 600, (x, z, h) => h > B.water + 1 && Math.hypot(x - C.x, z - C.z) > C.r + 3);
     decor(geo('decor_pebble'), 200, () => true, 0.6, 1.4);
-  } else {
+  } else if (!T) {
     decor(geo('decor_drygrass'), 1600, (x, z, h) => h < 20 && slopeAt(x, z) < 0.9);
     decor(geo('decor_bone'), 500, (x, z, h) => h < 8 && slopeAt(x, z) < 0.9, 0.8, 1.6);
     decor(geo('decor_skull'), 90, (x, z, h) => h < 8 && slopeAt(x, z) < 0.9, 0.8, 1.3);
@@ -842,5 +974,5 @@ export function buildWorld(scene, id, random, PROPS) {
     }
     return fallingWalls;
   }
-  return { B, terrainH: H, slopeAt, obstacles, collapse, stones, altars, wells, pads, things, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, gates, rahab, update, horizon: skyMat.uniforms.horizon.value };
+  return { B, terrainH: H, slopeAt, obstacles, collapse, towerFloor, portals, stones, altars, wells, pads, things, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, gates, rahab, update, horizon: skyMat.uniforms.horizon.value };
 }

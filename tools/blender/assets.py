@@ -855,7 +855,7 @@ def rigged(name, m, bones, clips, scale):
     skin(mesh, arm, [{b: 1.0} for b in m.BONE])
     actions(arm, clips)
     export_glb(os.path.join(ROOT, 'assets/models/bosses', f'{name}.glb'), [mesh, arm], animations=True, draco=True)
-    arm.location.x = {'golias': 8, 'farao': -8, 'rei': 24, 'isbi': 32, 'janes': 40, 'ogue': 48, 'adonizedeque': 56}.get(name, 16)
+    arm.location.x = {'golias': 8, 'farao': -8, 'rei': 24, 'isbi': 32, 'janes': 40, 'ogue': 48, 'adonizedeque': 56, 'ninrode': 64}.get(name, 16)
 
 
 # ---------- Hidden bosses (main.js BOSS_KITS isbi/janes/ogue/adonizedeque; 10% of runs) ----------
@@ -1043,6 +1043,40 @@ def adonizedeque():
     m.part('torus', 0.92, 0.06, 2 * PI, 18, p=(-1.6, 2.65, 0.25), r=(0, PI / 2, 0), color=GOLD, **sh)
     m.part('ball', 0.22, 1, p=(-1.62, 2.65, 0.25), color=GOLD, **sh)
     rigged('adonizedeque', m, GIANT_BONES, giant_clips(22, 4), 0.88)
+
+
+def ninrode():
+    """Nimrod, the mighty hunter before the Lord (Gn 10:8-10), king of Shinar: tall crown, curled beard, a great bow."""
+    m = Model('ninrode', 35)
+    ROBE, FRINGE, LAPIS = 0x8a2a24, 0xe8b84a, 0x2f5f9a
+    giant(m, SKIN2, 0x3a2e2a, ROBE, ROBE, GOLD, belt=LAPIS, boots=LEATHER, beard=None, robe=ROBE, sleeve=SKIN2)
+    body = dict(bone='hips')
+    for k in range(14):  # the fringe of the royal robe
+        a = k / 14 * 2 * PI
+        m.part('box', 0.18, 0.5, 0.06, p=(math.sin(a) * 1.1, 1.2, math.cos(a) * 1.1), r=(0, a, 0), color=FRINGE, **body)
+    m.part('box', 0.4, 2.2, 0.08, p=(0.35, 2.9, 0.6), r=(0, 0, -0.5), color=LAPIS, **body)  # sash
+    m.part('cyl', 0.12, 0.1, 1.6, 8, p=(0.6, 3.2, -0.62), r=(0, 0, -0.4), color=LEATHER, **body)  # quiver
+    for k in range(4):
+        m.part('cone', 0.05, 0.25, 4, p=(0.95 - k * 0.05, 4.05, -0.62), r=(0, 0, -0.4), color=WHITE, **body)
+    hd = dict(bone='head')
+    for row in range(4):  # the curled beard, Assyrian fashion
+        for k in range(5):
+            m.part('ball', 0.1, 1, p=(-0.28 + k * 0.14, 4.25 - row * 0.17, 0.42 - row * 0.02), color=BLACK, **hd)
+    m.part('box', 0.86, 0.36, 0.84, p=(0, 4.84, 0), color=BLACK, bevel=0.08, **hd)
+    m.part('cyl', 0.42, 0.5, 0.9, 12, p=(0, 5.35, 0), color=GOLD, **hd)  # the tall crown
+    m.part('cyl', 0.52, 0.52, 0.12, 12, p=(0, 4.95, 0), color=LAPIS, **hd)
+    m.part('cone', 0.16, 0.4, 8, p=(0, 6.0, 0), color=GOLD, **hd)
+    for k in range(6):
+        a = k / 6 * 2 * PI
+        m.part('ball', 0.07, 1, p=(math.sin(a) * 0.47, 5.3, math.cos(a) * 0.47), color=LAPIS if k % 2 else RED, **hd)
+    bw = dict(bone='arm.L')  # the great bow
+    m.part('torus', 1.6, 0.08, PI * 0.9, 16, p=(-1.3, 2.5, 0.45), r=(0, PI / 2, PI / 2 + PI * 0.05), color=DARKWOOD, **bw)
+    m.part('box', 0.03, 3.1, 0.03, p=(-1.3, 2.5, 0.0), color=WHITE, **bw)
+    m.part('cyl', 0.1, 0.1, 0.4, 8, p=(-1.3, 2.5, 0.45), color=LEATHER, **bw)
+    ar = dict(bone='arm.R')
+    m.part('cyl', 0.03, 0.03, 1.4, 5, p=(1.2, 2.2, 0.35), color=WOOD, **ar)
+    m.part('cone', 0.07, 0.22, 4, p=(1.2, 2.95, 0.35), color=IRON, **ar)
+    rigged('ninrode', m, GIANT_BONES, giant_clips(23, 4), 0.95)
 
 
 # ---------- Relics, weapons, the scroll ----------
@@ -2031,6 +2065,7 @@ if __name__ == '__main__':
     janes()
     ogue()
     adonizedeque()
+    ninrode()
     items()
     props()
     for group, objs in built.items():

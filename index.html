@@ -633,8 +633,9 @@
     .mode-col { display: grid; gap: 12px; }
     .hub-card.surv { --c1: #3e5a2a; --c2: #4a6a34; }
     .hub-card.event { --c1: #5b3a8a; --c2: #6a4a9a; }
-    .hub-card.surv, .hub-card.event { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
-    .hub-card.surv b, .hub-card.event b { font-size: 30px; }
+    .hub-card.babel { --c1: #8a4a2a; --c2: #2f5f9a; }
+    .hub-card.surv, .hub-card.event, .hub-card.babel { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
+    .hub-card.surv b, .hub-card.event b, .hub-card.babel b { font-size: 30px; }
     .hub-card.tasks { --c1: #8a5a14; --c2: #a8701c; }
     .hub-card.tasks img { width: 40px; height: 40px; image-rendering: pixelated; }
     .pips3 { margin-left: auto; display: flex; gap: 6px; }
@@ -853,6 +854,7 @@
           <button class="btn hub-card play" data-go="setup"><span class="hc-face"><img id="play-face" alt=""></span><span class="hc-txt"><b>Jogar</b><small id="play-sub"></small></span><kbd class="k">Enter</kbd></button>
           <div class="mode-col">
             <button class="btn hub-card surv" id="surv-card"><b>Sobrevivência</b><small id="surv-sub">Sem fim · guardiões</small></button>
+            <button class="btn hub-card babel" id="babel-card"><b>Torre de Babel</b><small id="babel-sub">Andares · portais · Ninrode</small></button>
             <button class="btn hub-card event" id="event-card"><b>Desafio do dia</b><small id="event-sub"></small></button>
           </div>
         </div>
@@ -1034,6 +1036,8 @@
         <span><kbd class="k">←</kbd><kbd class="k">→</kbd><kbd class="k">↑</kbd><kbd class="k">↓</kbd></span><span>Girar a câmera pelo teclado</span>
         <span><kbd class="k">Esc</kbd></span><span>Pausa</span>
       </div>
+      <h3>Torre de Babel</h3>
+      <p>Um modo de subida: cada andar é uma sala de tijolos no alto da torre (anfiteatro, zigurate, pontes sobre o fogo ou espiral quebrada). Derrote a horda que sai dos portais e escolha um portal para subir: armas, relíquias ou, a cada 3 andares, a caravana de Ismael. No andar 5 há um guardião com um baú; no 10, Ninrode, o poderoso caçador. A partir do andar 4, a cada 3 andares, a Confusão das Línguas muda uma regra. Depois do 10 a subida não tem fim.</p>
       <h3>Chefes secretos</h3>
       <p>Em 1 de cada 10 jornadas, cada cenário esconde um chefe secreto que aparece no meio da partida: Isbi-Benobe em Elá, Janes no Mar Vermelho, Ogue nos Ossos Secos e Adoni-Zedeque em Jericó. São bem mais fortes que o chefe do cenário e pagam 1.500 denários. Em 1 de cada 100 jornadas, em qualquer cenário, surge a Antiga Serpente, o chefe mais difícil do jogo: vencê-la paga 10.000 denários.</p>
       <h3>Raridade das cartas</h3>

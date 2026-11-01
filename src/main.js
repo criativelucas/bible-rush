@@ -5,7 +5,7 @@ import {
   TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
   STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, RESEARCH_KINDS, researchOf, MASTERY, masteryOf,
   TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES, hashStr, MOB_TYPES, BEAST_TYPE,
-  SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS,
+  SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS, TOWER, FLOOR_MAPS, TOWER_LAYOUTS, TONGUES, floorGoal,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
@@ -32,7 +32,8 @@ const unlockName = (key) => {
 // ---------- URL + settings ----------
 const params = new URLSearchParams(location.search);
 const wantBiome = params.get('biome');
-const BIOME_ID = BIOMES[wantBiome] && isOpen('map', wantBiome) ? wantBiome : 'ela'; // a locked map in the URL falls back
+let BABEL = params.get('mode') === 'babel'; // the Tower of Babel: its own arena, floor after floor
+const BIOME_ID = BABEL ? 'babel' : BIOMES[wantBiome] && isOpen('map', wantBiome) ? wantBiome : 'ela'; // a locked map in the URL falls back
 // Difficulty and mode: chosen on the setup screen (kept in the URL for "Jogar de novo"); fixed once a run starts.
 let DIFF_ID = Math.min(2, Math.max(0, Number(params.get('diff')) || 0));
 if (!diffOpen(profile, BIOME_ID, DIFF_ID)) DIFF_ID = 0;
@@ -250,7 +251,7 @@ function updateLights(dt) {
 }
 
 // ---------- World ----------
-const ASSETS = await loadAll(BIOMES[BIOME_ID].bossModel, Object.keys(HEROES)); // models built in Blender (tools/build_models.sh)
+const ASSETS = await loadAll((BABEL ? TOWER : BIOMES[BIOME_ID]).bossModel, Object.keys(HEROES)); // models built in Blender (tools/build_models.sh)
 Object.assign(ASSETS.items, forgeModels()); // the newer weapons' models
 const world = buildWorld(scene, BIOME_ID, random, ASSETS.props);
 const B = world.B;
@@ -285,7 +286,7 @@ scene.add(motes);
 const moteSeed = Array.from({ length: MOTES }, () => [random() * 40, random() * 40, random(), random() * 6.28, 0.4 + random() * 0.6]);
 const moteGround = new Float32Array(MOTES); // the ground under each mote, refreshed a few at a time (terrainH is not cheap)
 let moteNext = 0;
-const MOTE_COL = { ela: [1.5, 1.45, 0.75], mar: [1.7, 1.5, 1.1], ossos: [1.8, 0.95, 0.45], jerico: [1.7, 1.4, 0.65] }; // pollen, sea glitter, embers, gold dust
+const MOTE_COL = { babel: [1.7, 1.35, 0.9], ela: [1.5, 1.45, 0.75], mar: [1.7, 1.5, 1.1], ossos: [1.8, 0.95, 0.45], jerico: [1.7, 1.4, 0.65] }; // pollen, sea glitter, embers, gold dust
 const FIREFLY = [1.1, 2.1, 0.7];
 const SHAFT_DAY = new THREE.Color(1, 0.84, 0.58);
 const SHAFT_NIGHT = new THREE.Color(0.55, 0.65, 1);
@@ -363,7 +364,6 @@ const walkable = (x, z) => Math.hypot(x, z) < B.radius - 2 && terrainH(x, z) > B
 
 const flow = new FlowField(HALF, 2);
 const hash = new SpatialHash(HALF, 2, MAX_ENEMIES);
-for (const o of obstacles) flow.blockCircle(o.x, o.z, o.r + 0.6);
 // Colliders by 4 m cell: "is this point inside a rock, ruin, tree or chest?" for shots, enemies and drops.
 const OB_CELL = 4;
 const obGrid = new Map();
@@ -392,13 +392,26 @@ function obstacleAt(x, z, pad = 0) {
 // Rock faces by flow cell: enemies path round them (up the ramps) and never step onto one.
 const CLIFFS = new Uint8Array(flow.n * flow.n);
 const steepAt = (x, z) => Math.hypot(...slope(x, z)) > CLIFF;
-for (let c = 0; c < flow.n * flow.n; c++) { // sea, the world's edge and the cliffs
-  const x = -HALF + ((c % flow.n) + 0.5) * flow.cell;
-  const z = -HALF + (Math.floor(c / flow.n) + 0.5) * flow.cell;
-  if (!walkable(x, z)) flow.blocked[c] = 1;
-  else if (steepAt(x, z) || steepAt(x - 0.7, z) || steepAt(x + 0.7, z) || steepAt(x, z - 0.7) || steepAt(x, z + 0.7)) CLIFFS[c] = flow.blocked[c] = 1;
+// What blocks the way: rocks and ruins, the sea, the world's edge and the cliffs. Again whenever the
+// colliders change (each floor of the tower).
+function blockFlow(px = 0, pz = 0) {
+  flow.blocked.fill(0);
+  CLIFFS.fill(0);
+  for (const o of obstacles) flow.blockCircle(o.x, o.z, o.r + 0.6);
+  for (let c = 0; c < flow.n * flow.n; c++) {
+    const x = -HALF + ((c % flow.n) + 0.5) * flow.cell;
+    const z = -HALF + (Math.floor(c / flow.n) + 0.5) * flow.cell;
+    if (!walkable(x, z)) flow.blocked[c] = 1;
+    else if (steepAt(x, z) || steepAt(x - 0.7, z) || steepAt(x + 0.7, z) || steepAt(x, z - 0.7) || steepAt(x, z + 0.7)) CLIFFS[c] = flow.blocked[c] = 1;
+  }
+  flow.update(px, pz);
 }
-flow.update(0, 0);
+blockFlow();
+function reindexObstacles() {
+  obGrid.clear();
+  obstacles.forEach((o, id) => indexObstacle(id));
+  blockFlow(P.pos.x, P.pos.z);
+}
 
 // ---------- Entities: flat typed arrays, swap-remove, instanced meshes ----------
 function pool(max, fields) {
@@ -434,7 +447,7 @@ function instanced(geo, mat, max, colors = false, shadow = false) {
 }
 const enemyMat = M.toon(0xffffff, { walk: true, fade: true, rim: true });
 const enemyMeshes = []; // by type (sparse: the boss is a rig)
-for (const t of MOB_TYPES) enemyMeshes[t] = instanced(ASSETS.mobs[`mob_${t}_${BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true);
+for (const t of MOB_TYPES) enemyMeshes[t] = instanced(ASSETS.mobs[`mob_${t}_${BABEL ? 'ela' : BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true); // the tower swaps them floor by floor
 const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca'];
 const shotMeshes = PROJ.map((k) => instanced(ASSETS.items[`proj_${k}`], M.toon(), MAX_SHOTS, true));
 const eshotMesh = instanced(new THREE.IcosahedronGeometry(0.25, 0), hdr(new THREE.MeshBasicMaterial({ color: 0xff3fb4 }), 2), MAX_ESHOTS);
@@ -825,7 +838,7 @@ const P = {
 let dmgSrc = 'other'; // who is dealing damage right now (a weapon id, 'move', 'miracle', 'passive', 'other'): fills P.dmgBy
 let srcSlot = -3; // the same for shots and strikes, kept on them: weapon slot, or -1 miracle, -2 passive, -3 other
 const srcName = (code) => (code >= 0 ? P.weapons[code]?.id ?? 'other' : ['other', 'passive', 'miracle'][code + 3]);
-const moveSpeed = () => HEROES[P.hero].speed * (1 + P.st.speed) * (P.netT > 0 ? 0.7 : 1); // caught in a net
+const moveSpeed = () => HEROES[P.hero].speed * (1 + P.st.speed) * (P.netT > 0 ? 0.7 : 1) * (tower.tongue === 'pressa' ? 1.4 : 1); // caught in a net; the builders' haste
 const pickupR = () => 3.5 * (1 + P.st.pickup);
 const globalDmg = () => (1 + P.st.dmg) * (P.hero === 'sansao' ? 1 + P.stacks / 100 : 1)
   * (P.hero === 'josue' ? 1 + Math.min(0.8, 0.08 * P.conquests) : 1);
@@ -1050,7 +1063,7 @@ function lockedHint(key) {
 }
 // The map picked on the setup screen. Only one map is built at a time (the page's), so the setup screen
 // shows every map, the loaded one too, as its video; starting the run loads the picked one if it is another.
-let pickMap = BIOME_ID;
+let pickMap = BIOME_ID === 'babel' ? 'ela' : BIOME_ID;
 const mapVideos = {};
 function pickMapTo(id) {
   pickMap = id;
@@ -1066,13 +1079,13 @@ function syncMapVideo() {
     }
   }
   for (const [id, v] of Object.entries(mapVideos)) {
-    const on = setup && id === pickMap;
+    const on = setup && id === pickMap && !BABEL; // the tower has no video: the live scene shows
     v.classList.toggle('on', on);
     if (on) v.play().catch(() => {});
     else v.pause();
   }
 }
-const playQuery = (biome = BIOME_ID) => ({ biome, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : 'classic', diff: DIFF_ID });
+const playQuery = (biome = BIOME_ID) => ({ biome, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : BABEL ? 'babel' : 'classic', diff: DIFF_ID });
 // Map screen: the maps as tabs, a big view of the chosen one (its hero, its milestones), and the panel to
 // prepare the run (mode, difficulty, saddlebag, records).
 function renderSetup() {
@@ -1092,7 +1105,7 @@ function renderSetup() {
     };
     return el;
   }));
-  const PB = BIOMES[pickMap];
+  const PB = BABEL ? TOWER : BIOMES[pickMap];
   $('map-art').className = `map-art art ${pickMap}`;
   $('mv-name').textContent = PB.name;
   $('map-info').innerHTML = `<div class="tags">${PB.tags.map((t) => `<i>${t}</i>`).join('')}</div><p>${PB.desc}</p>`;
@@ -1101,16 +1114,19 @@ function renderSetup() {
   $('mv-face').className = frameClass(selHero);
   $('mv-hero-name').textContent = h.name;
   $('mv-stage').textContent = STAGES[selHero].names[stageOf(selHero)];
-  $('mv-marks').innerHTML = SURV
+  $('mv-marks').innerHTML = BABEL
+    ? `<small>Andares · vença a horda, escolha um portal, suba</small>${[1, 4, 5, 6, 10].map((n) => `<span class="mk"><b>Andar ${n}</b>${{ 1: 'Arsenal', 4: 'Línguas', 5: 'Guardião', 6: 'Terraços' }[n] ?? 'Ninrode'}</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>11+</b>Subida sem fim</span>`
+    : SURV
     ? `<small>Marcos · um guardião a cada 5 minutos</small>${[5, 10, 15, 20, 25, 30].map((m) => `<span class="mk"><b>${m} min</b>Guardião</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>45 min</b>Noite sem fim</span>`
     : `<small>Objetivo · erga as pedras e o chefe aparece (ou vem furioso aos 10:00)</small>${[1, 2, 3].map((k) => `<span class="mk"><b>Pedra ${k}</b>do Memorial</span>`).join('<i>›</i>')}<i>›</i><span class="mk big"><b>${PB.boss}</b>Chefe</span>`;
   $('pp-map').textContent = PB.name;
-  $('modes').innerHTML = [['classic', 'Clássico', 'Pedras e chefe'], ['surv', 'Sobrevivência', 'Sem fim, guardiões e alianças']]
-    .map(([k, n, d]) => `<button data-mode="${k}" class="${(k === 'surv') === SURV ? 'on' : ''}"><b>${n}</b><small>${d}</small></button>`).join('');
+  const mode = BABEL ? 'babel' : SURV ? 'surv' : 'classic';
+  $('modes').innerHTML = [['classic', 'Clássico', 'Pedras e chefe'], ['surv', 'Sobrevivência', 'Sem fim, guardiões e alianças'], ['babel', 'Torre de Babel', 'Andares, portais e Ninrode']]
+    .map(([k, n, d]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}"><b>${n}</b><small>${d}</small></button>`).join('');
   $('diffs').innerHTML = DIFFS.map((d, k) => `<button data-diff="${k}" class="${k === DIFF_ID ? 'on' : ''}${diffOpen(profile, pickMap, k) ? '' : ' locked'}"><b>${d.name}</b><small>${k ? `×${d.pay} denários` : 'denários ×1'}</small></button>`).join('');
   $('diff-note').textContent = diffOpen(profile, pickMap, Math.min(2, DIFF_ID + 1)) || DIFF_ID === 2 ? DIFFS[DIFF_ID].text
     : `${DIFFS[DIFF_ID].text} · vença no ${DIFFS[DIFF_ID].name} para abrir o ${DIFFS[DIFF_ID + 1].name}`;
-  $('modes').querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => { SURV = b.dataset.mode === 'surv'; renderSetup(); beep(600, 0.05, 'triangle', 0.03); }; });
+  $('modes').querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => { SURV = b.dataset.mode === 'surv'; BABEL = b.dataset.mode === 'babel'; syncMapVideo(); renderSetup(); beep(600, 0.05, 'triangle', 0.03); }; });
   $('diffs').querySelectorAll('[data-diff]').forEach((b) => {
     b.onclick = () => {
       const k = Number(b.dataset.diff);
@@ -1417,7 +1433,8 @@ function renderMenu() {
   $('pp-name').textContent = profile.name || 'Convidado';
   $('pp-title').textContent = titleOf() || (profile.name ? 'Peregrino' : 'Clique para escolher um nome');
   $('play-face').src = ICON.face[selHero];
-  $('play-sub').textContent = `${SURV ? 'Sobrevivência' : 'Clássico'} · ${HEROES[selHero].name} · ${BIOMES[pickMap].name}${DIFF_ID ? ` · ${DIFF.name}` : ''}`;
+  $('babel-sub').textContent = profile.records.babel?.best ? `Andares · seu recorde: andar ${profile.records.babel.best}` : 'Andares · portais · Ninrode';
+  $('play-sub').textContent = `${BABEL ? 'Torre de Babel' : SURV ? 'Sobrevivência' : 'Clássico'} · ${HEROES[selHero].name} · ${BABEL ? 'Babel' : BIOMES[pickMap].name}${DIFF_ID ? ` · ${DIFF.name}` : ''}`;
   const sr = Object.keys(BIOMES).map((b) => profile.records[`surv:${b}`]?.best || 0);
   $('surv-sub').textContent = Math.max(...sr) ? `Sem fim · seu recorde ${fmt(Math.max(...sr))}` : 'Sem fim · um guardião a cada 5 min';
   $('event-sub').textContent = `${BIOMES[EVENT_MAP].name} · +50% de denários hoje`;
@@ -1441,8 +1458,9 @@ function fitSeason() {
   if (g?.width) $('season').style.setProperty('--season-w', `${Math.max(300, Math.round(g.width))}px`);
 }
 addEventListener('resize', () => { if (state === 'menu') fitSeason(); });
-$('surv-card').onclick = () => { SURV = true; go('setup'); };
-$('event-card').onclick = () => { pickMapTo(EVENT_MAP); go('setup'); };
+$('surv-card').onclick = () => { SURV = true; BABEL = false; go('setup'); };
+$('babel-card').onclick = () => { SURV = false; BABEL = true; go('setup'); };
+$('event-card').onclick = () => { BABEL = false; pickMapTo(EVENT_MAP); go('setup'); };
 $('fs-btn').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
 $('profile-pill').onclick = () => askName();
 
@@ -1803,7 +1821,7 @@ function applyCfg() {
 }
 
 function startRun() {
-  if (pickMap !== BIOME_ID) return reload({ ...playQuery(pickMap), screen: 'play' }); // build the picked map first
+  if (BABEL !== (BIOME_ID === 'babel') || (!BABEL && pickMap !== BIOME_ID)) return reload({ ...playQuery(BABEL ? 'babel' : pickMap), screen: 'play' }); // build the picked map (or the tower) first
   const h = HEROES[selHero];
   P.hero = selHero;
   P.pack = packed.filter((id) => profile.bag[id] > 0);
@@ -1821,7 +1839,7 @@ function startRun() {
   refreshWeapons();
   if (!heroRig) setHero(selHero);
   if (random() < SERPENT_ODDS) { serpentAt = (SURV ? 120 + random() * 900 : 90 + random() * 300); loadBossRig('serpente'); }
-  if (random() < SECRET_ODDS) { secretAt = (SURV ? 120 + random() * 600 : 90 + random() * 240); loadBossRig(SECRET.model); }
+  if (SECRET && random() < SECRET_ODDS) { secretAt = (SURV ? 120 + random() * 600 : 90 + random() * 240); loadBossRig(SECRET.model); }
   P.pos.set(0, terrainH(0, 0), 0);
   yaw = 0;
   pitch = 0.5;
@@ -1835,7 +1853,8 @@ function startRun() {
   $('skill-e').querySelector('span').textContent = h.move[0];
   $('skill-q').querySelector('span').textContent = h.miracle[0];
   resume();
-  toast('Siga as colunas de luz até as Pedras do Memorial', '#ffe08f');
+  if (BABEL) towerFloorStart(1);
+  else toast('Siga as colunas de luz até as Pedras do Memorial', '#ffe08f');
 }
 
 function renderBuild() {
@@ -2122,7 +2141,7 @@ function updatePlayer(dt) {
 
   const hs2 = Math.hypot(v.x, v.z);
   if (hs2 > MAX_SPEED) { v.x *= MAX_SPEED / hs2; v.z *= MAX_SPEED / hs2; }
-  if (!P.climbing) v.y -= GRAVITY * dt;
+  if (!P.climbing) v.y -= GRAVITY * grav * dt;
   const y0 = p.y; // last frame's height: a fast fall must land on a top it passed through, not slide off it
   p.addScaledVector(v, dt);
 
@@ -2219,7 +2238,7 @@ function useSpecial() {
   Object.assign(P, { dashX: dx, dashZ: dz, dashSpeed: speed, dashT: dur, sliding: false });
   P.dashId++;
   P.iframes = Math.max(P.iframes, dur + 0.12);
-  P.specialCd = HEROES[P.hero].move[2] * Math.max(0.4, 1 - P.st.cd);
+  P.specialCd = HEROES[P.hero].move[2] * Math.max(0.4, 1 - P.st.cd) * (tower.tongue === 'pressa' ? 0.5 : 1);
   burst(P.pos.x, P.pos.y + 0.2, P.pos.z, P.hero === 'moises' || P.hero === 'debora' ? 0x9fd8ff : 0xcbb89a, 10, 4, 0.13, 1);
   beep(260, 0.18, 'sawtooth', 0.04, 0, 900);
 }
@@ -2445,6 +2464,14 @@ function damage(i, base, kx = 0, kz = 0, knock = 0, forceCrit = false) {
 // ---------- Enemies ----------
 // Puts enemy i on a ring around the player, mostly ahead when the player is moving.
 function placeOnRing(i) {
+  if (BABEL) { // the tower: through one of the portals in the wall
+    const p = world.portals[Math.floor(random() * world.portals.length)];
+    E.x[i] = p.x + (random() - 0.5) * 2;
+    E.z[i] = p.z + (random() - 0.5) * 2;
+    E.y[i] = terrainH(E.x[i], E.z[i]);
+    E.kx[i] = E.kz[i] = 0;
+    return true;
+  }
   for (let t = 0; t < 12; t++) {
     let a = random() * Math.PI * 2;
     if (Math.hypot(P.vel.x, P.vel.z) > 2 && random() < 0.7) a = Math.atan2(P.vel.z, P.vel.x) + (random() - 0.5) * 1.6;
@@ -2479,7 +2506,7 @@ function spawnEnemy(type, x, z) {
   E.elite[i] = 0;
   E.hp[i] = E.maxhp[i] = (t.boss ? t.hp : t.hp * (1 + time / 120) * (night > 0.5 ? 1.2 : 1)) * DIFF.hp
     * (SURV && time > ENDLESS_NIGHT ? 1 + (time - ENDLESS_NIGHT) / 300 : 1) // the endless night keeps getting worse
-    * (SURV && !t.boss ? hordeK : 1);
+    * (SURV && !t.boss ? hordeK : 1) * (BABEL ? 1 + (tower.n - 1) * 0.18 : 1); // the tower: tougher floor by floor
   E.born[i] = time;
   E.revived[i] = E.lc[i] = 0;
   E.spd[i] = t.speed + random() * t.speedVar;
@@ -2512,6 +2539,7 @@ function spawnCarrier() {
 }
 // Each map's own event (see BIOMES[id].event).
 function mapEvent() {
+  if (BABEL) return;
   toast(B.event, '#ff9a8a');
   beep(98, 0.9, 'sawtooth', 0.07, 0, 147);
   if (BIOME_ID === 'jerico') { // guards pour out of both gates
@@ -2561,7 +2589,7 @@ function spawnBoss(enraged, guardian = false, foe = MAP_FOE) {
   if (enraged) E.hp[i] = E.maxhp[i] *= 1.3;
   if (guardian) E.hp[i] = E.maxhp[i] *= 0.35 + 0.35 * P.guardians; // survival: each guardian tougher than the last
   if (SURV) E.hp[i] = E.maxhp[i] *= hordeK; // and as tough as the horde has grown
-  E.hp[i] = E.maxhp[i] *= foe.hp;
+  E.hp[i] = E.maxhp[i] *= foe.hp * (BABEL ? 1 + (tower.n - 1) * 0.1 : 1);
   if (foe.r) { E.r[i] = foe.r; E.h[i] = foe.h; }
   bossRig.group.visible = true;
   bossRig.dissolve.value = 0;
@@ -2582,6 +2610,7 @@ function spawnBoss(enraged, guardian = false, foe = MAP_FOE) {
 // calmer gaps between them to raise stones and pray at altars. The alive cap keeps the screen readable.
 const WAVE = 45;
 function director(dt) {
+  if (BABEL) return towerDirector(dt);
   const wave = 0.55 + 0.45 * (0.5 - 0.5 * Math.cos((time / WAVE) * Math.PI * 2));
   const k = (1 + night * 0.25) * (boss.spawned ? 0.5 : 1) * wave;
   const cap = Math.min(MAX_ENEMIES * 0.5, (14 + time * 0.5) * k * (1 + 0.02 * hordeWave()));
@@ -2613,7 +2642,7 @@ function director(dt) {
     toast('Um trecho da muralha desabou!', '#ffd66b');
   }
   if (!boss.spawned && time >= serpentAt && bossRigs.serpente) { serpentAt = Infinity; spawnBoss(false, false, SERPENT); }
-  if (!boss.spawned && time >= secretAt && bossRigs[SECRET.model]) { secretAt = Infinity; spawnBoss(false, false, SECRET); }
+  if (SECRET && !boss.spawned && time >= secretAt && bossRigs[SECRET.model]) { secretAt = Infinity; spawnBoss(false, false, SECRET); }
   if (!SURV && !boss.spawned && stonesDone === 3 && time >= bossWait) spawnBoss(false);
   if (!SURV && !boss.spawned && time >= RUN_TIME) spawnBoss(true);
   if (SURV && !boss.spawned && time >= nextGuardian) spawnBoss(false, true);
@@ -2878,7 +2907,7 @@ function updateEnemies(dt) {
     E.face[i] = face;
     const dy = P.pos.y - E.y[i];
     if (type.fly ? dist < E.r[i] + 0.6 && Math.abs(dy + 0.6) < 1.1 : dist < E.r[i] + 0.45 && dy < E.h[i] && dy > -1.6) {
-      hurt(type.dmg * (E.elite[i] ? 1.5 : 1) * nightDmg , E.x[i], E.z[i]);
+      hurt(type.dmg * (E.elite[i] ? 1.5 : 1) * nightDmg * (type.fly && tower.tongue === 'vento' ? 2 : 1), E.x[i], E.z[i]);
     }
   }
 }
@@ -2933,6 +2962,11 @@ const BOSS_KITS = {
     speed: 3, keep: [8, 15], rage: 'Os cinco reis sobem contra Gibeão!', rageMove: 'arrows',
     pick: (d, n) => (d < 5 ? 'thrust' : ['arrows', 'volley', 'thrust', 'gates', 'challenge'][n % 5]),
     names: { volley: 'Fundas de Jerusalém', challenge: 'Os cinco reis atacam!', arrows: 'Arqueiros dos amorreus', thrust: 'Estocada do rei', gates: 'Escudo de Jerusalém' },
+  },
+  ninrode: { // Nimrod, the mighty hunter (Gn 10:9): keeps away and shoots, leaps in, calls the builders
+    speed: 3.2, keep: [9, 17], rage: 'Ninrode: "Façamos um nome!"', rageMove: 'volley', // Gn 11:4
+    pick: (d, n, p2) => (d < 5 ? 'stomp' : ['arrows', 'volley', 'leap', 'arrows', p2 ? 'challenge' : 'javelins'][n % 5]),
+    names: { arrows: 'Flechas do caçador', volley: 'Chuva de flechas', leap: 'Salto do caçador', javelins: 'Dardos de Sinar', challenge: 'Construtores, avante!', stomp: 'Pisão do gigante' },
   },
   serpente: { // the ancient serpent: strikes, spits, burns the ground and calls fiery serpents (Nm 21:6)
     speed: 4.4, rage: 'O dragão se ira contra a descendência da mulher!', rageMove: 'bones', // Ap 12:17
@@ -3517,6 +3551,7 @@ function reapEnemies() {
       burst(x, y + 2, z, 0xffe08f, 60, 10, 0.3, 10);
       removeAt(E, i);
       if (FOE !== MAP_FOE) { hiddenDown(x, y, z); continue; }
+      if (BABEL) { towerBossDown(x, y, z); continue; }
       if (SURV) { guardianDown(x, y, z); continue; }
       startVictory(x, y, z);
       return;
@@ -3549,6 +3584,10 @@ function reapEnemies() {
     if (random() < 0.004) dropPickup(x, y + 0.5, z);
     P.hp = Math.min(P.st.maxHp, P.hp + P.st.vamp); // Favo de Mel
     P.kills++;
+    if (BABEL) {
+      tower.kills++;
+      if (tower.tongue === 'fogo' && random() < 0.35) hazard(x, z, 1.2, 0.35, 8, 'fire', 2); // Língua de fogo: an ember where it fell
+    }
     if (!E.elite[i]) lifeAvg += (time - E.born[i] - lifeAvg) * 0.02; // how long the horde lasts (survival)
     const kt = E.elite[i] ? 'elite' : type.id;
     P.killsBy[kt] = (P.killsBy[kt] || 0) + 1;
@@ -4223,7 +4262,7 @@ function updateWorld(dt) {
     pd.cd -= dt;
     if (pd.cd > 0 || Math.hypot(p.x - pd.x, p.z - pd.z) > 1.4 || p.y - pd.y > 0.8) continue;
     pd.cd = 0.8;
-    P.vel.set(pd.dx * 7, Math.sqrt(2 * GRAVITY * (pd.up + 2.2)), pd.dz * 7);
+    P.vel.set(pd.dx * 7, Math.sqrt(2 * GRAVITY * grav * (pd.up + 2.2)), pd.dz * 7);
     P.grounded = false;
     P.sliding = false;
     p.y += 0.1;
@@ -4460,9 +4499,15 @@ function renderChoice() {
     let rar = '';
     const evoHint = (id) => (EVOLUTIONS[id] ? `<em class="evo">Evolui com ${RELICS[EVOLUTIONS[id].needs].name} no nível ${MAX_LEVEL}</em>` : '');
     const bonusLine = (t) => (t ? `<li>Dano desta arma <ins>+${Math.round(RARITY[t].weapon * 100)}%</ins></li>` : '');
-    if (o.kind === 'buy') {
-      const can = P.gold >= o.price;
-      flag = `${o.price} siclos`;
+    if (o.kind === 'portal') {
+      const [pn, pt, pi] = PORTALS[o.path];
+      tag = 'Portal';
+      name = pn;
+      text = pt;
+      icon = pi;
+    } else if (o.kind === 'buy' || o.kind === 'gift') {
+      const can = o.kind === 'gift' || P.gold >= o.price;
+      flag = o.kind === 'gift' ? 'Grátis' : `${o.price} siclos`;
       if (o.what === 'relic') {
         const e = RELICS[o.relic.id];
         tier = o.relic.tier;
@@ -4557,9 +4602,16 @@ function takeOffer(o) {
   choice.picking = false;
   if (o.kind === 'leave') { choice = null; return resume(); }
   if (o.kind === 'pact') { applyPact(o.pact); choice = null; return resume(); }
-  if (o.kind === 'buy') {
-    P.gold -= o.price;
-    o.t.sold++;
+  if (o.kind === 'portal') { // up the stairs: the next floor, then this portal's reward
+    choice = null;
+    towerFloorStart(tower.n + 1);
+    return towerReward(o.path);
+  }
+  if (o.kind === 'buy' || o.kind === 'gift') {
+    if (o.kind === 'buy') {
+      P.gold -= o.price;
+      o.t.sold++;
+    }
     if (o.what === 'relic') {
       applyEntry(P.st, RELICS[o.relic.id], o.relic.tier);
       P.relics.push(o.relic);
@@ -4683,6 +4735,7 @@ function endScreen(title, text, verse, won = false) {
   // Denários: the run's pay line by line (trophies were paid as they were won), then the record for this map.
   const pay = runDenarios({ time, kills: P.kills, stones: stonesDone, chests: chestsOpened, won });
   if (P.guardians) { pay.lines.push([`Guardiões vencidos (${P.guardians})`, P.guardians * 40]); pay.total += P.guardians * 40; }
+  if (BABEL && tower.n > 1) { pay.lines.push([`Andares vencidos (${tower.n - 1})`, (tower.n - 1) * 35]); pay.total += (tower.n - 1) * 35; }
   if (DIFF.pay > 1) { const extra = Math.round(pay.total * (DIFF.pay - 1)); pay.lines.push([`${DIFF.name} ×${DIFF.pay}`, extra]); pay.total += extra; }
   if (BIOME_ID === EVENT_MAP && pay.total) { const extra = Math.round(pay.total * 0.5); pay.lines.push(['Desafio do dia +50%', extra]); pay.total += extra; }
   for (const f of hiddenBeaten) { pay.lines.push([`${f.name} derrotado`, f.pay]); pay.total += f.pay; }
@@ -4708,7 +4761,7 @@ function endScreen(title, text, verse, won = false) {
   $('end-report').innerHTML = `<div><h3>Dano por ataque</h3>${dmgRows()}</div><div><h3>Inimigos derrotados</h3>${killRows()}</div>`;
   // The season's ranking: this run goes online (or waits for the network).
   const online = $('end-online');
-  if (!onlineOn()) online.textContent = '';
+  if (!onlineOn() || BABEL) online.textContent = ''; // the season's boards are for the four maps
   else {
     const lookF = heroRec(P.hero).look.frame;
     const runData = { map: BIOME_ID, mode: SURV ? 'surv' : 'classic', diff: DIFF_ID, hero: P.hero, kills: P.kills, seconds: Math.floor(time), won,
@@ -4823,7 +4876,7 @@ function startDeath() {
 // A hidden boss beaten: a chest, a shower of maná, its denários at the end; the run goes on.
 function hiddenDown(x, y, z) {
   const foe = FOE;
-  hiddenBeaten.push(foe);
+  if (!foe.tower) hiddenBeaten.push(foe);
   boss.spawned = false;
   clearBossFx();
   bossRig.group.visible = false;
@@ -4838,8 +4891,149 @@ function hiddenDown(x, y, z) {
   indexObstacle(obstacles.length - 1);
   for (let k = 0; k < 40; k++) dropGem(x + random() * 6 - 3, y + 0.5, z + random() * 6 - 3, 4, k % 3 ? 0 : 1);
   chord([523, 659, 784, 1046, 1318], 'square');
+  if (foe.tower) return towerClear(); // the tower's guardian: its chest is the floor's prize
   banner('assets/ui/trophy-2.png', `+${foe.pay} denários no fim da jornada`, `${foe.name} caiu!`, '#ffd66b', foe.ref);
   award(foe === SERPENT ? 'serpente' : 'secreto');
+}
+// ---------- The Tower of Babel (PLANO.md 4): floor after floor ----------
+// Each floor: a layout of brick (world.towerFloor), one map's enemies through the portals, a kill goal
+// (or a boss on floors 5, 10, 15...). Clearing it opens two or three portals: weapons, relics, or the
+// caravan's bread and silver. From floor 4, every three floors, the Confusion of Tongues changes a rule.
+const tower = { n: 0, kills: 0, goal: 0, spawned: 0, boss: null, clear: false, clearT: 0, layout: '', tongue: null, fire: false, fireT: 0, ax: 0, az: 0, still: 0 };
+let grav = 1; // Vento de Sinar: lighter
+const GUARDS = ['golias', 'gogue', 'rei'];
+function towerFloorStart(n) {
+  Object.assign(tower, { n, kills: 0, spawned: 0, clear: false, clearT: 0, still: 0 });
+  tower.boss = n % 10 === 0 ? 'ninrode' : n % 5 === 0 ? 'guardian' : null;
+  const layouts = TOWER_LAYOUTS.filter((l) => l !== tower.layout);
+  tower.layout = tower.boss ? 'trono' : layouts[Math.floor(random() * layouts.length)];
+  tower.goal = tower.boss ? 0 : floorGoal(n);
+  // the old floor goes: its enemies, shots and marks; the maná left flies to the hero
+  E.n = 0;
+  EP.n = 0;
+  hazards.length = 0;
+  clearBossFx();
+  for (let i = 0; i < G.n; i++) G.pull[i] = 1;
+  tower.fire = world.towerFloor(tower.layout).fire;
+  reindexObstacles();
+  const map = FLOOR_MAPS[(n - 1) % FLOOR_MAPS.length]; // this floor's enemies
+  for (const t of MOB_TYPES) enemyMeshes[t].geometry = ASSETS.mobs[`mob_${t}_${map}`];
+  B.flyer = BIOMES[map].flyer;
+  B.climber = BIOMES[map].climber;
+  if (n >= 4 && (n - 4) % 3 === 0) setTongue(Object.keys(TONGUES).filter((k) => k !== tower.tongue)[Math.floor(random() * 3)]);
+  let gy = terrainH(0, 0); // the hero starts in the middle, on top of whatever stands there
+  for (const o of obstacles) if (Math.hypot(o.x, o.z) < o.r) gy = Math.max(gy, o.top);
+  P.pos.set(0, gy + 0.05, 0);
+  P.vel.set(0, 0, 0);
+  tower.ax = tower.az = 0;
+  if (tower.boss === 'ninrode') spawnBoss(false);
+  else if (tower.boss) {
+    const model = GUARDS[Math.floor(random() * GUARDS.length)];
+    loadBossRig(model).then(() => spawnBoss(false, false, { model, name: 'Guardião da Torre', ref: 'Gn 11:4', intro: 'O guardião da torre barra a escada!', summon: 'Construtores, avante!', hp: 0.6, k: 1.1, pay: 0, tower: true }));
+  }
+  if (!tower.boss && n >= 3 && n % 2) spawnElite();
+  const names = { anfiteatro: 'Anfiteatro', zigurate: 'Zigurate', pontes: 'Pontes sobre o fogo', espiral: 'Espiral quebrada', trono: 'Sala do trono' };
+  banner('assets/ui/star.png', tower.boss ? (tower.boss === 'ninrode' ? 'O cume de Sinar' : 'Guardião da torre') : `Derrote ${tower.goal} inimigos`, `Andar ${n} · ${names[tower.layout]}`, '#ffd66b',
+    tower.tongue ? `${TONGUES[tower.tongue].name}: ${TONGUES[tower.tongue].text}` : 'Gn 11:4');
+  chord([392, 523, 659], 'triangle');
+}
+function setTongue(id) {
+  if (tower.tongue === 'fogo') P.st.area -= 0.3;
+  if (tower.tongue === 'pressa') P.mods.espd /= 1.4;
+  tower.tongue = id;
+  grav = id === 'vento' ? 0.65 : 1;
+  if (id === 'fogo') P.st.area += 0.3;
+  if (id === 'pressa') P.mods.espd *= 1.4;
+  refreshWeapons();
+}
+function towerClear() {
+  if (tower.clear) return;
+  tower.clear = true;
+  tower.clearT = 1.6;
+  for (let i = 0; i < E.n; i++) if (!ENEMIES[E.type[i]].boss) E.hp[i] = 0; // the rest of the horde flees
+  EP.n = 0;
+  chord([523, 659, 784, 1046], 'square');
+  toast(`Andar ${tower.n} vencido!`, '#ffd66b');
+}
+function towerBossDown(x, y, z) { // Ninrode (floor 10, 20...): the tower is won, and the climb goes on
+  boss.spawned = false;
+  clearBossFx();
+  bossRig.group.visible = false;
+  $('bossbar').hidden = true;
+  burst(x, y + 2, z, 0xffe08f, 80, 12, 0.3, 12);
+  for (let k = 0; k < 30; k++) dropGem(x + random() * 6 - 3, y + 0.5, z + random() * 6 - 3, 4, k % 3 ? 0 : 1);
+  if (tower.n === 10) {
+    award('babel');
+    banner('assets/ui/trophy-2.png', 'A subida continua: até onde você chega?', 'O cume de Sinar!', '#ffd66b', 'Gn 11:8');
+  }
+  towerClear();
+}
+function openPortals() {
+  const list = [{ kind: 'portal', path: 'arsenal' }, { kind: 'portal', path: 'reliquias' }];
+  if (tower.n % 3 === 0) list.push({ kind: 'portal', path: 'ismael' });
+  openChoice(`Andar ${tower.n} vencido! Escolha o portal`, list, 'portal');
+}
+const PORTALS = {
+  arsenal: ['Caminho do Arsenal', 'Cartas só de armas: novas ou melhorias.', 'assets/ui/sword.png'],
+  reliquias: ['Caminho das Relíquias', 'Relíquias e rolos (as relíquias evoluem armas).', 'assets/ui/gem.png'],
+  ismael: ['Caravana de Ismael', 'Cura 30% da vida e dá siclos.', 'assets/ui/heart.png'],
+};
+function towerReward(path) {
+  if (path === 'ismael') {
+    P.hp = Math.min(P.st.maxHp, P.hp + P.st.maxHp * 0.3);
+    addGold(30 + tower.n * 6);
+    toast('A caravana de Ismael: pão, água e prata', '#ffd66b');
+    return resume();
+  }
+  let list;
+  if (path === 'arsenal') {
+    list = rollOffers({ weapons: P.weapons, luck: P.st.luck, locked: LOCKED, banned: P.banned }, random, 12).filter((o) => o.kind !== 'scroll').slice(0, 3);
+    if (!list.length) list = offers(3);
+  } else {
+    const ids = Object.keys(RELICS).filter((id) => isOpen('relic', id));
+    list = [0, 1].map(() => ({ kind: 'gift', what: 'relic', relic: rollRelic(P.st.luck, random, 0, ids) }));
+    const sc = Object.keys(SCROLLS);
+    list.push({ kind: 'scroll', id: sc[Math.floor(random() * sc.length)], tier: rollRarity(P.st.luck, random) });
+  }
+  openChoice(PORTALS[path][0], list, 'tower');
+}
+const towerWeights = (n) => {
+  const w = spawnWeights(50 + n * 35);
+  if (n >= 6) { w[7] *= 2; w[8] *= 2; } // the hanging terraces: fliers and climbers twice as often
+  return w;
+};
+function towerDirector(dt) {
+  if (tower.clear) {
+    if (tower.clearT > 0 && (tower.clearT -= dt) <= 0) openPortals();
+    return;
+  }
+  if (!boss.spawned && time >= serpentAt && bossRigs.serpente) { serpentAt = Infinity; spawnBoss(false, false, SERPENT); }
+  const cap = 40 + tower.n * 5;
+  if (!tower.boss) {
+    spawnAcc += dt * (2.2 + tower.n * 0.35);
+    for (; spawnAcc >= 1 && tower.spawned < tower.goal; spawnAcc--) {
+      if (E.n >= cap) break;
+      if (spawnEnemy(pickWeighted(towerWeights(tower.n), random)) >= 0) tower.spawned++;
+    }
+    if (tower.kills >= tower.goal) towerClear();
+  } else { // a boss floor: a trickle of help for the boss
+    spawnAcc += dt * 0.7;
+    for (; spawnAcc >= 1; spawnAcc--) if (E.n < 12) spawnEnemy(pickWeighted(towerWeights(tower.n), random));
+  }
+  if (tower.fire && (tower.fireT -= dt) <= 0) { // the floor burns below the bridges
+    tower.fireT = 1.1;
+    const a = random() * Math.PI * 2;
+    const r = 4 + random() * 26;
+    hazard(Math.cos(a) * r, Math.sin(a) * r, 2.4, 1.0, 12, 'fire', 6);
+    if (P.pos.y < 1) hazard(P.pos.x, P.pos.z, 2.2, 1.0, 12, 'fire', 5);
+  }
+  if (tower.tongue === 'inacabada') { // the unfinished tower: the floor gives way under whoever stands still
+    if (Math.hypot(P.pos.x - tower.ax, P.pos.z - tower.az) > 1.5) { tower.ax = P.pos.x; tower.az = P.pos.z; tower.still = 0; }
+    else if ((tower.still += dt) > 3) {
+      tower.still = 0;
+      hazard(P.pos.x, P.pos.z, 1.7, 0.8, 18, 'spike');
+    }
+  }
 }
 function guardianDown(x, y, z) {
   P.guardians++;
@@ -4990,6 +5184,13 @@ function updateOutro(dt) {
   if (o.t > 2.6) { outro = null; die(); }
 }
 function die() {
+  if (BABEL) {
+    const rec = (profile.records.babel ??= { best: 0 });
+    const best = tower.n > rec.best;
+    rec.best = Math.max(rec.best, tower.n);
+    return endScreen(`Você chegou ao andar ${tower.n}`, `${HEROES[P.hero].name} subiu a Torre de Babel até o andar ${tower.n}.${best ? ' Novo recorde!' : ` Recorde: andar ${rec.best}.`}`,
+      ['Deus resiste aos soberbos, mas dá graça aos humildes.', 'Tg 4:6'], tower.n > 10);
+  }
   if (SURV) {
     const rec = (profile.records[`surv:${BIOME_ID}`] ??= { best: 0 });
     const best = Math.floor(time) > rec.best;
@@ -5647,7 +5848,8 @@ function updateHud() {
   document.body.classList.toggle('sunstop', P.sunT > 0);
   setText(hud.timer, fmt(time));
   hud['phase-dot'].classList.toggle('night', night > 0.5);
-  setHtml(hud.objective, boss.spawned && FOE !== MAP_FOE ? `<b>Derrote ${FOE.name}</b>`
+  setHtml(hud.objective, BABEL ? `<b>Andar ${tower.n}</b><span style="opacity:.8">· ${tower.clear ? 'vencido!' : tower.boss ? `derrote ${boss.spawned ? FOE.name : 'o chefe'}` : `abates ${Math.min(tower.kills, tower.goal)}/${tower.goal}`}${tower.tongue ? ` · ${TONGUES[tower.tongue].name}` : ''}</span>`
+    : boss.spawned && FOE !== MAP_FOE ? `<b>Derrote ${FOE.name}</b>`
     : SURV ? (boss.spawned ? `<b>Derrote o guardião ${P.guardians + 1}</b>` : `<span>Sobrevivência</span><span style="opacity:.7">· guardião em ${fmt(Math.max(0, nextGuardian - time))}${hordeK > 1.05 ? ` · horda ×${hordeK.toFixed(1)}` : ''}</span>`)
     : boss.spawned ? `<b>Derrote ${B.boss}</b>`
     : `<span>Pedras do Memorial</span><span class="pips">${stones.map((s) => `<i class="${s.done ? 'on' : ''}"></i>`).join('')}</span><span style="opacity:.7">· ${B.boss} em ${fmt(Math.max(0, RUN_TIME - time))}</span>`);
@@ -5750,6 +5952,7 @@ window.arm = (ids, level = 1) => {
 };
 // Debug: poke at the run from the console, e.g. dev.look(Math.PI) or dev.spawnBoss().
 window.dev = {
+  tower: () => tower, floor: (n) => towerFloorStart(n),
   icon: () => ICON, dressHero: (id) => { dressHero(id); ICON.redoHero(id); },
   P, E, EP, boss, stones, altars, chests, obstacles, miracles, spawnBoss, bossMove, hazards, spawnEnemy, cfg, scene, ASSETS, profile, saveProfile, world,
   look: (y, p = pitch) => { yaw = y; pitch = p; },
