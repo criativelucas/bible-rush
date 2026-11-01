@@ -445,13 +445,14 @@ export function buildWorld(scene, id, random, PROPS) {
       return Math.max(...hs) - Math.min(...hs) < 0.7 && dry(x + len * c, z - len * sn, 0.5);
     });
   }
-  function tall(key, list, n, minD, maxD, gap, len, colliders) {
+  const BIG = 1.45; // the climbable pieces are built large: room to fight on top
+  function tall(key, list, n, minD, maxD, gap, len, colliders, sc = BIG) {
     for (let k = 0; k < n; k++) {
       const rot = random() * Math.PI * 2;
-      const s = levelSpot(minD, maxD, gap, len, rot);
+      const s = levelSpot(minD, maxD, gap, len * sc, rot);
       if (!s) continue;
-      build(key, geo(`prop_${key}`), s.x, s.z, rot, colliders);
-      placed.push(s, { x: s.x + len * Math.cos(rot), z: s.z - len * Math.sin(rot) });
+      build(key, geo(`prop_${key}`), s.x, s.z, rot, colliders, sc);
+      placed.push(s, { x: s.x + len * sc * Math.cos(rot), z: s.z - len * sc * Math.sin(rot) });
       list?.push(s);
     }
   }
@@ -462,13 +463,16 @@ export function buildWorld(scene, id, random, PROPS) {
   const brickMats = {};
   const brickMat = (c) => (brickMats[c] ??= M.toon(c, { vc: false, grain: true, fade: true }));
   const portals = [];
+  const torches = [];
+  let door = null;
+  const CEIL = 20; // the tower is closed: a ceiling of beams and brick over the floor
   const box = (w, h, d, y = 0) => new THREE.BoxGeometry(w, h, d).translate(0, y + h / 2, 0);
   function towerShell() {
     const g = new THREE.Group();
     const R = 35.5;
     for (let k = 0; k < 28; k++) {
       const a = (k / 28) * Math.PI * 2;
-      for (const [geom, c] of [[box(8.2, 3.2, 1.6, -0.2), BRICKC[k % 3]], [box(8.3, 0.3, 1.7, 2.8), GLAZE], [box(1.2, 0.8, 1.6, 3.0), BRICKC[(k + 1) % 3]]]) {
+      for (const [geom, c] of [[box(8.2, CEIL + 0.4, 1.6, -0.2), BRICKC[k % 3]], [box(8.3, 0.4, 1.7, 2.8), GLAZE], [box(8.3, 0.4, 1.7, 11), GLAZE]]) {
         const m = new THREE.Mesh(geom, brickMat(c));
         m.position.set(Math.cos(a) * R, 0, Math.sin(a) * R);
         m.rotation.y = -a + Math.PI / 2;
@@ -476,9 +480,36 @@ export function buildWorld(scene, id, random, PROPS) {
         g.add(m);
       }
     }
+    const ceilMat = M.toon(0x5a3a26, { vc: false, grain: true, side: THREE.DoubleSide });
+    const ceil = new THREE.Mesh(new THREE.CircleGeometry(37, 40).rotateX(Math.PI / 2), ceilMat);
+    ceil.position.y = CEIL;
+    g.add(ceil);
+    for (let k = 0; k < 12; k++) { // beams from the wall to a ring in the middle
+      const a = (k / 12) * Math.PI * 2;
+      const beam = new THREE.Mesh(box(0.8, 0.8, 34), M.toon(0x4a2e1c, { vc: false, grain: true }));
+      beam.position.set(Math.cos(a) * 17.5, CEIL - 0.8, Math.sin(a) * 17.5);
+      beam.rotation.y = Math.PI / 2 - a;
+      g.add(beam);
+    }
+    const flameMatT = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.6, 0.5) }); // glows (bloom)
+    for (let k = 0; k < 16; k++) { // torches round the wall
+      const a = (k / 16) * Math.PI * 2;
+      const x = Math.cos(a) * (R - 1.1);
+      const z = Math.sin(a) * (R - 1.1);
+      const t = new THREE.Group();
+      t.position.set(x, 4.2, z);
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.9, 6), M.toon(0x4a2e1c, { vc: false }));
+      stick.rotation.z = 0.4;
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.14, 0.25, 8).translate(0, 0.45, 0), brickMat(0xe8b84a));
+      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 6).translate(0, 0.85, 0), flameMatT);
+      t.add(stick, cup, fl);
+      t.rotation.y = -a;
+      g.add(t);
+      torches.push({ x, y: 5.1, z, fl });
+    }
     const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 0.9, 2.4), transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false });
     for (let k = 0; k < 8; k++) { // portals in the wall: the horde comes through them
-      const a = (k / 8) * Math.PI * 2 + Math.PI / 16;
+      const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
       const p = new THREE.Group();
       p.position.set(Math.cos(a) * (R - 1.2), 0, Math.sin(a) * (R - 1.2));
       p.rotation.y = -a - Math.PI / 2;
@@ -493,9 +524,23 @@ export function buildWorld(scene, id, random, PROPS) {
       g.add(p);
       portals.push({ x: Math.cos(a) * (R - 3.5), z: Math.sin(a) * (R - 3.5) });
     }
-    const clouds = new THREE.Mesh(new THREE.RingGeometry(39, 340, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xf6eef2 }));
-    clouds.position.y = -9;
-    g.add(clouds);
+    // The way up: a door in the north wall, barred until the floor is cleared.
+    const dg = new THREE.Group();
+    const da = Math.PI * 1.5;
+    dg.position.set(Math.cos(da) * (R - 1.0), 0, Math.sin(da) * (R - 1.0));
+    dg.rotation.y = -da - Math.PI / 2;
+    for (const x of [-2.2, 2.2]) {
+      const pil = new THREE.Mesh(box(1.1, 6, 1.4), brickMat(0xe8b84a));
+      pil.position.x = x;
+      dg.add(pil);
+    }
+    const lin = new THREE.Mesh(box(5.6, 1.0, 1.5, 6), brickMat(GLAZE));
+    const bars = new THREE.Mesh(box(3.4, 5.6, 0.3), M.toon(0x3a3a42, { vc: false }));
+    const way = new THREE.Mesh(new THREE.PlaneGeometry(3.3, 5.6).translate(0, 2.8, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.0, 1.0), transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+    way.visible = false;
+    dg.add(lin, bars, way);
+    g.add(dg);
+    door = { x: Math.cos(da) * (R - 3.5), z: Math.sin(da) * (R - 3.5), open: false, set(o) { this.open = o; bars.visible = !o; way.visible = o; } };
     scene.add(g);
   }
   let floorGroup = null;
@@ -544,43 +589,47 @@ export function buildWorld(scene, id, random, PROPS) {
       pads.push({ x, z, y: 0, dx: -x / d, dz: -z / d, up, spout, cd: 0 });
     };
     let fire = false;
-    if (layout === 'anfiteatro') { // low middle, two rings of benches round it
-      ring(20, 14, 3.4, 1.5, (k) => k % 7 === 0);
-      ring(26, 18, 3.4, 3.0);
+    if (layout === 'anfiteatro') { // low middle, two rings of benches round it, a tier in the middle
+      ring(19, 14, 4.5, 1.6, (k) => k % 7 === 0);
+      ring(26, 18, 4.5, 3.2);
+      block(0, 0, 7, 7, 1.6);
       spring(0, 23, 1.5);
       spring(0, -23, 1.5);
     } else if (layout === 'zigurate') { // a three-step pyramid in the middle, springs on each side
-      block(0, 0, 10, 10, 1.5);
-      block(0, 0, 7, 7, 3.0);
-      block(0, 0, 4, 4, 4.5);
-      spring(15, 0, 4.5);
-      spring(-15, 0, 4.5);
+      block(0, 0, 15, 15, 1.6);
+      block(0, 0, 10.5, 10.5, 3.2);
+      block(0, 0, 6, 6, 4.8);
+      block(0, 0, 2.5, 2.5, 6.4);
+      for (const [x, z] of [[-16, -16], [16, -16], [-16, 16], [16, 16]]) block(x, z, 4, 4, 2.4); // corner platforms
+      spring(19, 0, 4.8);
+      spring(-19, 0, 4.8);
     } else if (layout === 'pontes') { // four pillars and a middle joined high over a burning floor
-      block(0, 0, 6, 6, 5.5);
+      block(0, 0, 9, 9, 6);
       for (let k = 0; k < 4; k++) {
         const a = (k * Math.PI) / 2;
         const ux = Math.round(Math.cos(a));
         const uz = Math.round(Math.sin(a));
-        block(ux * 13, uz * 13, 4, 4, 5.5);
-        block(ux * 8, uz * 8, ux ? 6.2 : 1.8, ux ? 1.8 : 6.2, 5.5); // the bridge
-        for (let s = 1; s <= 3; s++) block(ux * (15 + s * 2.1), uz * (15 + s * 2.1), 2, 2, 5.5 - s * 1.35); // steps up
+        block(ux * 16, uz * 16, 6, 6, 6);
+        block(ux * 9.7, uz * 9.7, ux ? 7 : 3.6, ux ? 3.6 : 7, 6); // the bridge, wide enough to fight on
+        for (let s = 1; s <= 4; s++) block(ux * (18.5 + s * 2.2), uz * (18.5 + s * 2.2), 3, 3, 6 - s * 1.2); // steps up
       }
       fire = true;
     } else if (layout === 'espiral') { // a broken ramp round the edge up to a platform hung in the middle
       const n = 18;
       for (let k = 0; k < n; k++) {
         const a = (k / n) * Math.PI * 1.7;
-        block(Math.cos(a) * 27, Math.sin(a) * 27, 5.4, 3, 0.8 + k * 0.4, Math.atan2(-Math.cos(a), -Math.sin(a)));
+        block(Math.cos(a) * 26, Math.sin(a) * 26, 6.6, 4.5, 0.8 + k * 0.45, Math.atan2(-Math.cos(a), -Math.sin(a)));
       }
       const a = Math.PI * 1.7 * ((n - 1) / n);
-      const top = 0.8 + (n - 1) * 0.4;
-      block(0, 0, 6, 6, top);
-      block(Math.cos(a) * 15, Math.sin(a) * 15, 21, 1.8, top, -a);
+      const top = 0.8 + (n - 1) * 0.45;
+      block(0, 0, 9, 9, top);
+      block(Math.cos(a) * 14.5, Math.sin(a) * 14.5, 19, 3.6, top, -a);
       spring(Math.cos(a + 0.6) * 8, Math.sin(a + 0.6) * 8, top - 1);
     } else { // the throne room: wide, four columns to hide behind
-      for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) block(x, z, 2.4, 2.4, 7);
-      block(0, -24, 10, 4, 1.2);
-      block(0, -25, 3, 1.5, 3.2);
+      for (const [x, z] of [[-11, -11], [11, -11], [-11, 11], [11, 11]]) block(x, z, 3.4, 3.4, 9);
+      block(0, 24, 14, 5, 1.4);
+      block(0, 25.5, 4, 2, 3.6);
+      for (const [x, z] of [[-22, 0], [22, 0]]) { block(x, z, 5, 5, 2); block(x, z, 2.5, 2.5, 3.6); }
     }
     scene.add(floorGroup);
     return { fire };
@@ -652,7 +701,7 @@ export function buildWorld(scene, id, random, PROPS) {
       WATCH.push([tx, 0, 1.7, 2.6], [tx, 0, 0.95, 5.05], [tx + 1.1, 0.7, 0.45, 3.6]);
       for (let k = 0; k < 5; k++) WATCH.push([tx + (tx ? 2.2 : -2.2), -1.4 + k * 0.7, 0.42, 0.5 * (k + 1)]);
     }
-    for (let x = 1.3; x < 8.8; x += 0.8) if (x < 4.3 || x > 5.7) WATCH.push([x, 0, 0.55, 5.02]);
+    for (let x = 1.3; x < 8.8; x += 0.8) if (x < 4.3 || x > 5.7) WATCH.push([x, 0, 1.0, 5.02]); // the walkway, 2 m wide
     tall('watchpair', null, 3, 18, 80 * S, 16, 10, WATCH);
     const RAMP = [[0, 0, 3.0, 3.6], [-1.6, -1.4, 0.5, 6.7], [1.0, -1.4, 0.5, 5.7]];
     for (let lx = 6.6; lx > 3.2; lx -= 0.5) RAMP.push([lx, 0, 1.2, Math.min(3.6, 2.17 + (5.2 - lx) * 1.557)]);
@@ -789,10 +838,10 @@ export function buildWorld(scene, id, random, PROPS) {
     // Corner towers outside the wall (their tops reach the wall walk) and houses stepped up against it inside.
     for (const f of [0.1, 0.4, 0.6, 0.9]) {
       const k = Math.round(n * f);
-      const w = wallAt(k, n, 3.4);
-      build('cornertower', geo('prop_cornertower'), w.x, w.z, -w.a, [[0, 0, 2.1, 1.6], [0, 0, 1.45, 3.2], [0, 0, 0.95, 4.8], [2.6, -0.4, 0.42, 0.55], [2.6, 0.3, 0.42, 1.1]]);
-      const h = wallAt(k + 2, n, -2.2);
-      build('rooftops', geo('prop_rooftops'), h.x, h.z, Math.atan2(-Math.cos(h.a), -Math.sin(h.a)), [[0, 0, 1.3, 2.0], [2.6, 0, 1.3, 3.0], [5.2, 0, 1.3, 4.0]]);
+      const w = wallAt(k, n, 4.4);
+      build('cornertower', geo('prop_cornertower'), w.x, w.z, -w.a, [[0, 0, 2.1, 1.6], [0, 0, 1.45, 3.2], [0, 0, 0.95, 4.8], [2.6, -0.4, 0.42, 0.55], [2.6, 0.3, 0.42, 1.1]], 1.3);
+      const h = wallAt(k + 2, n, -2.9);
+      build('rooftops', geo('prop_rooftops'), h.x, h.z, Math.atan2(-Math.cos(h.a), -Math.sin(h.a)), [[0, 0, 1.3, 2.0], [2.6, 0, 1.3, 3.0], [5.2, 0, 1.3, 4.0]], 1.3);
     }
     for (let k = 0; k < 4; k++) build('cart', geo('prop_cart'), C.x - 4 + k * 2.6, C.z - 4, random() * 6, [[0, 0, 1.2, 1.0]]); // market stalls
     placed.push({ x: C.x, z: C.z });
@@ -846,22 +895,22 @@ export function buildWorld(scene, id, random, PROPS) {
     const spines = [];
     for (let k = 0; k < 3; k++) {
       const rot = random() * Math.PI * 2;
-      const e = levelSpot(18, 70 * S, 18, 16, rot); // one end; the piece is centred 8 m along
+      const e = levelSpot(18, 70 * S, 18, 16 * BIG, rot); // one end; the piece is centred half its length along
       if (!e) continue;
-      const s = { x: e.x + 8 * Math.cos(rot), z: e.z - 8 * Math.sin(rot) };
-      build('spinebridge', geo('prop_spinebridge'), s.x, s.z, rot, SPINE);
+      const s = { x: e.x + 8 * BIG * Math.cos(rot), z: e.z - 8 * BIG * Math.sin(rot) };
+      build('spinebridge', geo('prop_spinebridge'), s.x, s.z, rot, SPINE, BIG);
       placed.push(s);
       spines.push(s);
     }
     const zig = [];
-    const flat = (x, z) => dry(x, z, 0.5) && reachable(x, z) && [0, 1.57, 3.14, 4.71].every((a) => Math.abs(H(x + Math.cos(a) * 4.5, z + Math.sin(a) * 4.5) - H(x, z)) < 0.8);
+    const flat = (x, z) => dry(x, z, 0.5) && reachable(x, z) && [0, 1.57, 3.14, 4.71].every((a) => Math.abs(H(x + Math.cos(a) * 6.5, z + Math.sin(a) * 6.5) - H(x, z)) < 0.9);
     const zs = spot(20, 90 * S, 14, flat);
     if (zs) {
-      build('ziggurat', geo('prop_ziggurat'), zs.x, zs.z, random() * 6.28, [[0, 0, 4.6, 1.5], [0, 0, 3.1, 3.0], [0, 0, 1.7, 4.5]]);
+      build('ziggurat', geo('prop_ziggurat'), zs.x, zs.z, random() * 6.28, [[0, 0, 4.6, 1.5], [0, 0, 3.1, 3.0], [0, 0, 1.7, 4.5]], BIG);
       placed.push(zs);
       zig.push(zs);
     }
-    for (const z of zig) addChest(z.x, z.z, 'dark', H(z.x, z.z) - sink + 4.5);
+    for (const z of zig) addChest(z.x, z.z, 'dark', H(z.x, z.z) - sink + 4.5 * BIG);
     for (let k = 0; k < n2(16); k++) { // big red boulders fallen from the cliffs
       const s = spot(30, 112, 8);
       if (!s) continue;
@@ -952,6 +1001,7 @@ export function buildWorld(scene, id, random, PROPS) {
     skyMat.uniforms.top.value.lerpColors(top[0], top[1], night);
     skyMat.uniforms.horizon.value.lerpColors(hor[0], hor[1], night);
     for (const c of clouds) {
+      c.visible = !T;
       c.position.x += dt * 1.5;
       if (c.position.x > 220) c.position.x = -220;
     }
@@ -962,6 +1012,7 @@ export function buildWorld(scene, id, random, PROPS) {
     }
     for (const c of chests) c.lid.rotation.x += ((c.open ? -1.9 : 0) - c.lid.rotation.x) * Math.min(1, dt * 8);
     for (const t of things) if (t.flame) t.flame.scale.setScalar((t.kind === 'gideon' ? 0.7 : 1) * (1 + Math.sin(time * 11 + t.x) * 0.12));
+    for (const t of torches) t.fl.scale.set(1 + Math.sin(time * 13 + t.x) * 0.12, 1 + Math.sin(time * 17 + t.z) * 0.25, 1);
     for (const p of pads) p.spout.scale.set(1, 0.6 + 0.4 * Math.abs(Math.sin(time * 3 + p.x)) + (p.cd > 0 ? 2 * p.cd : 0), 1);
   }
 
@@ -974,5 +1025,5 @@ export function buildWorld(scene, id, random, PROPS) {
     }
     return fallingWalls;
   }
-  return { B, terrainH: H, slopeAt, obstacles, collapse, towerFloor, portals, stones, altars, wells, pads, things, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, gates, rahab, update, horizon: skyMat.uniforms.horizon.value };
+  return { B, terrainH: H, slopeAt, obstacles, collapse, towerFloor, portals, torches, get door() { return door; }, CEIL, stones, altars, wells, pads, things, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, gates, rahab, update, horizon: skyMat.uniforms.horizon.value };
 }

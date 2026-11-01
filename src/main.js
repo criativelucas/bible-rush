@@ -5,7 +5,7 @@ import {
   TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
   STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, RESEARCH_KINDS, researchOf, MASTERY, masteryOf,
   TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES, hashStr, MOB_TYPES, BEAST_TYPE,
-  SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS, TOWER, FLOOR_MAPS, TOWER_LAYOUTS, TONGUES, floorGoal, PSALMS,
+  SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS, TOWER, FLOOR_MAPS, TOWER_LAYOUTS, TONGUES, floorGoal, floorTime, PSALMS,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
 import * as M from './models.js';
@@ -242,6 +242,7 @@ function flash(x, y, z, color, power = 60, dur = 0.4) {
   Object.assign(f, { t: dur, dur, power });
 }
 function updateLights(dt) {
+  torchLights.forEach((l, k) => { l.intensity = 30 + Math.sin(time * 11 + k * 2) * 4 + Math.sin(time * 23 + k) * 3; });
   heroLight.intensity = cfg.lights ? 40 * night + (P.castT > 0 ? 20 : 0) : 0;
   heroLight.position.set(P.pos.x - P.faceX * 1.5, P.pos.y + 4.5, P.pos.z - P.faceZ * 1.5); // above and behind: lights the ground round the hero
   for (const f of flashes) {
@@ -256,6 +257,13 @@ Object.assign(ASSETS.items, forgeModels()); // the newer weapons' models
 const world = buildWorld(scene, BIOME_ID, random, ASSETS.props);
 const B = world.B;
 const terrainH = world.terrainH;
+// The tower's torches: a few warm lights that flicker (the rest of the torches only glow).
+const torchLights = BABEL ? world.torches.filter((_, k) => k % 3 === 0).map((t) => {
+  const l = new THREE.PointLight(0xff9a4a, 30, 26, 1.6);
+  l.position.set(t.x, t.y + 0.4, t.z);
+  scene.add(l);
+  return l;
+}) : [];
 
 // ---------- Atmosphere (the HD-2D look): shafts of sunlight, motes in the air, the sun's haze ----------
 const SUN_DIR = new THREE.Vector3(30, 60, 22).normalize(); // the sun stands here (see updateCamera)
@@ -303,7 +311,7 @@ function updateAtmos(dt, t) {
   const fz = focus.z;
   // Shafts: each fades in and out somewhere round the hero, slanted toward the sun, turned to the camera.
   for (const s of shafts) {
-    s.m.visible = on;
+    s.m.visible = on && !BABEL; // no sunbeams inside the tower
     if (!on) continue;
     s.t += dt;
     if (s.t > s.life) {
@@ -894,7 +902,6 @@ let melCarrier = Infinity; // Mel silvestre: one more carrier early on
 let seenHoreb = false;
 let nextGuardian = GUARDIAN_EVERY; // survival: a guardian every 5 minutes
 let wallsFell = false; // Jericó: the wall gives way at 5:00
-let psalmAt = Infinity; // when the Psalm choice opens (classic: the first stone; survival: 2:00; the tower: floor 1)
 let bossWait = 0; // classic: the map's boss waits for a hidden boss to fall
 // Hidden bosses: rolled when the run starts (content.js SECRET_BOSSES, SERPENT); paid at the end.
 const SECRET = SECRET_BOSSES[BIOME_ID];
@@ -1141,6 +1148,7 @@ function renderSetup() {
     };
   });
   renderPack();
+  renderPsalmPick();
   const rec = profile.records[pickMap];
   const srec = profile.records[`surv:${pickMap}`];
   $('my-marks').innerHTML = `<div>Clássico · ${rec ? `recorde <b>${fmt(rec.best)}</b>${rec.fastest ? ` · vitória em <b>${fmt(rec.fastest)}</b>` : ''}` : 'sem marca'}</div>
@@ -1266,6 +1274,21 @@ function renderPack() {
   }));
 }
 
+// The Psalm to take along (bought in the Market): one per run, or none.
+function renderPsalmPick() {
+  const owned = Object.keys(PSALMS).filter((id) => profile.owned.includes(`psalm:${id}`));
+  const el = $('psalm-pick');
+  if (!owned.length) { el.innerHTML = '<span class="none">Nenhum ainda: compre Salmos no Mercado.</span>'; return; }
+  el.replaceChildren(...[null, ...owned].map((id) => {
+    const b = document.createElement('button');
+    b.className = (profile.psalmSel ?? null) === id ? 'on' : '';
+    b.title = id ? PSALMS[id].text : 'Sem Salmo nesta jornada';
+    b.innerHTML = id ? `<small>${PSALMS[id].ref}</small>${PSALMS[id].name}` : '<small>—</small>Nenhum';
+    b.onclick = () => { profile.psalmSel = id; saveProfile(); renderPsalmPick(); beep(600, 0.05, 'triangle', 0.03); };
+    return b;
+  }));
+}
+
 // ---------- Market ----------
 const iconSrc = ([group, key]) => (group === 'ui' ? `assets/ui/${key}.png` : ICON[group][key]);
 const coinImg = '<img class="ico" src="assets/ui/denario.png" alt="denários">';
@@ -1277,6 +1300,7 @@ const SHOP_TABS = {
   ferramentas: ['Ferramentas', 'Mudam a partida: mais controle sobre as cartas de nível e uma reserva de vida.'],
   arsenal: ['Arsenal', 'Compre armas novas para as cartas de nível, e fortaleça as que você já tem: a maestria vale para sempre, com todos os heróis.'],
   alforje: ['Alforje', 'Itens para uma partida. Escolha quais levar em Nova jornada; eles são gastos ao começar.'],
+  salmos: ['Salmos', 'Cada Salmo muda a sua build de um jeito. Compre e leve um por jornada: escolha qual em Nova jornada.'],
   guarda: ['Guarda-roupa', 'Roupas, rastros e molduras para qualquer herói. Vista em Nova jornada. Algumas molduras só se ganham no Bestiário.'],
 };
 let shopTab = 'treino';
@@ -1336,6 +1360,12 @@ function renderShop() {
         level, max: MASTERY.max, cost: levelCost(MASTERY.cost, level), note: `Maestria ${level}/${MASTERY.max}`, buy: () => { profile.mastery[id] = level + 1; } });
       if (level < MASTERY.max) el.querySelector('.buy').insertAdjacentText('afterbegin', 'Fortalecer ');
       return el;
+    });
+  } else if (shopTab === 'salmos') {
+    items = Object.entries(PSALMS).map(([id, ps]) => {
+      const have = profile.owned.includes(`psalm:${id}`);
+      return ware({ icon: 'assets/ui/book.png', name: ps.name, text: `${ps.text} · ${ps.ref}`, level: have ? 1 : 0, max: 1, cost: ps.cost, note: have ? 'Seu' : '',
+        buy: () => { profile.owned.push(`psalm:${id}`); profile.psalmSel ??= id; } });
     });
   } else if (shopTab === 'guarda') {
     items = Object.entries(COSMETICS).map(([cid, c]) => {
@@ -1828,6 +1858,8 @@ function startRun() {
   const h = HEROES[selHero];
   P.hero = selHero;
   P.pack = packed.filter((id) => profile.bag[id] > 0);
+  const ps = profile.psalmSel;
+  if (ps && PSALMS[ps] && profile.owned.includes(`psalm:${ps}`)) psalmStart = ps; // applied once the stats are set
   for (const id of P.pack) profile.bag[id]--;
   saveProfile();
   P.st = stageBonus(applyMarket(baseStats(h), profile, P.pack), P.hero, stageOf(P.hero));
@@ -1856,6 +1888,7 @@ function startRun() {
   $('skill-e').querySelector('span').textContent = h.move[0];
   $('skill-q').querySelector('span').textContent = h.miracle[0];
   resume();
+  if (psalmStart) { takePsalm(psalmStart); toast(`${PSALMS[psalmStart].name}: ${PSALMS[psalmStart].text}`, '#fff1b8'); }
   if (BABEL) towerFloorStart(1);
   else toast('Siga as colunas de luz até as Pedras do Memorial', '#ffe08f');
 }
@@ -2153,7 +2186,8 @@ function updatePlayer(dt) {
   const y0 = p.y; // last frame's height: a fast fall must land on a top it passed through, not slide off it
   p.addScaledVector(v, dt);
 
-  // Collider sides push out; low rock tops are floor.
+  // Collider sides push out; low rock tops are floor. A step up to 0.65 m is taken in stride, and holding
+  // Space against any rock, ruin, wall or tower climbs it (every structure can be climbed).
   for (const id of obstaclesNear(p.x, p.z)) {
     const o = obstacles[id];
     const dx = p.x - o.x;
@@ -2163,6 +2197,14 @@ function updatePlayer(dt) {
     if (d >= min || p.y >= o.top - 0.3 || y0 >= o.top - 0.05) continue;
     const nx = dx / d;
     const nz = dz / d;
+    if (o.top - p.y <= 0.65 && (P.grounded || P.coyote > 0)) { p.y = o.top; v.y = Math.max(v.y, 0); continue; } // a step
+    const into = wl > 0 && -(wx * nx + wz * nz) > 0.35;
+    if (into && keys.has('Space')) { // climb
+      v.y = 5.5;
+      P.climbing = true;
+      P.grounded = false;
+      if (random() < dt * 8) burst(p.x - nx * 0.3, p.y + 0.4, p.z - nz * 0.3, 0xb8a27a, 1, 1.5, 0.1, 1);
+    } else if (into) P.cliffHint = true;
     p.x = o.x + nx * min;
     p.z = o.z + nz * min;
     const vn = v.x * nx + v.z * nz;
@@ -2241,7 +2283,7 @@ function hurt(dmg, fromX, fromZ) {
     dmgNumber(P.pos.x, P.pos.y + 2, P.pos.z, 0, false, 'Esquiva');
     return;
   }
-  P.hp -= dmg * DIFF.dmg * (1 + 0.025 * hordeWave()) * Math.sqrt(hordeK) * (1 - Math.min(0.6, P.st.armor)); // survival: a stronger horde hits harder
+  P.hp -= dmg * DIFF.dmg * (1 + 0.025 * hordeWave()) * Math.sqrt(hordeK) * (BABEL ? 1 + 0.07 * (tower.n - 1) : 1) * (1 - Math.min(0.6, P.st.armor)); // survival and the tower: a stronger horde hits harder
   P.hits++;
   P.lastHit = time;
   P.iframes = 0.6;
@@ -2544,7 +2586,7 @@ function spawnEnemy(type, x, z) {
   E.elite[i] = 0;
   E.hp[i] = E.maxhp[i] = (t.boss ? t.hp : t.hp * (1 + time / 120) * (night > 0.5 ? 1.2 : 1)) * DIFF.hp
     * (SURV && time > ENDLESS_NIGHT ? 1 + (time - ENDLESS_NIGHT) / 300 : 1) // the endless night keeps getting worse
-    * (SURV && !t.boss ? hordeK : 1) * (BABEL ? 1 + (tower.n - 1) * 0.18 : 1); // the tower: tougher floor by floor
+    * ((SURV || BABEL) && !t.boss ? hordeK : 1) * (BABEL ? 1 + (tower.n - 1) * 0.28 : 1); // the tower: tougher floor by floor
   E.born[i] = time;
   E.revived[i] = E.lc[i] = 0;
   E.spd[i] = t.speed + random() * t.speedVar;
@@ -2648,8 +2690,6 @@ function spawnBoss(enraged, guardian = false, foe = MAP_FOE) {
 // calmer gaps between them to raise stones and pray at altars. The alive cap keeps the screen readable.
 const WAVE = 45;
 function director(dt) {
-  if (SURV && psalmAt === Infinity && !P.psalms.length && time >= 120) psalmAt = time;
-  if (time >= psalmAt && state === 'play') { psalmAt = -1; openPsalms(); return; }
   if (BABEL) return towerDirector(dt);
   const wave = 0.55 + 0.45 * (0.5 - 0.5 * Math.cos((time / WAVE) * Math.PI * 2));
   const k = (1 + night * 0.25) * (boss.spawned ? 0.5 : 1) * wave;
@@ -4259,7 +4299,7 @@ const STONE_DONE = new THREE.Color(0xf2c14e);
 const CLOUD = new THREE.Color(0xffffff);
 const FIRE = new THREE.Color(0xff8a3d);
 function updateWorld(dt) {
-  promptText = P.cliffHint ? 'Paredão: segure Espaço encostado na rocha para escalar' : '';
+  promptText = P.cliffHint ? 'Segure Espaço encostado para escalar' : '';
   const p = P.pos;
   for (const s of stones) {
     if (s.done) continue;
@@ -4278,7 +4318,6 @@ function updateWorld(dt) {
         s.done = true;
         stonesDone++;
         P.conquests++;
-        if (stonesDone === 1) psalmAt = time + 0.5; // the first stone: a Psalm
         if (stonesDone === 3) award('memorial');
         s.beam.scale.set(0.3, 1, 0.3);
         s.beam.material.color.copy(STONE_DONE);
@@ -4736,6 +4775,7 @@ function takeOffer(o) {
   nextChoice();
 }
 let psalmPending = false;
+let psalmStart = null;
 function openPsalms() {
   const ids = Object.keys(PSALMS).filter((id) => !P.psalms.includes(id));
   const list = [];
@@ -5010,12 +5050,14 @@ function hiddenDown(x, y, z) {
 // Each floor: a layout of brick (world.towerFloor), one map's enemies through the portals, a kill goal
 // (or a boss on floors 5, 10, 15...). Clearing it opens two or three portals: weapons, relics, or the
 // caravan's bread and silver. From floor 4, every three floors, the Confusion of Tongues changes a rule.
-const tower = { n: 0, kills: 0, goal: 0, spawned: 0, boss: null, clear: false, clearT: 0, layout: '', tongue: null, fire: false, fireT: 0, ax: 0, az: 0, still: 0 };
+const tower = { n: 0, kills: 0, goal: 0, spawned: 0, boss: null, clear: false, clearT: 0, layout: '', tongue: null, fire: false, fireT: 0, ax: 0, az: 0, still: 0, left: 0, up: false };
 let grav = 1; // Vento de Sinar: lighter
 const GUARDS = ['golias', 'gogue', 'rei'];
 function towerFloorStart(n) {
-  Object.assign(tower, { n, kills: 0, spawned: 0, clear: false, clearT: 0, still: 0 });
+  Object.assign(tower, { n, kills: 0, spawned: 0, clear: false, clearT: 0, still: 0, up: false });
   tower.boss = n % 10 === 0 ? 'ninrode' : n % 5 === 0 ? 'guardian' : null;
+  tower.left = floorTime(n, tower.boss);
+  world.door.set(false);
   const layouts = TOWER_LAYOUTS.filter((l) => l !== tower.layout);
   tower.layout = tower.boss ? 'trono' : layouts[Math.floor(random() * layouts.length)];
   tower.goal = tower.boss ? 0 : floorGoal(n);
@@ -5036,6 +5078,8 @@ function towerFloorStart(n) {
   for (const o of obstacles) if (Math.hypot(o.x, o.z) < o.r) gy = Math.max(gy, o.top);
   P.pos.set(0, gy + 0.05, 0);
   P.vel.set(0, 0, 0);
+  Object.assign(P, { grounded: true, ground: gy, coyote: 0, jumpBuffer: 0, sliding: false, climbing: false, dashT: 0 }); // a clean start on the new floor
+  if (heroRig) { for (const a of Object.values(heroRig.act)) a.stop(); setHero(P.hero); P.pos.set(0, gy + 0.05, 0); }
   tower.ax = tower.az = 0;
   if (tower.boss === 'ninrode') spawnBoss(false);
   else if (tower.boss) {
@@ -5043,8 +5087,6 @@ function towerFloorStart(n) {
     loadBossRig(model).then(() => spawnBoss(false, false, { model, name: 'Guardião da Torre', ref: 'Gn 11:4', intro: 'O guardião da torre barra a escada!', summon: 'Construtores, avante!', hp: 0.6, k: 1.1, pay: 0, tower: true }));
   }
   if (!tower.boss && n >= 3 && n % 2) spawnElite();
-  if (n === 6) psalmPending = true; // after this floor's reward
-  if (n === 1) psalmAt = time + 2.5;
   const names = { anfiteatro: 'Anfiteatro', zigurate: 'Zigurate', pontes: 'Pontes sobre o fogo', espiral: 'Espiral quebrada', trono: 'Sala do trono' };
   banner('assets/ui/star.png', tower.boss ? (tower.boss === 'ninrode' ? 'O cume de Sinar' : 'Guardião da torre') : `Derrote ${tower.goal} inimigos`, `Andar ${n} · ${names[tower.layout]}`, '#ffd66b',
     tower.tongue ? `${TONGUES[tower.tongue].name}: ${TONGUES[tower.tongue].text}` : 'Gn 11:4');
@@ -5062,11 +5104,11 @@ function setTongue(id) {
 function towerClear() {
   if (tower.clear) return;
   tower.clear = true;
-  tower.clearT = 1.6;
+  world.door.set(true); // the way up opens; the time stops: pick up what is left, then go through
   for (let i = 0; i < E.n; i++) if (!ENEMIES[E.type[i]].boss) E.hp[i] = 0; // the rest of the horde flees
   EP.n = 0;
   chord([523, 659, 784, 1046], 'square');
-  toast(`Andar ${tower.n} vencido!`, '#ffd66b');
+  toast(`Andar ${tower.n} vencido! Junte o que ficou e suba pela porta ao norte`, '#ffd66b');
 }
 function towerBossDown(x, y, z) { // Ninrode (floor 10, 20...): the tower is won, and the climb goes on
   boss.spawned = false;
@@ -5117,22 +5159,31 @@ const towerWeights = (n) => {
   return w;
 };
 function towerDirector(dt) {
-  if (tower.clear) {
-    if (tower.clearT > 0 && (tower.clearT -= dt) <= 0) openPortals();
+  if (tower.clear) { // the door is open: walk through it to choose the way up
+    const d = world.door;
+    if (!tower.up && Math.hypot(P.pos.x - d.x, P.pos.z - d.z) < 3) { tower.up = true; openPortals(); }
+    else if (tower.up && Math.hypot(P.pos.x - d.x, P.pos.z - d.z) > 5) tower.up = false;
     return;
   }
+  if ((tower.left -= dt) <= 0) { // out of time: the floor gives way
+    toast('O tempo acabou: a torre desaba sobre você!', '#ff9a8a');
+    P.st.revives = 0;
+    P.hp = 0;
+    return;
+  }
+  hordeK = clamp(hordeK * Math.exp((HORDE_LIFE - lifeAvg) * 0.012 * dt), 1, 400); // the climb answers your strength too
   if (!boss.spawned && time >= serpentAt && bossRigs.serpente) { serpentAt = Infinity; spawnBoss(false, false, SERPENT); }
-  const cap = 40 + tower.n * 5;
+  const cap = Math.min(50 + tower.n * 7, tower.goal - tower.kills); // never more out than are still needed
   if (!tower.boss) {
-    spawnAcc += dt * (2.2 + tower.n * 0.35);
-    for (; spawnAcc >= 1 && tower.spawned < tower.goal; spawnAcc--) {
-      if (E.n >= cap) break;
+    spawnAcc += dt * (3 + tower.n * 0.5);
+    for (; spawnAcc >= 1; spawnAcc--) { // until the goal is met: whoever fell off or got stuck is replaced
+      if (E.n >= cap) { spawnAcc = 0; break; }
       if (spawnEnemy(pickWeighted(towerWeights(tower.n), random)) >= 0) tower.spawned++;
     }
     if (tower.kills >= tower.goal) towerClear();
-  } else { // a boss floor: a trickle of help for the boss
-    spawnAcc += dt * 0.7;
-    for (; spawnAcc >= 1; spawnAcc--) if (E.n < 12) spawnEnemy(pickWeighted(towerWeights(tower.n), random));
+  } else { // a boss floor: steady help for the boss
+    spawnAcc += dt * (1 + tower.n * 0.05);
+    for (; spawnAcc >= 1; spawnAcc--) if (E.n < 14 + tower.n) spawnEnemy(pickWeighted(towerWeights(tower.n), random));
   }
   if (tower.fire && (tower.fireT -= dt) <= 0) { // the floor burns below the bridges
     tower.fireT = 1.1;
@@ -5337,8 +5388,9 @@ function updateSky() {
     night = Math.max(night, clamp((time - ENDLESS_NIGHT) / 6, 0, 1));
     if (!P.endless) { P.endless = true; toast('A noite sem fim começou. Ninguém resiste para sempre.', '#ff9a8a'); }
   }
-  hemi.intensity = 1.25 - 0.7 * night;
-  sun.intensity = 2.8 - 2 * night;
+  if (BABEL) night = 0; // inside the tower: no day and night, torchlight
+  hemi.intensity = BABEL ? 0.75 : 1.25 - 0.7 * night;
+  sun.intensity = BABEL ? 1.1 : 2.8 - 2 * night;
   sun.color.lerpColors(SUN, MOON, night);
   const isNight = night > 0.5;
   if (isNight !== wasNight) {
@@ -5681,7 +5733,7 @@ function updateCamera(dt) {
     const cp = Math.cos(pitch);
     const cx = camTarget.x + Math.sin(yaw) * cp * d;
     const cz = camTarget.z + Math.cos(yaw) * cp * d;
-    const cy = Math.max(camTarget.y + Math.sin(pitch) * d, terrainH(cx, cz) + 0.5);
+    const cy = Math.min(Math.max(camTarget.y + Math.sin(pitch) * d, terrainH(cx, cz) + 0.5), BABEL ? world.CEIL - 1 : Infinity); // under the tower's ceiling
     shake = state === 'play' ? Math.max(0, shake - dt * 2) : outro ? shake : 0; // paused, cards or end screen: hold still
   if (state === 'play') dustT = Math.max(0, dustT - dt);
   scene.fog.far = 135 - 75 * Math.min(1, dustT / 3, (16 - dustT) / 2); // wind over the bones: dust closes in, then clears
@@ -5964,7 +6016,7 @@ function updateHud() {
     josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas',
   }[P.hero]);
   document.body.classList.toggle('sunstop', P.sunT > 0);
-  setText(hud.timer, fmt(time));
+  setText(hud.timer, BABEL ? (tower.clear ? 'Porta aberta' : fmt(Math.max(0, tower.left))) : fmt(time)); // the tower: time left on the floor
   hud['phase-dot'].classList.toggle('night', night > 0.5);
   setHtml(hud.objective, BABEL ? `<b>Andar ${tower.n}</b><span style="opacity:.8">· ${tower.clear ? 'vencido!' : tower.boss ? `derrote ${boss.spawned ? FOE.name : 'o chefe'}` : `abates ${Math.min(tower.kills, tower.goal)}/${tower.goal}`}${tower.tongue ? ` · ${TONGUES[tower.tongue].name}` : ''}</span>`
     : boss.spawned && FOE !== MAP_FOE ? `<b>Derrote ${FOE.name}</b>`

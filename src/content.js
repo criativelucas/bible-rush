@@ -646,7 +646,7 @@ export const TOWER = {
   desc: 'Uma arena no alto da torre, cercada de nuvens. Cada andar é uma sala nova: vença a horda, escolha um portal e suba.',
   radius: 34, water: -60,
   water2: { shallow: 0x6fd6c0, deep: 0x2f8f9e },
-  sky: { top: 0x6a8ed0, horizon: 0xf4c89a, nightTop: 0x0b1230, nightHorizon: 0x3a2f5a },
+  sky: { top: 0x1a0f0a, horizon: 0x2a1a12, nightTop: 0x1a0f0a, nightHorizon: 0x2a1a12 }, // inside: no sky
   boss: 'Ninrode', bossIntro: 'Ninrode, o poderoso caçador, defende o alto da torre!', summon: 'Construtores de Babel, avante!',
   elite: 'Um capataz de Babel apareceu! Ele guarda um baú.', win: 'Ninrode caiu no alto de Babel.',
   verse: ['Vinde, edifiquemos uma cidade e uma torre cujo cume toque nos céus.', 'Gn 11:4'],
@@ -665,17 +665,18 @@ export const TONGUES = {
   pressa: { name: 'Pressa dos construtores', text: 'Inimigos e você 40% mais rápidos; a recarga do E cai pela metade.' },
   inacabada: { name: 'Torre inacabada', text: 'O chão afunda debaixo de quem fica parado mais de 3 segundos.' },
 };
-export const floorGoal = (n) => 25 + n * 8; // kills to clear a floor
+export const floorGoal = (n) => 30 + n * 10; // kills to clear a floor
+export const floorTime = (n, boss) => (boss ? 150 : 45 + floorGoal(n) * 0.8); // seconds before the floor falls in on you
 
-// Psalms: chosen once a run (the first Memorial stone, 2:00 in Survival, floors 1 and 6 of the tower),
-// each changes how the whole build plays.
+// Psalms: bought in the Market (they are for later in the game) and taken one per run, chosen on the
+// setup screen; each changes how the whole build plays, from the start.
 export const PSALMS = {
-  s23: { name: 'Salmo 23', ref: 'Sl 23:5', text: 'O cálice transborda: com a vida cheia, a cada 4 s uma luz sagrada fere a horda ao seu redor.' },
-  s144: { name: 'Salmo 144', ref: 'Sl 144:1', text: 'Mãos adestradas para a peleja: todo projétil seu ricocheteia mais uma vez.' },
-  s91: { name: 'Salmo 91', ref: 'Sl 91:7', text: 'Mil cairão ao teu lado: a cada 12 s um escudo anula o próximo golpe.' },
-  s18: { name: 'Salmo 18', ref: 'Sl 18:29', text: 'Com o meu Deus salto uma muralha: um pulo a mais no ar.' },
-  s103: { name: 'Salmo 103', ref: 'Sl 103:5', text: 'A mocidade se renova como a da águia: recupera 1,5 de vida por segundo.' },
-  s46: { name: 'Salmo 46', ref: 'Sl 46:1', text: 'Deus é o nosso refúgio: abaixo de 30% da vida, empurra a horda e fica intocável por 2 s (a cada 30 s).' },
+  s23: { cost: 1400, name: 'Salmo 23', ref: 'Sl 23:5', text: 'O cálice transborda: com a vida cheia, a cada 4 s uma luz sagrada fere a horda ao seu redor.' },
+  s144: { cost: 1200, name: 'Salmo 144', ref: 'Sl 144:1', text: 'Mãos adestradas para a peleja: todo projétil seu ricocheteia mais uma vez.' },
+  s91: { cost: 1100, name: 'Salmo 91', ref: 'Sl 91:7', text: 'Mil cairão ao teu lado: a cada 12 s um escudo anula o próximo golpe.' },
+  s18: { cost: 800, name: 'Salmo 18', ref: 'Sl 18:29', text: 'Com o meu Deus salto uma muralha: um pulo a mais no ar.' },
+  s103: { cost: 900, name: 'Salmo 103', ref: 'Sl 103:5', text: 'A mocidade se renova como a da águia: recupera 1,5 de vida por segundo.' },
+  s46: { cost: 1000, name: 'Salmo 46', ref: 'Sl 46:1', text: 'Deus é o nosso refúgio: abaixo de 30% da vida, empurra a horda e fica intocável por 2 s (a cada 30 s).' },
 };
 // Hidden bosses. Each map has one that shows up in 10% of runs, at some moment of the run, and the
 // Serpent can show up on any map in 1% of runs: the hardest fight in the game. They are much tougher

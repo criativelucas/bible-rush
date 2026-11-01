@@ -370,7 +370,7 @@
       filter: drop-shadow(0 calc(3 * var(--cp)) 0 rgba(10, 5, 2, .55));
       transform: perspective(900px) translateY(var(--lift, 0px)) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
       transition: transform .14s ease-out, filter .14s; animation: deal .6s cubic-bezier(.2, .9, .3, 1.15) backwards; }
-    .card.tn { border-image-source: url(assets/ui/card.png); border-image-slice: 7; border-width: calc(7 * var(--cp)); border-image-width: calc(7 * var(--cp)); --art: linear-gradient(#8a6a4a, #5e4430); }
+    .card.tn { border-image-source: url(assets/ui/card.png); border-image-slice: 7 fill; border-width: calc(7 * var(--cp)); border-image-width: calc(7 * var(--cp)); --art: linear-gradient(#8a6a4a, #5e4430); }
     .card.t1 { border-image-source: url(assets/ui/card-r1.png); --art: repeating-linear-gradient(135deg, rgba(255, 255, 255, .05) 0 8px, transparent 8px 16px), linear-gradient(#5e6a78, #323a46); }
     .card.t2 { border-image-source: url(assets/ui/card-r2.png); --art: repeating-linear-gradient(135deg, rgba(255, 255, 255, .06) 0 10px, transparent 10px 20px), linear-gradient(#77822f, #3c461a); }
     .card.t3 { border-image-source: url(assets/ui/card-r3.png); --art: repeating-linear-gradient(45deg, rgba(200, 225, 255, .1) 0 2px, transparent 2px 18px), repeating-linear-gradient(-45deg, rgba(200, 225, 255, .1) 0 2px, transparent 2px 18px), linear-gradient(#34558a, #1a2a4e);
@@ -429,6 +429,7 @@
       to { transform: perspective(900px) translateY(-60px) rotateY(360deg) scale(1.2); filter: brightness(1.8) drop-shadow(0 0 24px var(--rar)); opacity: 0; } }
     @keyframes gone { to { transform: perspective(900px) translateY(60px) rotateX(35deg) scale(.9); opacity: 0; } }
     .card-tools { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .card-tools[hidden] { display: none; }
     .card-tools .btn:disabled { opacity: .45; cursor: default; }
     .card-tools .btn.on { filter: hue-rotate(-20deg) brightness(1.15); }
     #choice.banning .card { outline: 3px dashed #d6453d; outline-offset: 4px; }
@@ -533,6 +534,7 @@
     .wardrobe button.on small { color: #6a4a2a; }
     .wardrobe .none { font-size: 15px; color: var(--dim); }
     .ware.guarda { --c1: #8a3a5a; --c2: #9a4a6a; }
+    .ware.salmos { --c1: #2f5f9a; --c2: #3e6ea8; }
     /* Portrait frames: stage rims, or the wardrobe's */
     .stage-1 { box-shadow: 0 0 0 3px #e09a55, 0 0 0 5px var(--line); }
     .stage-2 { box-shadow: 0 0 0 3px #f2c14e, 0 0 0 5px #fff1b8, 0 0 0 7px var(--line); }
@@ -931,6 +933,7 @@
           <h3>Modo</h3><div id="modes" class="modes"></div>
           <h3>Dificuldade</h3><div id="diffs" class="diffs"></div><small id="diff-note" class="diff-note"></small>
           <h3>Alforje <small id="pack-count"></small></h3><div id="pack" class="pack"></div>
+          <h3>Salmo</h3><div id="psalm-pick" class="wardrobe"></div>
           <h3>Suas marcas</h3><div id="my-marks" class="my-marks"></div>
           <div id="lock-hint" class="lock-hint"></div>
         </div>
@@ -1037,9 +1040,9 @@
         <span><kbd class="k">Esc</kbd></span><span>Pausa</span>
       </div>
       <h3>Salmos, baús de sorte e grimório</h3>
-      <p>Uma vez por jornada você escolhe um <b>Salmo</b> que muda a build inteira (na primeira Pedra do Memorial, aos 2 minutos na Sobrevivência, nos andares 1 e 6 da Torre). Os baús de chefe e de emboscada rolam a sua Sorte: às vezes vêm com 3 ou 5 relíquias. O <b>Grimório</b>, na pausa, guarda as receitas de evolução que você já descobriu. Passar raspando em vários tiros seguidos aumenta o som e o brilho do raspão.</p>
+      <p>Os <b>Salmos</b> mudam a build inteira: compre no Mercado e leve um por jornada (escolha em Nova jornada). Os baús de chefe e de emboscada rolam a sua Sorte: às vezes vêm com 3 ou 5 relíquias. O <b>Grimório</b>, na pausa, guarda as receitas de evolução que você já descobriu. Passar raspando em vários tiros seguidos aumenta o som e o brilho do raspão.</p>
       <h3>Torre de Babel</h3>
-      <p>Um modo de subida: cada andar é uma sala de tijolos no alto da torre (anfiteatro, zigurate, pontes sobre o fogo ou espiral quebrada). Derrote a horda que sai dos portais e escolha um portal para subir: armas, relíquias ou, a cada 3 andares, a caravana de Ismael. No andar 5 há um guardião com um baú; no 10, Ninrode, o poderoso caçador. A partir do andar 4, a cada 3 andares, a Confusão das Línguas muda uma regra. Depois do 10 a subida não tem fim.</p>
+      <p>Um modo de subida: cada andar é uma sala de tijolos no alto da torre (anfiteatro, zigurate, pontes sobre o fogo ou espiral quebrada). Derrote toda a horda que sai dos portais antes do tempo acabar; então o tempo para, a porta ao norte abre e, ao entrar nela, você escolhe o caminho: armas, relíquias ou, a cada 3 andares, a caravana de Ismael. Segure Espaço encostado em qualquer estrutura para escalar. No andar 5 há um guardião com um baú; no 10, Ninrode, o poderoso caçador. A partir do andar 4, a cada 3 andares, a Confusão das Línguas muda uma regra. Depois do 10 a subida não tem fim.</p>
       <h3>Chefes secretos</h3>
       <p>Em 1 de cada 10 jornadas, cada cenário esconde um chefe secreto que aparece no meio da partida: Isbi-Benobe em Elá, Janes no Mar Vermelho, Ogue nos Ossos Secos e Adoni-Zedeque em Jericó. São bem mais fortes que o chefe do cenário e pagam 1.500 denários. Em 1 de cada 100 jornadas, em qualquer cenário, surge a Antiga Serpente, o chefe mais difícil do jogo: vencê-la paga 10.000 denários.</p>
       <h3>Raridade das cartas</h3>

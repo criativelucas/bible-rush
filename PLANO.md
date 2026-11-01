@@ -181,8 +181,10 @@ A cada 3 andares entra um modificador que vale até o fim do bloco:
 | 4 | Polimento (seção 5) | Feito |
 
 **Como ficou (diferenças do plano):**
-- Pontes e passarelas são blocos maciços com colisão por cima (o terreno é mapa de alturas e as colisões são círculos): não dá para passar por baixo delas.
+- Pontes e passarelas têm colisão por cima e são largas (2 a 3,6 m); toda estrutura pode ser escalada (segurar Espaço encostado) e degraus de até 0,65 m sobem sozinhos.
 - O "fundo do ribeiro" de Elá não foi rebaixado; no lugar, torres de vigia, ruína com rampa de pilares e mais altura nos mapas.
 - O escorpião é mais rápido em vez de causar dano contínuo; o Salmo 23 virou uma explosão a cada 4 s com a vida cheia.
+- Salmos: comprados no Mercado (aba Salmos) e escolhidos em Nova jornada, um por partida; valem desde o começo.
+- Torre de Babel: fechada (teto com vigas, 16 tochas, sem dia e noite); cada andar tem tempo limite; ao matar todos, o tempo para e a porta ao norte abre (os portais de recompensa aparecem ao entrar nela).
 - Torre de Babel: as colunas da sala do trono não quebram; a Subida Infinita (andar 11+) existe, mas ainda não vai para o ranking da temporada (o servidor só aceita os 4 mapas: precisa mudar `tools/ranking.sql`).
 - Números de dano continuam em elementos reaproveitados (o teste com 500 inimigos ficou em ~3 ms por quadro).

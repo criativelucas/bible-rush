@@ -1790,10 +1790,14 @@ def vertical_props(P):
         x = 1.3 + k * 0.82
         if 4.3 < x < 5.7:
             continue
-        m.part('box', 0.78, 0.1, 1.1, p=(x, 4.97, 0), r=(0, 0, 0.04 * ((k % 3) - 1)), color=PLANK if k % 2 else PLANK2)
+        m.part('box', 0.78, 0.12, 2.0, p=(x, 4.97, 0), r=(0, 0, 0.04 * ((k % 3) - 1)), color=PLANK if k % 2 else PLANK2)
     for x in (1.3, 3.9, 6.1, 8.7):
-        m.part('cyl', 0.07, 0.07, 1.1, 5, p=(x, 4.4, 0.55), color=POST)
-        m.part('cyl', 0.07, 0.07, 1.1, 5, p=(x, 4.4, -0.55), color=POST)
+        for z in (-1.0, 1.0):
+            m.part('cyl', 0.09, 0.09, 5.0, 5, p=(x, 2.5, z), color=POST)  # posts down to the ground
+            m.part('cyl', 0.05, 0.05, 0.8, 5, p=(x, 5.4, z), color=POST)  # and a rail post
+    for z in (-1.0, 1.0):
+        for x0, x1 in ((1.3, 3.9), (6.1, 8.7)):
+            m.part('box', x1 - x0, 0.06, 0.06, p=((x0 + x1) / 2, 5.75, z), color=PLANK2)  # rails
     m.part('box', 0.6, 0.1, 1.0, p=(4.0, 4.6, 0.1), r=(0, 0, -0.6), color=PLANK2)  # a plank hanging off the break
     out('props', m)
 
