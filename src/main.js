@@ -3,7 +3,7 @@ import { rng, FlowField, SpatialHash } from './sim.js';
 import {
   HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL, TROPHIES, TIERS, openSet, migrateProfile, exportCode, importCode, unlockedBy,
   TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
-  STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, researchOf, MASTERY, masteryOf,
+  STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, RESEARCH_KINDS, researchOf, MASTERY, masteryOf,
   TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES, hashStr, MOB_TYPES, BEAST_TYPE,
   SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
@@ -410,12 +410,12 @@ function removeAt(p, i) {
   const last = --p.n;
   for (const f of p.fields) p[f][i] = p[f][last];
 }
-const E = pool(MAX_ENEMIES, ['x', 'y', 'z', 'hp', 'maxhp', 'kx', 'kz', 'flash', 'spd', 'face', 'type', 'elite', 'born',
+const E = pool(MAX_ENEMIES, ['x', 'y', 'z', 'hp', 'maxhp', 'kx', 'kz', 'flash', 'spd', 'face', 'type', 'elite', 'born', 'revived', 'lc',
   'st', 't', 'dx', 'dz', 'slow', 'stun', 'burn', 'cd', 'r', 'h', 'mark', 'sw']); // sw: last sweep that hit it
 // ret: boomerang (s until it turns back, 0 = coming back, -1 = not a boomerang); glow: from an evolved weapon
 const S = pool(MAX_SHOTS, ['x', 'y', 'z', 'vx', 'vy', 'vz', 'life', 'bounce', 'pierce', 'last', 'dmg', 'seek', 'speed', 'size', 'crit', 'kind',
   'ret', 'glow', 'burn', 'src']);
-const EP = pool(MAX_ESHOTS, ['x', 'y', 'z', 'vx', 'vz', 'life', 'graze', 'dmg']);
+const EP = pool(MAX_ESHOTS, ['x', 'y', 'z', 'vx', 'vy', 'vz', 'life', 'graze', 'dmg', 'g']); // g: 1 = lobbed (falls in an arc)
 const G = pool(MAX_GEMS, ['x', 'y', 'z', 'val', 'pull', 'kind']); // kind 0 = maná (XP), 1 = siclo (gold), 2+ = PICKUPS
 const K = pool(MAX_STRIKES, ['x', 'z', 'r', 'dmg', 't', 't0', 'fire', 'burn', 'src']); // falling hail, or fire from heaven
 const PT = pool(MAX_PARTS, ['x', 'y', 'z', 'vx', 'vy', 'vz', 'life', 'max', 'size', 'col', 'grav', 'glow']);
@@ -501,7 +501,7 @@ const hazFill = instanced(new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2),
 const hazBolt = instanced(ASSETS.items.proj_fire, flameMatOf(), MAX_HAZ); // brimstone falling
 const hazArrow = instanced(ASSETS.items.proj_arrow, M.toon(), MAX_HAZ); // arrows falling
 hazRing.renderOrder = hazFill.renderOrder = 5;
-const HAZ_COL = { quake: new THREE.Color(0xff3b30), arrow: new THREE.Color(0xff3b30), fire: new THREE.Color(0xff5a1e), spike: new THREE.Color(0xff3b30), rise: new THREE.Color(0xd8ccb0) };
+const HAZ_COL = { quake: new THREE.Color(0xff3b30), arrow: new THREE.Color(0xff3b30), fire: new THREE.Color(0xff5a1e), spike: new THREE.Color(0xff3b30), rise: new THREE.Color(0xd8ccb0), mark: new THREE.Color(0xff3b30) };
 const POOL_COL = new THREE.Color(0xff8a3d);
 const spikeGeo = new THREE.ConeGeometry(0.45, 2.4, 5).translate(0, 1.2, 0); // bone spikes from Gog's fissure
 const spikeMat = M.toon(0xe6dcc2, { vc: false });
@@ -820,11 +820,12 @@ const P = {
   bless: null, blessT: 0, // a blessing from the pillar of Bethel
   goldGot: 0, veins: 0, jars: 0, chests: 0, hits: 0, lastHit: -99, guardians: 0, // for tasks and trophies
   mods: { espd: 1, spawn: 1, chest: 1 }, endless: false, // survival: the prices of the alliances
+  netT: 0, // caught in a climber's net
 };
 let dmgSrc = 'other'; // who is dealing damage right now (a weapon id, 'move', 'miracle', 'passive', 'other'): fills P.dmgBy
 let srcSlot = -3; // the same for shots and strikes, kept on them: weapon slot, or -1 miracle, -2 passive, -3 other
 const srcName = (code) => (code >= 0 ? P.weapons[code]?.id ?? 'other' : ['other', 'passive', 'miracle'][code + 3]);
-const moveSpeed = () => HEROES[P.hero].speed * (1 + P.st.speed);
+const moveSpeed = () => HEROES[P.hero].speed * (1 + P.st.speed) * (P.netT > 0 ? 0.7 : 1); // caught in a net
 const pickupR = () => 3.5 * (1 + P.st.pickup);
 const globalDmg = () => (1 + P.st.dmg) * (P.hero === 'sansao' ? 1 + P.stacks / 100 : 1)
   * (P.hero === 'josue' ? 1 + Math.min(0.8, 0.08 * P.conquests) : 1);
@@ -877,6 +878,7 @@ let nextEvent = 120; // the map's own event every 150 s
 let melCarrier = Infinity; // Mel silvestre: one more carrier early on
 let seenHoreb = false;
 let nextGuardian = GUARDIAN_EVERY; // survival: a guardian every 5 minutes
+let wallsFell = false; // Jericó: the wall gives way at 5:00
 let bossWait = 0; // classic: the map's boss waits for a hidden boss to fall
 // Hidden bosses: rolled when the run starts (content.js SECRET_BOSSES, SERPENT); paid at the end.
 const SECRET = SECRET_BOSSES[BIOME_ID];
@@ -1743,7 +1745,7 @@ function renderBestiary() {
   if (beastTab === 'inimigos') {
     $('beast-hint').textContent = 'Cada inimigo derrotado conta para a pesquisa do seu cenário. Complete as seis e ganhe a moldura do cenário para o retrato do herói.';
     $('beast-body').innerHTML = Object.entries(BIOMES).map(([biome, b]) => {
-      const names = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 4, escudeiro: 5 };
+      const names = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 4, escudeiro: 5, voador: 6, escalador: 7 };
       const done = researchOf(profile, biome);
       const cells = BEAST_KINDS.map((k) => {
         const n = kills[`${biome}:${k}`] || 0;
@@ -1752,7 +1754,7 @@ function renderBestiary() {
         const label = k === 'chefe' ? b.boss : k === 'elite' ? 'Campeão' : BEAST_NAMES[biome][names[k]];
         return cell(icon, label, `${n} derrotado${n === 1 ? '' : 's'}`, n > 0, n >= goal, `<div class="meter" title="${Math.min(n, goal)} de ${goal}"><i style="width:${Math.min(1, n / goal) * 100}%"></i></div>`);
       }).join('');
-      return `<div class="beast-map"><h3>${b.name}<small>${done ? 'Pesquisa completa · moldura ganha' : `${BEAST_KINDS.filter((k) => (kills[`${biome}:${k}`] || 0) >= RESEARCH[k]).length} de ${BEAST_KINDS.length} pesquisados`}</small></h3><div class="beast-grid">${cells}</div></div>`;
+      return `<div class="beast-map"><h3>${b.name}<small>${done ? 'Pesquisa completa · moldura ganha' : `${RESEARCH_KINDS.filter((k) => (kills[`${biome}:${k}`] || 0) >= RESEARCH[k]).length} de ${RESEARCH_KINDS.length} pesquisados`}</small></h3><div class="beast-grid">${cells}</div></div>`;
     }).join('');
   } else if (beastTab === 'armas') {
     const used = profile.bestiary.w ?? {};
@@ -2121,6 +2123,7 @@ function updatePlayer(dt) {
   const hs2 = Math.hypot(v.x, v.z);
   if (hs2 > MAX_SPEED) { v.x *= MAX_SPEED / hs2; v.z *= MAX_SPEED / hs2; }
   if (!P.climbing) v.y -= GRAVITY * dt;
+  const y0 = p.y; // last frame's height: a fast fall must land on a top it passed through, not slide off it
   p.addScaledVector(v, dt);
 
   // Collider sides push out; low rock tops are floor.
@@ -2130,7 +2133,7 @@ function updatePlayer(dt) {
     const dz = p.z - o.z;
     const d = Math.hypot(dx, dz) || 1e-3;
     const min = o.r + 0.4;
-    if (d >= min || p.y >= o.top - 0.3) continue;
+    if (d >= min || p.y >= o.top - 0.3 || y0 >= o.top - 0.05) continue;
     const nx = dx / d;
     const nz = dz / d;
     p.x = o.x + nx * min;
@@ -2147,7 +2150,7 @@ function updatePlayer(dt) {
   let g = terrainH(p.x, p.z);
   for (const id of obstaclesNear(p.x, p.z)) {
     const o = obstacles[id];
-    if (p.y >= o.top - 0.3 && Math.hypot(p.x - o.x, p.z - o.z) < o.r + 0.4) g = Math.max(g, o.top);
+    if ((p.y >= o.top - 0.3 || y0 >= o.top - 0.05) && Math.hypot(p.x - o.x, p.z - o.z) < o.r + 0.4) g = Math.max(g, o.top);
   }
   P.ground = g;
   if (p.y <= g || (P.grounded && v.y <= 0 && p.y - g < 0.4)) {
@@ -2420,6 +2423,7 @@ function damage(i, base, kx = 0, kz = 0, knock = 0, forceCrit = false) {
   }
   const crit = forceCrit || random() < P.st.crit;
   if (crit) dmg *= 2 + P.st.critDmg; // Tábuas da Lei
+  E.lc[i] = crit ? 1 : 0;
   E.hp[i] -= dmg;
   P.dmgBy[dmgSrc] = (P.dmgBy[dmgSrc] || 0) + Math.min(dmg, Math.max(0, E.hp[i] + dmg));
   E.flash[i] = 0.1;
@@ -2477,6 +2481,7 @@ function spawnEnemy(type, x, z) {
     * (SURV && time > ENDLESS_NIGHT ? 1 + (time - ENDLESS_NIGHT) / 300 : 1) // the endless night keeps getting worse
     * (SURV && !t.boss ? hordeK : 1);
   E.born[i] = time;
+  E.revived[i] = E.lc[i] = 0;
   E.spd[i] = t.speed + random() * t.speedVar;
   E.r[i] = t.r;
   E.h[i] = t.h;
@@ -2597,6 +2602,16 @@ function director(dt) {
   if (!boss.spawned && time >= nextCarrier) { nextCarrier += 150; spawnCarrier(); }
   if (time >= melCarrier) { melCarrier = Infinity; spawnCarrier(); }
   if (!boss.spawned && time >= nextEvent) { nextEvent += 150; mapEvent(); }
+  if (B.city && !wallsFell && time >= 300) { // Jericó at 5:00: stretches of the wall come down
+    wallsFell = true;
+    for (const f of world.collapse()) {
+      burst(f.x, f.y + 3, f.z, 0xc9a46e, 40, 8, 0.3, 8);
+      flash(f.x, f.y, f.z, 0xffc080, 60, 0.5);
+    }
+    shake = 1;
+    beep(45, 1.2, 'sawtooth', 0.09, 0, 25);
+    toast('Um trecho da muralha desabou!', '#ffd66b');
+  }
   if (!boss.spawned && time >= serpentAt && bossRigs.serpente) { serpentAt = Infinity; spawnBoss(false, false, SERPENT); }
   if (!boss.spawned && time >= secretAt && bossRigs[SECRET.model]) { secretAt = Infinity; spawnBoss(false, false, SECRET); }
   if (!SURV && !boss.spawned && stonesDone === 3 && time >= bossWait) spawnBoss(false);
@@ -2612,12 +2627,81 @@ function enemyShot(x, y, z, dx, dz, dmg, speed = 13) {
   EP.z[i] = z;
   EP.vx[i] = dx * speed;
   EP.vz[i] = dz * speed;
+  // Aimed at the hero's chest in 3D: standing on a rock no longer keeps you out of reach.
+  const hd = Math.hypot(P.pos.x - x, P.pos.z - z) || 1;
+  EP.vy[i] = clamp((P.pos.y + 1 - y) / hd, -1.2, 1.2) * speed;
+  EP.g[i] = 0;
   EP.life[i] = 3;
   EP.graze[i] = 0;
   EP.dmg[i] = dmg;
 }
+// A lob: a stone that flies in an arc over the edge of a ledge and comes down where the hero stands
+// (or is heading), its landing marked on the ground.
+const LOB_G = 18;
+function enemyLob(x, y, z, dmg, speed = 10) {
+  if (EP.n >= MAX_ESHOTS) return;
+  const tx = P.pos.x + P.vel.x * 0.25;
+  const tz = P.pos.z + P.vel.z * 0.25;
+  const dx = tx - x;
+  const dz = tz - z;
+  const t = clamp(Math.hypot(dx, dz) / speed, 0.45, 1.4);
+  const i = EP.n++;
+  EP.x[i] = x;
+  EP.y[i] = y;
+  EP.z[i] = z;
+  EP.vx[i] = dx / t;
+  EP.vz[i] = dz / t;
+  EP.vy[i] = (P.pos.y + 0.9 - y + 0.5 * LOB_G * t * t) / t;
+  EP.g[i] = 1;
+  EP.life[i] = t + 0.6;
+  EP.graze[i] = 0;
+  EP.dmg[i] = dmg;
+  hazard(tx, tz, 1.1, t, 0, 'mark');
+}
 
+// Fliers and climbers (content.js: fly/climb; each map gives them their own trick, BIOMES flyer/climber).
+const CLIMB = 4; // metres a second up a wall
+function flyerAct(i, type, dist, dx, dz, nightDmg) {
+  if (E.stun[i] > 0) return;
+  if (E.st[i] === 2) { if ((E.t[i] -= DT) <= 0) { E.st[i] = 3; E.t[i] = 0.9; } return; }
+  if (E.st[i] === 3) { if ((E.t[i] -= DT) <= 0) E.st[i] = 0; return; }
+  if (E.cd[i] > 0) return;
+  const k = B.flyer;
+  if (k === 'swoop' || dist < 8) { // a dive at the hero (crows dive from further out)
+    if (dist > (k === 'swoop' ? 14 : 8)) return;
+    E.st[i] = 2;
+    E.t[i] = 0.65;
+    E.dx[i] = dx / dist;
+    E.dz[i] = dz / dist;
+    E.cd[i] = 2.5 + random();
+    return;
+  }
+  if (dist > 22) return;
+  if (k === 'acid') enemyLob(E.x[i], E.y[i], E.z[i], type.dmg * nightDmg, 11); // locusts spit in an arc
+  else if (k === 'beam') { // the winged skull fires straight at the hero, height and all
+    for (let s = -1; s <= 1; s++) {
+      const a = Math.atan2(dx, dz) + s * 0.12;
+      enemyShot(E.x[i], E.y[i], E.z[i], Math.sin(a), Math.cos(a), type.dmg * nightDmg, 15);
+    }
+  } else if (k === 'ember' && dist < 4) hazard(P.pos.x, P.pos.z, 1.5, 0.7, type.dmg * nightDmg, 'fire', 2.5); // embers dropped from above
+  else return;
+  E.cd[i] = 2.6 + random() * 1.2;
+}
+function climberTop(i, type, dist, nightDmg) {
+  if (B.climber === 'net' && dist < 14) { // the scout of Gath throws a net: slower for a while
+    hazard(P.pos.x, P.pos.z, 1.8, 0.6, 0, 'mark');
+    netAt = { x: P.pos.x, z: P.pos.z, t: 0.6 };
+  } else if (B.climber === 'wall' && dist < 18) enemyLob(E.x[i], E.y[i] + 1.4, E.z[i], type.dmg * nightDmg); // a stone from the top of the wall
+}
+let netAt = null;
+let DT = 0;
 function updateEnemies(dt) {
+  DT = dt;
+  if (netAt && (netAt.t -= dt) <= 0) {
+    if (Math.hypot(P.pos.x - netAt.x, P.pos.z - netAt.z) < 1.9) { P.netT = 3; toast('Preso na rede!', '#ff9a8a'); burst(P.pos.x, P.pos.y + 1, P.pos.z, 0xc9b48a, 12, 3, 0.15, 3); }
+    netAt = null;
+  }
+  if (P.netT > 0) P.netT -= dt;
   hash.build(E.x, E.z, E.n);
   const px = P.pos.x;
   const pz = P.pos.z;
@@ -2652,6 +2736,25 @@ function updateEnemies(dt) {
       face = Math.atan2(mx, mz);
     }
 
+    let flyY = 0;
+    if (type.fly) { // straight at the hero over rocks and walls, hovering above head height
+      mx = dx / dist;
+      mz = dz / dist;
+      face = Math.atan2(mx, mz);
+      flyY = Math.max(terrainH(x, z) + 2.5, P.pos.y + 1.5 + Math.sin(time * 3 + i) * 0.5);
+      flyerAct(i, type, dist, dx, dz, nightDmg);
+      if (E.st[i] === 2) { // the swoop: a dive along a line
+        mx = E.dx[i];
+        mz = E.dz[i];
+        speed = 13;
+        face = Math.atan2(mx, mz);
+        flyY = P.pos.y + 0.7;
+      } else if (E.st[i] === 3) speed *= 0.6;
+    } else if (type.climb) {
+      if (P.pos.y - E.y[i] > 1.5) { mx = dx / dist; mz = dz / dist; face = Math.atan2(mx, mz); } // up the face, not round by the ramps
+      if (B.climber === 'sting') speed *= 1.5; // the scorpion scuttles
+    }
+
     if (type.ranged) {
       // Keep 11-17 m away, circle, and shoot at the player.
       if (dist < 11) { mx = -dx / dist; mz = -dz / dist; }
@@ -2663,7 +2766,8 @@ function updateEnemies(dt) {
       }
       face = Math.atan2(dx, dz);
       if (E.cd[i] <= 0 && dist < 20 && E.stun[i] <= 0) {
-        enemyShot(x, E.y[i] + 1.1, z, dx / dist, dz / dist, type.dmg * nightDmg);
+        if (P.pos.y - E.y[i] > 1.5) enemyLob(x, E.y[i] + 1.4, z, type.dmg * nightDmg); // up on a ledge: over the edge
+        else enemyShot(x, E.y[i] + 1.1, z, dx / dist, dz / dist, type.dmg * nightDmg);
         E.cd[i] = 2.2 + random() * 1.5;
       }
     } else if (type.charger) {
@@ -2719,29 +2823,63 @@ function updateEnemies(dt) {
     z += (mz * speed + E.kz[i]) * dt + sz * 0.3;
     E.kx[i] *= decay;
     E.kz[i] *= decay;
-    if (CLIFFS[flow.index(x, z)] && !CLIFFS[flow.index(E.x[i], E.z[i])]) { // a rock face ahead: slide along it
-      if (!CLIFFS[flow.index(x, E.z[i])]) z = E.z[i];
-      else if (!CLIFFS[flow.index(E.x[i], z)]) x = E.x[i];
-      else { x = E.x[i]; z = E.z[i]; }
+    let climbing = false;
+    if (!type.fly) { // fliers go over everything
+      if (!type.climb && CLIFFS[flow.index(x, z)] && !CLIFFS[flow.index(E.x[i], E.z[i])]) { // a rock face ahead: slide along it
+        if (!CLIFFS[flow.index(x, E.z[i])]) z = E.z[i];
+        else if (!CLIFFS[flow.index(E.x[i], z)]) x = E.x[i];
+        else { x = E.x[i]; z = E.z[i]; }
+      }
+
+      for (const id of obstaclesNear(x, z)) {
+        const o = obstacles[id];
+        const ox = x - o.x;
+        const oz = z - o.z;
+        const min = o.r + E.r[i];
+        if (ox * ox + oz * oz >= min * min || E.y[i] > o.top - 0.3) continue;
+        if (type.climb) { // up the rock, the ruin or the tree
+          climbing = true;
+          E.y[i] = Math.min(o.top, E.y[i] + CLIMB * dt);
+          x = E.x[i];
+          z = E.z[i];
+          break;
+        }
+        const d = Math.hypot(ox, oz) || 1e-3;
+        x = o.x + (ox / d) * min;
+        z = o.z + (oz / d) * min;
+      }
     }
 
-    for (const id of obstaclesNear(x, z)) {
-      const o = obstacles[id];
-      const ox = x - o.x;
-      const oz = z - o.z;
-      const min = o.r + E.r[i];
-      if (ox * ox + oz * oz >= min * min || E.y[i] > o.top - 0.3) continue;
-      const d = Math.hypot(ox, oz) || 1e-3;
-      x = o.x + (ox / d) * min;
-      z = o.z + (oz / d) * min;
+    if (type.fly) {
+      E.x[i] = x;
+      E.z[i] = z;
+      E.y[i] += (flyY - E.y[i]) * (1 - Math.exp(-4 * dt));
+    } else if (type.climb) { // a wall ahead: cling to it and climb, then step over the top
+      if (!climbing) {
+        const o = obstacleAt(x, z);
+        const gy = Math.max(terrainH(x, z), o && E.y[i] >= o.top - 0.3 ? o.top : -1e9);
+        if (gy > E.y[i] + 0.5) {
+          climbing = true;
+          E.y[i] = Math.min(gy, E.y[i] + CLIMB * dt);
+        } else {
+          E.x[i] = x;
+          E.z[i] = z;
+          E.y[i] = gy;
+        }
+      }
+      if (E.st[i] !== 5 && climbing && random() < dt * 4) burst(E.x[i], E.y[i] + 0.3, E.z[i], 0xcbb89a, 2, 2, 0.15, 2);
+      if (!climbing && E.st[i] === 5) climberTop(i, type, dist, nightDmg); // just over the edge
+      E.st[i] = climbing ? 5 : E.st[i] === 5 ? 0 : E.st[i];
+    } else {
+      E.x[i] = x;
+      E.z[i] = z;
+      E.y[i] = terrainH(x, z);
     }
-
-    E.x[i] = x;
-    E.z[i] = z;
-    E.y[i] = terrainH(x, z);
     E.face[i] = face;
     const dy = P.pos.y - E.y[i];
-    if (dist < E.r[i] + 0.45 && dy < E.h[i] && dy > -1.6) hurt(type.dmg * (E.elite[i] ? 1.5 : 1) * nightDmg, x, z);
+    if (type.fly ? dist < E.r[i] + 0.6 && Math.abs(dy + 0.6) < 1.1 : dist < E.r[i] + 0.45 && dy < E.h[i] && dy > -1.6) {
+      hurt(type.dmg * (E.elite[i] ? 1.5 : 1) * nightDmg , E.x[i], E.z[i]);
+    }
   }
 }
 
@@ -3337,12 +3475,14 @@ function updateBoss(i, dt) {
 function updateEnemyShots(dt) {
   for (let i = 0; i < EP.n; ) {
     EP.x[i] += EP.vx[i] * dt;
+    EP.y[i] += EP.vy[i] * dt;
     EP.z[i] += EP.vz[i] * dt;
+    if (EP.g[i]) EP.vy[i] -= LOB_G * dt;
     EP.life[i] -= dt;
     const d = Math.hypot(P.pos.x - EP.x[i], P.pos.z - EP.z[i]);
     const dy = P.pos.y + 0.9 - EP.y[i];
     const wall = obstacleAt(EP.x[i], EP.z[i]);
-    let dead = EP.life[i] <= 0 || (wall && EP.y[i] < wall.top);
+    let dead = EP.life[i] <= 0 || (wall && EP.y[i] < wall.top) || EP.y[i] < terrainH(EP.x[i], EP.z[i]); // into the ground
     if (!dead && d < 0.6 && Math.abs(dy) < 1) {
       hurt(EP.dmg[i], EP.x[i], EP.z[i]);
       dead = true;
@@ -3357,11 +3497,19 @@ function updateEnemyShots(dt) {
   }
 }
 
-const DEATH = [...B.death, 0, B.death[0], B.death[3]]; // the new kinds bleed like their cousins
+const DEATH = [...B.death, 0, B.death[0], B.death[3], B.death[1], B.death[0]]; // the new kinds bleed like their cousins
 function reapEnemies() {
   for (let i = 0; i < E.n; ) {
     if (E.hp[i] > 0) { i++; continue; }
     const type = ENEMIES[E.type[i]];
+    if (type.climb && B.climber === 'revive' && !E.revived[i] && !E.lc[i]) { // the crawling bones pull themselves together once (a critical hit ends them)
+      E.revived[i] = 1;
+      E.hp[i] = E.maxhp[i] * 0.5;
+      E.stun[i] = 1.2;
+      burst(E.x[i], E.y[i] + 0.5, E.z[i], 0xe6dcc2, 10, 3, 0.16, 4);
+      i++;
+      continue;
+    }
     const x = E.x[i];
     const y = E.y[i];
     const z = E.z[i];
@@ -4601,7 +4749,7 @@ function dmgRows() {
       <div class="meter"><i style="width:${(v / total) * 100}%"></i></div></div>`;
   }).join('');
 }
-const KILL_NAME = { soldado: 'Soldados', fundeiro: 'Atiradores', carro: 'Carros e investidas', gigante: 'Gigantes', batedor: 'Batedores', escudeiro: 'Escudeiros', elite: 'Campeões e tesoureiros' };
+const KILL_NAME = { soldado: 'Soldados', fundeiro: 'Atiradores', carro: 'Carros e investidas', gigante: 'Gigantes', batedor: 'Batedores', escudeiro: 'Escudeiros', voador: 'Voadores', escalador: 'Escaladores', elite: 'Campeões e tesoureiros' };
 function killRows() {
   const rows = Object.entries(P.killsBy).sort((a, b) => b[1] - a[1]);
   return rows.length ? `<div class="kills">${rows.map(([k, n]) => `<span>${KILL_NAME[k] ?? k}</span><b>${n}</b>`).join('')}</div>` : '<small>Nenhum.</small>';
@@ -5001,7 +5149,7 @@ function syncMeshes(dt) {
     }
     const bob = E.stun[i] > 0 ? 0 : Math.abs(Math.sin(time * 9 + i)) * 0.06;
     dummy.position.set(E.x[i], E.y[i] + bob, E.z[i]);
-    dummy.rotation.set(E.st[i] === 2 ? 0.25 : 0.06, E.face[i], 0);
+    dummy.rotation.set(E.st[i] === 5 ? 1.1 : E.st[i] === 2 ? (ENEMIES[t].fly ? 0.55 : 0.25) : 0.06, E.face[i], 0); // 5: climbing, flat against the rock
     dummy.scale.setScalar(E.elite[i] === 1 ? 1.4 : E.elite[i] ? 1.15 : 1);
     dummy.updateMatrix();
     const m = enemyMeshes[t];
@@ -5603,7 +5751,7 @@ window.arm = (ids, level = 1) => {
 // Debug: poke at the run from the console, e.g. dev.look(Math.PI) or dev.spawnBoss().
 window.dev = {
   icon: () => ICON, dressHero: (id) => { dressHero(id); ICON.redoHero(id); },
-  P, E, boss, stones, altars, chests, obstacles, miracles, spawnBoss, bossMove, hazards, spawnEnemy, cfg, scene, ASSETS, profile, saveProfile, world,
+  P, E, EP, boss, stones, altars, chests, obstacles, miracles, spawnBoss, bossMove, hazards, spawnEnemy, cfg, scene, ASSETS, profile, saveProfile, world,
   look: (y, p = pitch) => { yaw = y; pitch = p; },
   warp: (t) => { time = t; return time; }, // jump the run's clock (tests: guardians, the endless night)
   tick: (n = 1, dt = 1 / 30) => { // run frames by hand, as the loop would (works in a background tab)

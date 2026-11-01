@@ -235,6 +235,131 @@ def mobs():
     bone_mobs()
     jericho_mobs()
     new_mobs()
+    air_wall_mobs()
+
+
+def air_wall_mobs():
+    """Fliers (mob_7_*) and climbers (mob_8_*): the only kinds that get up the rock faces."""
+    # Crow of prey (1 Sm 17:44): black, a heavy beak, wings spread.
+    m = Model('mob_7_ela', 41)
+    INK, INK2 = 0x1d1d24, 0x2e2e3a
+    m.part('ball', 0.3, 2, p=(0, 0.55, 0), s=(0.9, 0.8, 1.6), color=INK)
+    m.part('ball', 0.19, 2, p=(0, 0.72, 0.42), color=INK2)
+    m.part('cone', 0.08, 0.3, 6, p=(0, 0.68, 0.66), r=(PI / 2, 0, 0), color=0x5a5246)
+    for x in (-0.08, 0.08):
+        m.part('ball', 0.035, 1, p=(x, 0.77, 0.56), color=0xf2c14e)
+    for x in (-1, 1):
+        m.part('box', 0.8, 0.05, 0.42, p=(x * 0.58, 0.62, -0.02), r=(0, -x * 0.25, x * 0.28), color=INK2, bevel=0.02)
+        for k in range(4):  # flight feathers
+            m.part('box', 0.08, 0.04, 0.32, p=(x * (0.75 + k * 0.1), 0.66 + k * 0.03, -0.2), r=(0, -x * 0.5, x * 0.28), color=INK)
+        m.part('cone', 0.04, 0.16, 4, p=(x * 0.1, 0.3, 0.12), r=(PI, 0, 0), color=0x5a5246)  # talons
+    m.part('box', 0.3, 0.04, 0.38, p=(0, 0.52, -0.55), r=(-0.2, 0, 0), color=INK2, bevel=0.02)
+    out('mobs', m)
+
+    # Locust of the eighth plague (Êx 10:14): a big one, hind legs folded, wings over the back.
+    m = Model('mob_7_mar', 42)
+    HUSK, HUSK2, WING = 0x8a7a3a, 0x6a5a2a, 0xd9c48a
+    m.part('ball', 0.22, 2, p=(0, 0.55, -0.1), s=(1, 0.9, 2.4), color=HUSK)
+    m.part('ball', 0.2, 2, p=(0, 0.62, 0.48), s=(1, 1.1, 1), color=HUSK2)
+    for x in (-0.12, 0.12):
+        m.part('ball', 0.07, 1, p=(x, 0.7, 0.6), color=0x2a1d14)
+        m.part('cyl', 0.012, 0.008, 0.5, 4, p=(x * 1.2, 0.95, 0.75), r=(0.8, 0, x * 2), color=HUSK2)
+    for x in (-1, 1):
+        m.part('box', 0.32, 0.03, 0.85, p=(x * 0.2, 0.75, -0.2), r=(0.08, 0, x * 0.25), color=WING, bevel=0.01)
+        m.part('cyl', 0.05, 0.03, 0.6, 6, p=(x * 0.26, 0.55, -0.3), r=(-0.9, 0, 0), color=HUSK2)  # hind leg
+        m.part('cyl', 0.03, 0.02, 0.5, 6, p=(x * 0.3, 0.32, -0.45), r=(0.6, 0, 0), color=HUSK2)
+        for z in (0.1, 0.3):
+            m.part('cyl', 0.02, 0.015, 0.3, 4, p=(x * 0.2, 0.38, z), r=(0, 0, x * 0.5), color=HUSK2)
+    out('mobs', m)
+
+    # Winged skull (the four winds, Ez 37:9): a skull with cold eyes and bony, ragged wings.
+    m = Model('mob_7_ossos', 43)
+    m.part('ball', 0.32, 2, p=(0, 0.62, 0), s=(1, 0.95, 1.1), color=BONE2)
+    m.part('box', 0.34, 0.14, 0.26, p=(0, 0.36, 0.12), color=BONE3, bevel=0.03)
+    for x in (-0.12, 0.12):
+        m.part('ball', 0.09, 1, p=(x, 0.66, 0.27), color=DARK)
+        m.part('ball', 0.045, 1, p=(x, 0.66, 0.33), color=0x7ff0ff)
+    m.part('box', 0.06, 0.08, 0.04, p=(0, 0.52, 0.34), color=DARK)
+    for x in (-1, 1):
+        for k in range(3):  # finger bones fanning out, rags between
+            a = 0.35 + k * 0.32
+            bone(m, (x * 0.3, 0.7, -0.05), (x * (0.3 + math.cos(a) * 0.8), 0.7 + math.sin(a) * 0.5, -0.15 - k * 0.08), 0.025)
+        m.part('box', 0.75, 0.03, 0.45, p=(x * 0.62, 0.86, -0.2), r=(0.2, 0, x * 0.45), color=RAG, bevel=0.02)
+    out('mobs', m)
+
+    # Fire watcher of Canaan: a war bird with a torch in its claws.
+    m = Model('mob_7_jerico', 44)
+    PLUM, FLAME, FLAME2 = 0x9a2a24, 0xff8a3d, 0xffd66b
+    m.part('ball', 0.28, 2, p=(0, 0.62, 0), s=(0.9, 0.8, 1.5), color=PLUM)
+    m.part('ball', 0.17, 2, p=(0, 0.8, 0.38), color=0xb8463a)
+    m.part('cone', 0.07, 0.25, 6, p=(0, 0.76, 0.58), r=(PI / 2, 0, 0), color=GOLD)
+    m.part('cone', 0.06, 0.3, 5, p=(0, 1.0, 0.32), r=(-0.5, 0, 0), color=FLAME)  # crest
+    for x in (-1, 1):
+        m.part('box', 0.75, 0.05, 0.4, p=(x * 0.55, 0.7, 0), r=(0, -x * 0.2, x * 0.3), color=PLUM, bevel=0.02)
+        for k in range(4):
+            m.part('box', 0.09, 0.04, 0.3, p=(x * (0.7 + k * 0.1), 0.75 + k * 0.03, -0.18), r=(0, -x * 0.5, x * 0.3), color=FLAME if k % 2 else FLAME2)
+    m.part('cyl', 0.04, 0.04, 0.5, 6, p=(0, 0.25, 0.1), color=DARKWOOD)  # the torch
+    m.part('cone', 0.1, 0.3, 6, p=(0, -0.05, 0.1), r=(PI, 0, 0), color=FLAME)
+    m.part('ball', 0.07, 1, p=(0, 0.0, 0.1), color=FLAME2)
+    out('mobs', m)
+
+    # Scout of Gath: lean, dark, a grappling hook and a net.
+    m = humanoid(Model('mob_8_ela', 45), 0.95, dict(skin=SKIN2, top=0x4a3a2a, bottom=0x6b5a3a, leg=SKIN2, feet=LEATHER, beard=0x2a1a10))
+    m.part('box', 0.3, 0.07, 0.28, p=(0, 1.36, 0), color=0x7a2a24)
+    m.part('torus', 0.2, 0.035, 2 * PI, 12, p=(0.05, 1.0, -0.15), r=(0.3, 0, 0.6), color=0xc9b48a)  # rope coil
+    m.part('box', 0.34, 0.4, 0.06, p=(0, 0.95, -0.18), color=0xb8a070, bevel=0.02)  # net bundle
+    m.part('torus', 0.09, 0.02, PI * 1.3, 8, p=(0.32, 0.5, 0.12), r=(0, PI / 2, 0), color=IRON, **RH(0.95))  # hook
+    m.part('cyl', 0.012, 0.012, 0.35, 4, p=(0.32, 0.7, 0.1), color=0xc9b48a, **RH(0.95))
+    out('mobs', m)
+
+    # Scorpion of Sinai: low, armoured, claws up, the tail curled over with its sting.
+    m = Model('mob_8_mar', 46)
+    SHELL, SHELL2 = 0x7a5232, 0x5a3a22
+    for k in range(4):
+        m.part('ball', 0.26 - k * 0.02, 2, p=(0, 0.3, 0.2 - k * 0.24), s=(1.2, 0.6, 0.9), color=SHELL if k % 2 else SHELL2)
+    for k in range(6):  # the tail
+        a = k * 0.42
+        m.part('ball', 0.12 - k * 0.008, 1, p=(0, 0.35 + math.sin(a) * 0.55, -0.6 - math.cos(a) * 0.2 + k * 0.03), color=SHELL)
+    m.part('cone', 0.06, 0.24, 5, p=(0, 0.95, -0.38), r=(2.2, 0, 0), color=0x2a1d14)
+    for x in (-1, 1):
+        m.part('cyl', 0.04, 0.035, 0.45, 6, p=(x * 0.3, 0.32, 0.5), r=(1.2, x * 0.4, 0), color=SHELL2)
+        m.part('box', 0.18, 0.1, 0.24, p=(x * 0.36, 0.34, 0.78), color=SHELL, bevel=0.03)  # pincer
+        m.part('box', 0.06, 0.08, 0.2, p=(x * 0.42, 0.34, 0.92), r=(0, x * 0.4, 0), color=SHELL2)
+        for k in range(4):
+            m.part('cyl', 0.025, 0.02, 0.4, 4, p=(x * 0.38, 0.18, 0.15 - k * 0.2), r=(0, 0, x * 1.0), color=SHELL2)
+    for x in (-0.07, 0.07):
+        m.part('ball', 0.035, 1, p=(x, 0.42, 0.42), color=0x1a1414)
+    out('mobs', m)
+
+    # Crawling bones: a skeleton on all fours, skull low and forward.
+    m = Model('mob_8_ossos', 47)
+    for k in range(6):  # the spine
+        m.part('ball', 0.06, 1, p=(0, 0.62, 0.35 - k * 0.15), color=BONE2)
+    for k in range(4):  # ribs
+        for x in (-1, 1):
+            bone(m, (0, 0.62, 0.25 - k * 0.12), (x * 0.18, 0.4, 0.25 - k * 0.12), 0.02, BONE3)
+    m.part('ball', 0.18, 2, p=(0, 0.66, 0.55), s=(1, 0.9, 1.15), color=BONE2)
+    for x in (-0.07, 0.07):
+        m.part('ball', 0.045, 1, p=(x, 0.68, 0.7), color=DARK)
+    m.part('box', 0.16, 0.06, 0.12, p=(0, 0.53, 0.62), color=BONE3)
+    for x in (-1, 1):
+        for z, sw in ((0.3, 1), (-0.45, -1)):
+            leg = dict(swing=sw * x * 0.6, pivot=0.62)
+            m.part('cyl', 0.025, 0.025, 0.3, 6, p=(x * 0.15, 0.5, z), r=(0, 0, x * 0.5), color=BONE2, **leg)
+            m.part('cyl', 0.022, 0.022, 0.32, 6, p=(x * 0.25, 0.2, z + 0.05), color=BONE2, **leg)
+            m.part('ball', 0.04, 1, p=(x * 0.25, 0.04, z + 0.08), color=BONE3, **leg)
+    out('mobs', m)
+
+    # Besieger of the wall (Jericó): leather, climbing claws on both hands.
+    m = humanoid(Model('mob_8_jerico', 48), 1, dict(skin=SKIN2, top=0x7a4a24, bottom=0xc9a46e, leg=SKIN2, feet=LEATHER, beard=BLACK, belt=0x5a3418))
+    m.part('box', 0.3, 0.1, 0.3, p=(0, 1.47, 0), color=0x5a3418, bevel=0.02)
+    for x, hand in ((-0.285, LH(1)), (0.285, RH(1))):
+        for k in range(3):
+            m.part('cone', 0.02, 0.14, 4, p=(x + (k - 1) * 0.03, 0.6, 0.06), r=(PI, 0, 0), color=IRON, **hand)
+    m.part('box', 0.1, 0.6, 0.05, p=(0, 0.95, -0.17), color=WOOD)  # a short ladder on the back
+    for k in range(3):
+        m.part('box', 0.22, 0.03, 0.04, p=(0, 0.75 + k * 0.18, -0.19), color=WOOD)
+    out('mobs', m)
 
 
 def tower_shield(m, h, face, rim, emblem=None):
@@ -1599,12 +1724,123 @@ def props():
     bone_props(P)
     stage2_props(P)
     jericho_props(P)
+    vertical_props(P)
     m = P('decor_lily')
     m.part('cyl', 0.35, 0.35, 0.02, 10, color=0x5f8f3a)
     m.part('cyl', 0.2, 0.2, 0.025, 8, p=(0.25, 0.005, 0.1), color=0x7aa84a)
     for j in range(5):
         a = j / 5 * 2 * PI
         m.part('box', 0.08, 0.03, 0.04, p=(0.05 + math.cos(a) * 0.05, 0.05, math.sin(a) * 0.05), r=(0, -a, 0.4), color=0xf3d0e0)
+    out('props', m)
+
+
+def vertical_props(P):
+    """Pieces with height to climb and fight on (world.js places them with matching colliders)."""
+    PLANK, PLANK2, POST = 0x8a6038, 0x74502e, 0x5a3a20
+    # Elá: two Philistine watchtowers (stone base, timber room on top) joined by a broken walkway, 10 m apart.
+    m = P('prop_watchpair', 51)
+    for tx, side in ((0, -1), (10, 1)):
+        bricks(m, 3.4, 2.6, 3.4, 51 + tx, x=tx, moss=True)
+        m.part('box', 3.6, 0.2, 3.6, p=(tx, 2.7, 0), color=CAP, bevel=0.03)
+        m.part('box', 1.8, 2.3, 1.8, p=(tx, 3.95, 0), color=PLANK, bevel=0.03)
+        for k in range(4):  # planks of the room
+            m.part('box', 1.84, 0.06, 1.84, p=(tx, 3.0 + k * 0.55, 0), color=PLANK2)
+        m.part('box', 2.1, 0.16, 2.1, p=(tx, 5.05, 0), color=POST, bevel=0.03)
+        for cx in (-0.9, 0.9):
+            for cz in (-0.9, 0.9):
+                m.part('box', 0.18, 0.5, 0.18, p=(tx + cx, 5.35, cz), color=POST)
+        m.part('box', 0.8, 0.8, 0.8, p=(tx + 1.1, 3.2, 0.7), r=(0, 0.3, 0), color=0x9a7448, bevel=0.04)  # a crate to climb by
+        for k in range(5):  # outside stairs up to the stone base
+            m.part('box', 0.9, 0.5 * (k + 1), 0.7, p=(tx + side * 2.2, 0.25 * (k + 1), -1.4 + k * 0.7), color=SLATE[k % 4], bevel=0.03)
+    for k in range(10):  # the walkway between the rooms, broken in the middle
+        x = 1.3 + k * 0.82
+        if 4.3 < x < 5.7:
+            continue
+        m.part('box', 0.78, 0.1, 1.1, p=(x, 4.97, 0), r=(0, 0, 0.04 * ((k % 3) - 1)), color=PLANK if k % 2 else PLANK2)
+    for x in (1.3, 3.9, 6.1, 8.7):
+        m.part('cyl', 0.07, 0.07, 1.1, 5, p=(x, 4.4, 0.55), color=POST)
+        m.part('cyl', 0.07, 0.07, 1.1, 5, p=(x, 4.4, -0.55), color=POST)
+    m.part('box', 0.6, 0.1, 1.0, p=(4.0, 4.6, 0.1), r=(0, 0, -0.6), color=PLANK2)  # a plank hanging off the break
+    out('props', m)
+
+    # Elá: a Canaanite ruin on a stone platform, reached up a ramp of fallen pillars.
+    m = P('prop_ruinramp', 52)
+    m.part('cyl', 2.9, 3.1, 3.4, 14, p=(0, 1.7, 0), color=SLATE[1], rough=0.05)
+    m.part('cyl', 3.0, 3.0, 0.25, 14, p=(0, 3.45, 0), color=CAP)
+    m.part('box', 2.4, 0.1, 2.4, p=(-0.4, 3.6, 0.3), color=MOSS, jitter=0.15)
+    for k in range(3):  # the fallen pillars, lying from the ground up onto the platform
+        z = -0.9 + k * 0.9
+        m.part('cyl', 0.42, 0.42, 5.2, 10, p=(5.2, 1.75, z), r=(0, 0, 1.0), color=STONE if k % 2 else SLATE[2], rough=0.03)
+    for x, h in ((-1.6, 3.2), (1.0, 2.2)):  # an arch still standing on top
+        bricks(m, 0.8, h, 0.8, 60 + int(h * 10), x=x, y=3.5, z=-1.4, moss=False)
+    m.part('box', 3.4, 0.5, 0.8, p=(-0.3, 3.5 + 3.2 + 0.25, -1.4), r=(0, 0, -0.1), color=CAP, bevel=0.04)
+    out('props', m)
+
+    # Mar: coral terraces in three steps, a chariot wreck on the second.
+    m = P('prop_coralstack', 53)
+    CORAL = [0xe08a6a, 0xd96a5a, 0xf0b08a, 0xc85a6a]
+    for k, (w, d, h, ox, oz) in enumerate(((5.0, 4.2, 1.4, 0, 0), (3.4, 3.0, 2.8, 0.7, 0.4), (2.0, 1.9, 4.2, 1.3, 0.8))):
+        m.part('box', w, h, d, p=(ox, h / 2, oz), color=0xd8c08a, bevel=0.08, rough=0.06)
+        m.part('box', w + 0.1, 0.18, d + 0.1, p=(ox, h - 0.05, oz), color=CORAL[k], bevel=0.05, jitter=0.12)
+        for q in range(5):
+            a = q * 1.3 + k
+            m.part('cone', 0.12, 0.6, 5, p=(ox + math.cos(a) * w * 0.48, h * 0.6, oz + math.sin(a) * d * 0.48), r=(math.sin(a) * 0.4, 0, math.cos(a) * 0.4), color=CORAL[(q + k) % 4])
+    wheel(m, 0.2, 3.25, -0.8, RED, GOLD, r=0.45)
+    m.part('box', 1.1, 0.4, 0.8, p=(-0.4, 3.0, -0.6), r=(0.3, 0.6, 0.2), color=GOLD, bevel=0.03)
+    out('props', m)
+
+    # Mar: the columns of Baal-zephon (Êx 14:2), standing at rising heights: hop from top to top.
+    m = P('prop_columns', 54)
+    for k, h in enumerate((1.5, 2.7, 3.9, 5.1, 6.3)):
+        x = k * 2.3
+        z = math.sin(k * 0.9) * 1.2
+        m.part('cyl', 0.62, 0.7, h - 0.3, 12, p=(x, (h - 0.3) / 2, z), color=0xe2cfa0, rough=0.03)
+        for q in range(3):
+            m.part('cyl', 0.64, 0.64, 0.08, 12, p=(x, 0.4 + q * (h - 0.6) / 3, z), color=BLUE if q % 2 else RED)
+        m.part('cyl', 0.95, 0.6, 0.3, 10, p=(x, h - 0.15, z), color=0xd8b45a)  # lotus capital, flat on top
+    out('props', m)
+
+    # Ossos: a giant's spine arching over the ground, ribs hanging down: walk across it.
+    m = P('prop_spinebridge', 55)
+    for k in range(19):
+        x = -8 + k * (16 / 18)
+        y = 4.6 * (1 - (x / 8.5) ** 2)
+        m.part('cyl', 0.75, 0.75, 0.55, 10, p=(x, y, 0), r=(0, 0, PI / 2 - math.atan(-2 * 4.6 * x / 8.5 ** 2)), color=BONE2 if k % 2 else BONE3, rough=0.04)
+        if 3 < k < 15 and k % 2:
+            for z in (-1, 1):
+                bone(m, (x, y, z * 0.5), (x + 0.3, max(0.3, y - 2.6), z * 1.6), 0.12, BONE3)
+    out('props', m)
+
+    # Ossos: a mausoleum in three stepped tiers.
+    m = P('prop_ziggurat', 56)
+    for k, (w, h) in enumerate(((9.0, 1.5), (6.0, 3.0), (3.2, 4.5))):
+        m.part('box', w, 1.5, w, p=(0, h - 0.75, 0), color=[0x9a7258, 0x8a6a52, 0xa98a6a][k], bevel=0.06, rough=0.05)
+        m.part('box', w + 0.12, 0.14, w + 0.12, p=(0, h - 0.05, 0), color=BONE3, bevel=0.03)
+    for q in range(8):
+        a = q / 8 * 2 * PI
+        m.part('ball', 0.25, 1, p=(math.cos(a) * 4.2, 1.7, math.sin(a) * 4.2), color=BONE2)  # skulls on the first step
+    out('props', m)
+
+    # Jericó: a corner tower in three stages, its top just above the wall walk.
+    m = P('prop_cornertower', 57)
+    for k, (r, top) in enumerate(((2.1, 1.6), (1.45, 3.2), (0.95, 4.8))):
+        m.part('cyl', r, r + 0.1, 1.6, 12, p=(0, top - 0.8, 0), color=BRICK[k % 4], rough=0.04)
+        m.part('cyl', r + 0.08, r + 0.08, 0.14, 12, p=(0, top - 0.04, 0), color=0xd9be8a)
+    for k in range(2):  # steps up to the first stage
+        m.part('box', 0.9, 0.55 * (k + 1), 0.7, p=(2.6, 0.275 * (k + 1), -0.4 + k * 0.7), color=BRICK[k], bevel=0.03)
+    for k in range(6):
+        a = k / 6 * 2 * PI
+        m.part('box', 0.3, 0.35, 0.3, p=(math.cos(a) * 0.85, 4.95, math.sin(a) * 0.85), color=BRICK[2])
+    out('props', m)
+
+    # Jericó: houses stepped against the wall, flat roofs one above the other.
+    m = P('prop_rooftops', 58)
+    for k, h in enumerate((2.0, 3.0, 4.0)):
+        x = k * 2.6
+        m.part('box', 2.5, h, 2.5, p=(x, h / 2, 0), color=BRICK[k % 4], bevel=0.05, rough=0.04)
+        m.part('box', 2.7, 0.16, 2.7, p=(x, h + 0.02, 0), color=0xc9a46e, bevel=0.03)
+        m.part('box', 0.6, 1.0, 0.06, p=(x, 0.5, 1.26), color=DARKWOOD)
+        m.part('box', 0.4, 0.4, 0.06, p=(x + 0.6, h - 0.8, 1.26), color=DARK)
     out('props', m)
 
 

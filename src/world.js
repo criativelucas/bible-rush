@@ -390,8 +390,7 @@ export function buildWorld(scene, id, random, PROPS) {
   // Chests: cedar (costs siclos), the champion's (free) and the challenge chest (sealed: opening it
   // calls an ambush; surviving it pays out).
   const chests = [];
-  function addChest(x, z, kind) {
-    const y = H(x, z);
+  function addChest(x, z, kind, y = H(x, z)) {
     const g = new THREE.Group();
     g.position.set(x, y, z);
     g.rotation.y = random() * 6;
@@ -435,6 +434,26 @@ export function buildWorld(scene, id, random, PROPS) {
     const sn = Math.sin(rot);
     for (const [lx, lz, r, h] of colliders) collide(x + (lx * c + lz * sn) * s, z + (-lx * sn + lz * c) * s, r * s, y + h * s);
   }
+  // Pieces with height (PLANO.md 3): somewhere level enough for the whole footprint (lx 0..len along the piece).
+  function levelSpot(minD, maxD, gap, len, rot) {
+    const c = Math.cos(rot);
+    const sn = Math.sin(rot);
+    return spot(minD, maxD, gap, (x, z) => {
+      if (!dry(x, z, 0.5) || !reachable(x, z)) return false;
+      const hs = [0, 0.5, 1].map((f) => H(x + len * f * c, z - len * f * sn));
+      return Math.max(...hs) - Math.min(...hs) < 0.7 && dry(x + len * c, z - len * sn, 0.5);
+    });
+  }
+  function tall(key, list, n, minD, maxD, gap, len, colliders) {
+    for (let k = 0; k < n; k++) {
+      const rot = random() * Math.PI * 2;
+      const s = levelSpot(minD, maxD, gap, len, rot);
+      if (!s) continue;
+      build(key, geo(`prop_${key}`), s.x, s.z, rot, colliders);
+      placed.push(s, { x: s.x + len * Math.cos(rot), z: s.z - len * Math.sin(rot) });
+      list?.push(s);
+    }
+  }
   const STAIRS = [];
   for (let k = 0; k < 5; k++) for (const lx of [-0.6, 0.6]) STAIRS.push([lx, -1.1 + k * 0.55, 0.75, 0.25 * (k + 1)]);
   for (const lx of [-1.45, 1.45]) for (const lz of [-1.1, 0, 1.1]) STAIRS.push([lx, lz, 0.35, 1.5]);
@@ -473,6 +492,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const bonePiles = [];
   const gates = [];
   let rahab = null;
+  const fallingWalls = [];
   if (ela) {
     // Waterfall: the brook drops off the eastern ledge between two cliffs; more cliffs line the ledge.
     const lx = B.ledgeX;
@@ -494,6 +514,17 @@ export function buildWorld(scene, id, random, PROPS) {
       const s = spot(14, 70 * S, 22);
       if (s) ruinSite(s.x, s.z);
     }
+    // Philistine watchtowers joined by a broken walkway (jump the gap), and ruins up a ramp of fallen pillars.
+    const WATCH = [];
+    for (const tx of [0, 10]) {
+      WATCH.push([tx, 0, 1.7, 2.6], [tx, 0, 0.95, 5.05], [tx + 1.1, 0.7, 0.45, 3.6]);
+      for (let k = 0; k < 5; k++) WATCH.push([tx + (tx ? 2.2 : -2.2), -1.4 + k * 0.7, 0.42, 0.5 * (k + 1)]);
+    }
+    for (let x = 1.3; x < 8.8; x += 0.8) if (x < 4.3 || x > 5.7) WATCH.push([x, 0, 0.55, 5.02]);
+    tall('watchpair', null, 3, 18, 80 * S, 16, 10, WATCH);
+    const RAMP = [[0, 0, 3.0, 3.6], [-1.6, -1.4, 0.5, 6.7], [1.0, -1.4, 0.5, 5.7]];
+    for (let lx = 6.6; lx > 3.2; lx -= 0.5) RAMP.push([lx, 0, 1.2, Math.min(3.6, 2.17 + (5.2 - lx) * 1.557)]);
+    tall('ruinramp', null, 2, 20, 75 * S, 18, 7, RAMP);
     scatter(5, 'wall', geo('prop_wall'), 0.9, 1.4, 0.9, 1.1, { gap: 8 });
     scatter(3, 'tower', geo('prop_tower'), 1.1, 5, 0.9, 1.1, { gap: 10 });
     for (const [kind, n] of [['gold', 12], ['orange', 12], ['red', 8], ['green', 8]]) scatter(n, `tree-${kind}`, geo(`prop_tree_${kind}`), 0.6, 6, 0.85, 1.25);
@@ -563,6 +594,9 @@ export function buildWorld(scene, id, random, PROPS) {
       build('sphinx', geo('prop_sphinx'), s.x, s.z, Math.atan2(s.x, s.z), [[0, -1.2, 1.2, 1.2], [0, 1.2, 1.1, 3.4], [0, 3.2, 0.7, 0.5]]);
       placed.push(s);
     }
+    // Coral terraces with a wrecked chariot, and the columns of Baal-zephon to hop along (Êx 14:2).
+    tall('coralstack', null, 5, 14, 75 * S, 12, 2, [[0, 0, 2.2, 1.4], [0.7, 0.4, 1.55, 2.8], [1.3, 0.8, 0.95, 4.2]]);
+    tall('columns', null, 2, 16, 60 * S, 16, 9.2, [1.5, 2.7, 3.9, 5.1, 6.3].map((h, k) => [k * 2.3, Math.sin(k * 0.9) * 1.2, 0.85, h]));
     for (let k = 0; k < n2(2); k++) {
       const s = spot(14, 70 * S, 10);
       if (s) build('cart', geo('prop_cart'), s.x, s.z, random() * 6.28, [[0, 0, 1.2, 1.0]]);
@@ -583,6 +617,7 @@ export function buildWorld(scene, id, random, PROPS) {
     const n = CITY_N;
     const breach = [Math.round(n * 0.2), Math.round(n * 0.7), Math.round(n * 0.85)];
     const rahabK = Math.round(n * 0.35);
+    const falls = [Math.round(n * 0.45), Math.round(n * 0.95)].filter((k) => k % 6 !== 3);
     for (let k = 0; k < n; k++) {
       const w = wallAt(k, n);
       const rot = -w.a - Math.PI / 2; // along the ring
@@ -593,6 +628,15 @@ export function buildWorld(scene, id, random, PROPS) {
         build('rubble', geo('prop_wallRubble'), w.x, w.z, rot, [[-2, 0, 0.9, 0.8], [0, 0, 0.9, 1.0], [2, 0, 0.9, 0.8]]);
       } else if (k % 6 === 3 && k !== rahabK) {
         build('tower', geo('prop_tower'), w.x, w.z, rot, [[0, 0, 1.2, 5]], 1.15);
+      } else if (falls.includes(k)) { // these stretches fall at 5:00 (main.js), changing the way up
+        const y = H(w.x, w.z) - sink;
+        const wall = M.solid(geo('prop_cityWall'), fadeMat);
+        const rubble = M.solid(geo('prop_wallRubble'), fadeMat);
+        for (const o of [wall, rubble]) { o.position.set(w.x, y, w.z); o.rotation.y = rot; scene.add(o); }
+        rubble.visible = false;
+        const cols = [-2.2, 0, 2.2].map((lx) => ({ x: w.x + lx * Math.cos(rot), z: w.z - lx * Math.sin(rot), r: 1.0, top: y + 4.6 }));
+        obstacles.push(...cols);
+        fallingWalls.push({ wall, rubble, cols, y, x: w.x, z: w.z });
       } else build('cityWall', geo('prop_cityWall'), w.x, w.z, rot, [[-2.2, 0, 1.0, 4.6], [0, 0, 1.0, 4.6], [2.2, 0, 1.0, 4.6]]);
       if (k === rahabK) { // Rahab's house against the outside of the wall, its window toward the plain
         const h = wallAt(k, n, 2.4);
@@ -610,6 +654,14 @@ export function buildWorld(scene, id, random, PROPS) {
       }
     }
     build('tower', geo('prop_tower'), C.x, C.z + 3, 0, [[0, 0, 1.4, 6]], 1.5); // the king of Jericho's house
+    // Corner towers outside the wall (their tops reach the wall walk) and houses stepped up against it inside.
+    for (const f of [0.1, 0.4, 0.6, 0.9]) {
+      const k = Math.round(n * f);
+      const w = wallAt(k, n, 3.4);
+      build('cornertower', geo('prop_cornertower'), w.x, w.z, -w.a, [[0, 0, 2.1, 1.6], [0, 0, 1.45, 3.2], [0, 0, 0.95, 4.8], [2.6, -0.4, 0.42, 0.55], [2.6, 0.3, 0.42, 1.1]]);
+      const h = wallAt(k + 2, n, -2.2);
+      build('rooftops', geo('prop_rooftops'), h.x, h.z, Math.atan2(-Math.cos(h.a), -Math.sin(h.a)), [[0, 0, 1.3, 2.0], [2.6, 0, 1.3, 3.0], [5.2, 0, 1.3, 4.0]]);
+    }
     for (let k = 0; k < 4; k++) build('cart', geo('prop_cart'), C.x - 4 + k * 2.6, C.z - 4, random() * 6, [[0, 0, 1.2, 1.0]]); // market stalls
     placed.push({ x: C.x, z: C.z });
     const O = B.oasis;
@@ -656,6 +708,28 @@ export function buildWorld(scene, id, random, PROPS) {
       build('skull', geo('prop_skull'), s.x, s.z, Math.atan2(-s.x, -s.z), [[0, 0, 1.9, 2.4]], 1.1); // staring at the valley floor
       placed.push(s);
     }
+    // A giant's spine arching over the ground (walk over it), and a stepped mausoleum with a sealed chest on top.
+    const SPINE = [];
+    for (let lx = -8; lx <= 8.01; lx += 0.8) SPINE.push([lx, 0, 0.75, 4.6 * (1 - (lx / 8.5) ** 2) + 0.65]);
+    const spines = [];
+    for (let k = 0; k < 3; k++) {
+      const rot = random() * Math.PI * 2;
+      const e = levelSpot(18, 70 * S, 18, 16, rot); // one end; the piece is centred 8 m along
+      if (!e) continue;
+      const s = { x: e.x + 8 * Math.cos(rot), z: e.z - 8 * Math.sin(rot) };
+      build('spinebridge', geo('prop_spinebridge'), s.x, s.z, rot, SPINE);
+      placed.push(s);
+      spines.push(s);
+    }
+    const zig = [];
+    const flat = (x, z) => dry(x, z, 0.5) && reachable(x, z) && [0, 1.57, 3.14, 4.71].every((a) => Math.abs(H(x + Math.cos(a) * 4.5, z + Math.sin(a) * 4.5) - H(x, z)) < 0.8);
+    const zs = spot(20, 90 * S, 14, flat);
+    if (zs) {
+      build('ziggurat', geo('prop_ziggurat'), zs.x, zs.z, random() * 6.28, [[0, 0, 4.6, 1.5], [0, 0, 3.1, 3.0], [0, 0, 1.7, 4.5]]);
+      placed.push(zs);
+      zig.push(zs);
+    }
+    for (const z of zig) addChest(z.x, z.z, 'dark', H(z.x, z.z) - sink + 4.5);
     for (let k = 0; k < n2(16); k++) { // big red boulders fallen from the cliffs
       const s = spot(30, 112, 8);
       if (!s) continue;
@@ -759,5 +833,14 @@ export function buildWorld(scene, id, random, PROPS) {
     for (const p of pads) p.spout.scale.set(1, 0.6 + 0.4 * Math.abs(Math.sin(time * 3 + p.x)) + (p.cd > 0 ? 2 * p.cd : 0), 1);
   }
 
-  return { B, terrainH: H, slopeAt, obstacles, stones, altars, wells, pads, things, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, gates, rahab, update, horizon: skyMat.uniforms.horizon.value };
+  // Jericho at 5:00: two stretches of the wall come down to rubble.
+  function collapse() {
+    for (const f of fallingWalls) {
+      f.wall.visible = false;
+      f.rubble.visible = true;
+      for (const c of f.cols) c.top = f.y + 0.9;
+    }
+    return fallingWalls;
+  }
+  return { B, terrainH: H, slopeAt, obstacles, collapse, stones, altars, wells, pads, things, chests, addChest, freeSpot, jars, jarMesh, glints, bonePiles, gates, rahab, update, horizon: skyMat.uniforms.horizon.value };
 }

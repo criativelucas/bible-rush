@@ -392,8 +392,11 @@ export const ENEMIES = [
   { id: 'chefe', hp: 7000, speed: 2.6, speedVar: 0, dmg: 25, r: 1.4, h: 4.6, xp: 0, mass: 0, big: true, boss: true },
   { id: 'batedor', hp: 9, speed: 5.4, speedVar: 0.8, dmg: 6, r: 0.36, h: 1.3, xp: 1, mass: 1.2, pack: 4 }, // runners: in packs
   { id: 'escudeiro', hp: 75, speed: 2.2, speedVar: 0.3, dmg: 14, r: 0.62, h: 1.9, xp: 4, mass: 0.3, shield: 0.4 }, // shield-bearers: take 40% less
+  // Nobody else gets up the rock faces: these two do (BIOMES flyer/climber: each map's own trick).
+  { id: 'voador', hp: 12, speed: 5, speedVar: 1, dmg: 8, r: 0.5, h: 1, xp: 2, mass: 1.2, fly: true }, // over everything, swooping
+  { id: 'escalador', hp: 30, speed: 3.6, speedVar: 0.6, dmg: 12, r: 0.45, h: 1.5, xp: 3, mass: 0.8, climb: true }, // up any wall
 ];
-export const MOB_TYPES = [0, 1, 2, 3, 5, 6]; // every kind but the boss (4), drawn from mobs.glb as mob_<type>_<map>
+export const MOB_TYPES = [0, 1, 2, 3, 5, 6, 7, 8]; // every kind but the boss (4), drawn from mobs.glb as mob_<type>_<map>
 
 // ---------- Biomes ----------
 export const smooth = (a, b, x) => {
@@ -491,6 +494,7 @@ export const BIOMES = {
     boss: 'Golias', bossIntro: 'Golias desafia os exércitos de Israel!', summon: 'Filisteus, avante!',
     elite: 'Um campeão anaquim apareceu! Ele guarda um baú.', win: 'Golias caiu no Vale de Elá.',
     verse: ['A batalha é do Senhor.', '1 Sm 17:47'],
+    flyer: 'swoop', climber: 'net', // the flier's and the climber's tricks (main.js flyerAct, climberTop)
     bossModel: 'golias', groundKind: 1, death: [0x9c4a32, 0x7d8a4a, 0x8a5a2b, 0xb98560],
     well: ['Poço de Belém', '2 Sm 23:15'], event: 'Os filisteus avançam em fileira!', carrier: 'Um mercador filisteu foge com ouro!',
     brookZ, ledgeX: 96,
@@ -531,6 +535,7 @@ export const BIOMES = {
     boss: 'Faraó', bossIntro: 'O Faraó persegue o povo até o mar!', summon: 'Carros do Egito, avante!',
     elite: 'Um colosso de pedra despertou! Ele guarda um baú.', win: 'O Faraó foi vencido à beira do Mar Vermelho.',
     verse: ['Cantarei ao Senhor, que triunfou gloriosamente.', 'Êx 15:1'],
+    flyer: 'acid', climber: 'sting', // the flier's and the climber's tricks (main.js flyerAct, climberTop)
     bossModel: 'farao', groundKind: 2, death: [0xf4efe4, 0xf4efe4, 0xe8b84a, 0xd8b98a], summonChariots: true,
     well: ['Fonte de Elim', 'Êx 15:27'], event: 'Os carros do Faraó atravessam a ilha!', carrier: 'Um escriba do Faraó foge com o tesouro!',
     terrain(x, z) {
@@ -567,6 +572,7 @@ export const BIOMES = {
     boss: 'Gogue', bossIntro: 'Gogue, príncipe de Magogue, marcha sobre o vale!', summon: 'Ossos, levantai-vos!',
     elite: 'Um gigante de ossos se ergueu! Ele guarda um baú.', win: 'Gogue caiu no Vale dos Ossos Secos.',
     verse: ['O espírito entrou neles, e viveram: um exército enorme.', 'Ez 37:10'],
+    flyer: 'beam', climber: 'revive', // the flier's and the climber's tricks (main.js flyerAct, climberTop)
     bossModel: 'gogue', groundKind: 3, death: [0xe6dcc2, 0xe6dcc2, 0xc9bc9c, 0xe6dcc2], summonChariots: true,
     well: ['Fonte que dá vida', 'Ez 47:9'], event: 'Vento sobre os ossos: eles se levantam!', carrier: 'O esqueleto do tesoureiro foge com siclos!',
     wadi,
@@ -602,6 +608,7 @@ export const BIOMES = {
     boss: 'Rei de Jericó', bossIntro: 'O rei de Jericó abre as portas e sai para a batalha!', summon: 'Guardas da muralha, avante!',
     elite: 'Um guardião da muralha avançou! Ele guarda um baú.', win: 'As muralhas de Jericó caíram.',
     verse: ['O povo gritou, e as muralhas caíram.', 'Js 6:20'],
+    flyer: 'ember', climber: 'wall', // the flier's and the climber's tricks (main.js flyerAct, climberTop)
     bossModel: 'rei', groundKind: 2, death: [0x7a3a6a, 0xb8463a, 0x8a5a2b, 0xc08a3e], summonChariots: true,
     well: ['Fonte de Eliseu', '2 Rs 2:21'], event: 'As trombetas soam: guardas saem pelas portas da cidade!', carrier: 'Um mercador de Jericó foge com ouro!',
     city: CITY, oasis: OASIS,
@@ -711,7 +718,7 @@ export const unlockedBy = (key) => Object.keys(TROPHIES).find((id) => TROPHIES[i
 
 // Which enemy types join the horde as the minutes pass.
 export function spawnWeights(t) { // by type; slingers survive longer, so keep them rare; runner packs count four
-  return [1, t > 60 ? 0.12 : 0, t > 120 ? 0.15 : 0, t > 180 ? 0.1 : 0, 0, t > 45 ? 0.09 : 0, t > 150 ? 0.08 : 0];
+  return [1, t > 60 ? 0.12 : 0, t > 120 ? 0.15 : 0, t > 180 ? 0.1 : 0, 0, t > 45 ? 0.09 : 0, t > 150 ? 0.08 : 0, t > 75 ? 0.1 : 0, t > 100 ? 0.09 : 0];
 }
 
 // ---------- Save ----------
@@ -862,10 +869,12 @@ export const COSMETICS = {
 export const SLOT_NAME = { head: 'Cabeça', back: 'Costas', trail: 'Rastro', frame: 'Moldura' };
 
 // ---------- Bestiary: kills by map and kind; enough of each completes the map's research (a frame) ----------
-export const BEAST_KINDS = ['soldado', 'fundeiro', 'carro', 'gigante', 'batedor', 'escudeiro', 'elite', 'chefe'];
-export const BEAST_TYPE = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 5, escudeiro: 6, elite: 3 }; // the model each kind shows
-export const RESEARCH = { soldado: 100, fundeiro: 50, carro: 40, gigante: 25, batedor: 80, escudeiro: 30, elite: 2, chefe: 1 };
-export const researchOf = (profile, biome) => BEAST_KINDS.every((k) => (profile.bestiary?.kills?.[`${biome}:${k}`] || 0) >= RESEARCH[k]);
+export const BEAST_KINDS = ['soldado', 'fundeiro', 'carro', 'gigante', 'batedor', 'escudeiro', 'voador', 'escalador', 'elite', 'chefe'];
+export const BEAST_TYPE = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 5, escudeiro: 6, voador: 7, escalador: 8, elite: 3 }; // the model each kind shows
+export const RESEARCH = { soldado: 100, fundeiro: 50, carro: 40, gigante: 25, batedor: 80, escudeiro: 30, voador: 40, escalador: 40, elite: 2, chefe: 1 };
+// The map's frame: the kinds it had when the frames came out (fliers and climbers came later and do not take it away).
+export const RESEARCH_KINDS = ['soldado', 'fundeiro', 'carro', 'gigante', 'batedor', 'escudeiro', 'elite', 'chefe'];
+export const researchOf = (profile, biome) => RESEARCH_KINDS.every((k) => (profile.bestiary?.kills?.[`${biome}:${k}`] || 0) >= RESEARCH[k]);
 
 // ---------- Difficulty: opens map by map, one win at a time ----------
 export const DIFFS = [
@@ -945,8 +954,8 @@ export function addRunToTasks(list, run) {
 
 // ---------- Bestiary names, by map and kind ----------
 export const BEAST_NAMES = {
-  ela: ['Soldado filisteu', 'Fundeiro filisteu', 'Carro filisteu', 'Gigante anaquim', 'Batedor filisteu', 'Escudeiro filisteu'],
-  mar: ['Soldado egípcio', 'Arqueiro egípcio', 'Carro do Faraó', 'Colosso de pedra', 'Corredor egípcio', 'Guarda do Faraó'],
-  ossos: ['Esqueleto', 'Esqueleto atirador', 'Carro de ossos', 'Gigante de ossos', 'Esqueleto ligeiro', 'Muralha de ossos'],
-  jerico: ['Guarda de Jericó', 'Fundeiro cananeu', 'Carro cananeu', 'Guardião da muralha', 'Espião cananeu', 'Porta-escudo de Jericó'],
+  ela: ['Soldado filisteu', 'Fundeiro filisteu', 'Carro filisteu', 'Gigante anaquim', 'Batedor filisteu', 'Escudeiro filisteu', 'Corvo de rapina', 'Batedor de Gate'],
+  mar: ['Soldado egípcio', 'Arqueiro egípcio', 'Carro do Faraó', 'Colosso de pedra', 'Corredor egípcio', 'Guarda do Faraó', 'Gafanhoto da praga', 'Escorpião do Sinai'],
+  ossos: ['Esqueleto', 'Esqueleto atirador', 'Carro de ossos', 'Gigante de ossos', 'Esqueleto ligeiro', 'Muralha de ossos', 'Crânio alado', 'Ossada rastejante'],
+  jerico: ['Guarda de Jericó', 'Fundeiro cananeu', 'Carro cananeu', 'Guardião da muralha', 'Espião cananeu', 'Porta-escudo de Jericó', 'Vigia de fogo', 'Sitiador da muralha'],
 };
