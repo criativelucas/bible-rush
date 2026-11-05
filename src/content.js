@@ -104,6 +104,9 @@ export const RELICS = {
   anel: { name: 'Anel de José', ref: 'Gn 41:42', stat: 'gold', base: 0.15, pct: true, label: 'Siclos' },
   cetro: { name: 'Cetro de Judá', ref: 'Gn 49:10', stat: 'dmg', base: 0.06, pct: true, label: 'Dano' },
   harpa: { name: 'Harpa de Davi', ref: '1 Sm 16:23', stat: 'faith', base: 0.15, pct: true, label: 'Fé' },
+  la: { name: 'Lã de Gideão', ref: 'Jz 6:37-40', stat: 'dodge', base: 0.03, pct: true, label: 'Esquiva' },
+  amendoeira: { name: 'Flor de Amendoeira', ref: 'Nm 17:8', stat: 'faith', base: 0.12, pct: true, label: 'Fé' },
+  selo: { name: 'Selo de Jeremias', ref: 'Jr 32:10', stat: 'critDmg', base: 0.15, pct: true, label: 'Dano crítico' },
   // Unlocked by trophies (see TROPHIES).
   tabuas: { name: 'Tábuas da Lei', ref: 'Êx 31:18', stat: 'critDmg', base: 0.25, pct: true, label: 'Dano crítico' },
   escudo: { name: 'Escudo de Abraão', ref: 'Gn 15:1', stat: 'dodge', base: 0.05, pct: true, label: 'Esquiva' },
@@ -226,6 +229,25 @@ export const WEAPONS = {
     levels: [{ dmg: 0.3 }, { area: 0.2 }, { cd: 0.2 }, { count: 1, dmg: 0.3 }],
   },
 
+  espada: {
+    name: 'Espada de Gideão', kind: 'melee', ref: 'Jz 7:20',
+    desc: 'Um corte amplo à frente; alcança mais inimigos, mas empurra menos.',
+    dmg: 32, cd: 1.4, radius: 3.6, arc: 3.4, knock: 5,
+    levels: [{ dmg: 0.25 }, { area: 0.15 }, { cd: 0.15 }, { dmg: 0.35, area: 0.15 }],
+  },
+  incensario: {
+    name: 'Incensário de Arão', kind: 'aura', ref: 'Nm 16:46-48',
+    desc: 'Pulsos de incenso ferem e deixam inimigos comuns lentos por um instante.',
+    dmg: 5, cd: 1.2, radius: 4, slow: 0.35, tint: 0xcab5f4,
+    levels: [{ area: 0.15 }, { dmg: 0.4 }, { cd: 0.15 }, { dmg: 0.4, area: 0.15 }],
+  },
+  rolo: {
+    name: 'Rolo de Zacarias', unit: 'rolo', kind: 'boomerang', ref: 'Zc 5:1-4',
+    desc: 'Um rolo voante atravessa inimigos na ida e no retorno.',
+    dmg: 18, cd: 1.8, count: 1, speed: 18, range: 16, life: 1.6, size: 0.55, proj: 'scroll',
+    levels: [{ count: 1 }, { dmg: 0.25 }, { cd: 0.15 }, { count: 1, dmg: 0.3 }],
+  },
+
   // Evolutions: a weapon at its last level, plus its relic, becomes one of these at the next chest.
   funda_evo: {
     name: 'Pedra do Gigante', evo: true, from: 'funda', needs: 'pedras', unit: 'pedra', kind: 'shot', ref: '1 Sm 17:49',
@@ -301,6 +323,21 @@ export const WEAPONS = {
     name: 'Corvos de Querite', evo: true, from: 'corvos', needs: 'paes', unit: 'bando', kind: 'swarm', bird: true, ref: '1 Rs 17:4',
     desc: 'Cinco bandos de corvos; como levavam pão a Elias, cada bicada cura um pouco.',
     dmg: 9, cd: 0.3, count: 5, radius: 2.4, speed: 12, heal: 0.25, levels: [],
+  },
+  espada_evo: {
+    name: 'Clamor dos Trezentos', evo: true, from: 'espada', needs: 'la', kind: 'melee', ref: 'Jz 7:20-22',
+    desc: 'Cortes largos e poderosos atordoam brevemente os inimigos comuns.',
+    dmg: 72, cd: 1.1, radius: 5.2, arc: 4.6, knock: 7, stun: 0.4, levels: [],
+  },
+  incensario_evo: {
+    name: 'Incenso da Aliança', evo: true, from: 'incensario', needs: 'amendoeira', kind: 'aura', ref: 'Nm 16:48',
+    desc: 'O incenso cobre uma área maior, pulsa mais rápido e prolonga a lentidão dos inimigos comuns.',
+    dmg: 11, cd: 0.8, radius: 5.8, slow: 0.5, tint: 0xe1c8ff, levels: [],
+  },
+  rolo_evo: {
+    name: 'Sentença Voante', evo: true, from: 'rolo', needs: 'selo', kind: 'boomerang', unit: 'rolo', ref: 'Zc 5:4',
+    desc: 'Três rolos atravessam a horda, voltam ao herói e incendeiam quem tocam.',
+    dmg: 38, cd: 1.25, count: 3, speed: 22, range: 20, life: 1.8, size: 0.7, proj: 'scroll', burn: 2, levels: [],
   },
   mo_evo: {
     name: 'Pedra da Torre', evo: true, from: 'mo', needs: 'arco', unit: 'mó', kind: 'sky', target: 'strong', mill: true, ref: 'Jz 9:53',
@@ -836,7 +873,7 @@ export const TOOLS = {
   alforje: { name: 'Alforje maior', desc: 'Leve 3 itens do alforje em vez de 2.', stat: 'pack', max: 1, cost: 600, icon: ['ui', 'scroll'] },
 };
 // Arsenal: weapons that only show up on cards and in chests after you buy them here.
-export const ARSENAL = { machado: 150, carros: 200, gafanhotos: 200, fogo: 250, estaca: 180, lanca: 220, corvos: 260, mo: 320 };
+export const ARSENAL = { machado: 150, carros: 200, gafanhotos: 200, fogo: 250, estaca: 180, lanca: 220, corvos: 260, mo: 320, espada: 180, incensario: 240, rolo: 260 };
 // Mastery: every weapon can be strengthened for good, +10% damage a level (its evolution keeps it).
 export const MASTERY = { per: 0.1, max: 5, cost: 80 };
 export const masteryOf = (profile, id) => profile.mastery?.[WEAPONS[id].from ?? id] || 0;

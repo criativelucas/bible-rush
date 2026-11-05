@@ -72,3 +72,20 @@ Para uma instalação existente do Supabase, execute **somente**
 vitórias do Clássico das partidas da Torre. O deploy do GitHub Pages não aplica SQL.
 O ranking continua baseado em resultados enviados pelo cliente; retirar ferramentas
 de debug da origem pública não equivale a uma validação antitrapaça no servidor.
+
+## Novas armas e relíquias
+
+As armas são desbloqueadas em **Mercado → Arsenal**. Depois da compra, aparecem
+nas cartas de nível e no Caminho do Arsenal da Torre; têm cinco níveis e maestria.
+As novas relíquias podem aparecer em baús, caravanas e no Caminho das Relíquias.
+
+| Arma | Preço | Estilo | Relíquia para evoluir | Evolução |
+| --- | ---: | --- | --- | --- |
+| Espada de Gideão | 180 | Corte amplo, pouco empurrão | Lã de Gideão | Clamor dos Trezentos |
+| Incensário de Arão | 240 | Aura de dano e lentidão em inimigos comuns | Flor de Amendoeira | Incenso da Aliança |
+| Rolo de Zacarias | 260 | Projétil que atravessa e retorna | Selo de Jeremias | Sentença Voante |
+
+Para evoluir, chegue ao nível 5 da arma, encontre a relíquia e abra outro baú.
+Lã dá esquiva (+3% na raridade Barro), Flor aumenta o ganho de Fé (+12%) e
+Selo aumenta o multiplicador de dano crítico (+0,15). A raridade amplia esses bônus.
+As mecânicas são adaptações lúdicas, inspiradas nas referências indicadas nos itens.

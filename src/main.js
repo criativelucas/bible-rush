@@ -458,7 +458,7 @@ function instanced(geo, mat, max, colors = false, shadow = false) {
 const enemyMat = M.toon(0xffffff, { walk: true, fade: true, rim: true });
 const enemyMeshes = []; // by type (sparse: the boss is a rig)
 for (const t of MOB_TYPES) enemyMeshes[t] = instanced(ASSETS.mobs[`mob_${t}_${BABEL ? 'ela' : BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true); // the tower swaps them floor by floor
-const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca'];
+const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca', 'scroll'];
 const shotMeshes = PROJ.map((k) => instanced(ASSETS.items[`proj_${k}`], M.toon(), MAX_SHOTS, true));
 const eshotMesh = instanced(new THREE.IcosahedronGeometry(0.25, 0), hdr(new THREE.MeshBasicMaterial({ color: 0xff3fb4 }), 2), MAX_ESHOTS);
 const manaMesh = instanced(ASSETS.items.proj_mana, hdr(new THREE.MeshBasicMaterial({ vertexColors: true }), 1.7), MAX_GEMS, true);
@@ -3835,7 +3835,7 @@ function fireShot(s, t, spread) {
 }
 
 // Hits every enemy within r of (x, z) whose body spans height y.
-function hitArea(x, y, z, r, dmg, knock = 0, burn = 0, stun = 0) {
+function hitArea(x, y, z, r, dmg, knock = 0, burn = 0, stun = 0, slow = 0) {
   const n = hash.query(x, z, r + MAX_R, near);
   for (let q = 0; q < n; q++) {
     const j = near[q];
@@ -3847,6 +3847,7 @@ function hitArea(x, y, z, r, dmg, knock = 0, burn = 0, stun = 0) {
     damage(j, dmg, ex, ez, knock);
     if (burn) E.burn[j] = Math.max(E.burn[j], burn);
     if (stun && !ENEMIES[E.type[j]].boss) E.stun[j] = Math.max(E.stun[j], stun);
+    if (slow && !ENEMIES[E.type[j]].boss) E.slow[j] = Math.max(E.slow[j], slow);
   }
 }
 // Like hitArea, but each enemy only once per sweep id (a chariot runs over everyone once).
@@ -3935,10 +3936,11 @@ function updateWeapons(dt) {
         if (hitNow) hitArea(ox, oy, oz, s.size, s.dmg, 4, s.burn || 0);
       }
     } else if (s.kind === 'aura') {
-      auraRadius = s.radius;
+      if (!s.slow) auraRadius = Math.max(auraRadius, s.radius);
       if (w.timer > 0) continue;
       w.timer = s.cd;
-      hitArea(px, py + 0.5, pz, s.radius, s.dmg, 0, s.burn || 0);
+      hitArea(px, py + 0.5, pz, s.radius, s.dmg, 0, s.burn || 0, 0, s.slow || 0);
+      if (s.slow) addFx(ringGeo, s.tint, px, 0.2, pz, s.radius * 0.6, 0.55, { grow: 0.65, ground: true, opacity: 0.3 });
     } else if (s.kind === 'sky') {
       if (w.timer > 0) continue;
       const m = nearestEnemies(px, pz, 16, s.range, -1);

@@ -91,6 +91,49 @@ test('legacy Tower seconds are not migrated into a fake floor record', () => {
   assert.deepEqual(C.migrateProfile(migrated),migrated);
   assert.equal(C.migrateProfile({records:{babel:{best:180}},pending:[{p_mode:'babel',p_floor:3}]}).records.babel.bestFloor,3);
 });
+test('new Arsenal weapons stay locked until purchased, then can evolve', () => {
+  const fresh=C.migrateProfile({v:C.PROFILE_VERSION,trophies:{inicio:1}});
+  const ids=['espada','incensario','rolo'];
+  for (const id of ids) assert.ok(C.lockedWeapons(fresh).has(id));
+  const locked=C.rollOffers({weapons:[],luck:0,locked:C.lockedWeapons(fresh)},()=>0.5,100);
+  assert.ok(!locked.some(o=>ids.includes(o.id)));
+  for (const id of ids) {
+    const purchased=C.migrateProfile({...fresh,unlocked:[`weapon:${id}`]});
+    const offers=C.rollOffers({weapons:[],luck:0,locked:C.lockedWeapons(purchased)},()=>0.5,100);
+    assert.ok(offers.some(o=>o.kind==='weapon'&&o.id===id));
+    const evo=C.EVOLUTIONS[id];
+    assert.ok(C.openSet(fresh).has(`relic:${evo.needs}`));
+    assert.equal(C.readyToEvolve([{id,level:4}],[{id:evo.needs}]).length,0);
+    assert.equal(C.readyToEvolve([{id,level:5}],[{id:evo.needs}]).length,1);
+    const st=C.baseStats(C.HEROES.davi);
+    const base=C.weaponStats(id,5,st), evolved=C.weaponStats(evo.into,5,st);
+    const throughput=w=>w.dmg*(w.count||1)/w.cd;
+    const ratio=throughput(evolved)/throughput(base);
+    assert.ok(ratio>1 && ratio<2.5,`${id}: evolution should be a useful, bounded improvement`);
+  }
+});
+test('incense slows nearby living common enemies, never bosses or distant targets', () => {
+  const E={hp:[100,100,0,100],type:[0,C.BOSS,0,0],x:[1,1,1,20],z:[0,0,0,0],y:[0,0,0,0],r:[0.4,1.4,0.4,0.4],h:[2,4.6,2,2],slow:[0,0,0,0]};
+  const hits=[];
+  const c=vm.createContext({E,ENEMIES:C.ENEMIES,MAX_R:1.4,near:[0,1,2,3],hash:{query:()=>4},damage:(i)=>hits.push(i)});
+  vm.runInContext(fn('hitArea')+'\nhitArea(0,1,0,4,5,0,0,0,0.35);',c);
+  assert.deepEqual(hits,[0,1]);
+  assert.deepEqual(E.slow,[0.35,0,0,0]);
+  E.slow[0]=2;
+  vm.runInContext('hitArea(0,1,0,4,5,0,0,0,0.35);',c);
+  assert.equal(E.slow[0],2,'incense must not shorten a stronger active slow');
+});
+test('new relic bonuses scale with rarity and survive profile export', () => {
+  for (const id of ['la','amendoeira','selo']) {
+    const relic=C.RELICS[id];
+    const st=C.baseStats(C.HEROES.davi), before=st[relic.stat];
+    C.applyEntry(st,relic,4);
+    assert.ok(Math.abs(st[relic.stat]-before-relic.base*5)<1e-10);
+  }
+  const profile=C.migrateProfile({v:C.PROFILE_VERSION,unlocked:['weapon:espada','weapon:incensario','weapon:rolo'],mastery:{espada:2},bestiary:{r:{la:1,amendoeira:1,selo:1}}});
+  assert.deepEqual(C.importCode(C.exportCode(profile)),profile);
+  assert.equal(C.masteryOf(profile,'espada_evo'),2);
+});
 // Offline retry: use the real module with a mocked network; never contact the production server.
 const previousFetch=globalThis.fetch;
 let fail=true;
