@@ -118,7 +118,7 @@ language sql stable security definer set search_path = public as $$
   with mine as (
     select r.* from runs r
     where r.season = p_season and (p_map is null or r.map = p_map)
-      and case p_board when 'abates' then true when 'relogio' then r.won when 'torre' then r.mode = 'babel' else r.mode = 'surv' end
+      and case p_board when 'abates' then true when 'relogio' then r.won and r.mode = 'classic' when 'torre' then r.mode = 'babel' else r.mode = 'surv' end
   ), scored as (
     select m.player,
       case p_board when 'abates' then sum(m.kills) when 'relogio' then min(m.seconds) when 'torre' then max(m.floor) else max(m.seconds) end::bigint as value,

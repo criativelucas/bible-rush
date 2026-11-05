@@ -45,3 +45,30 @@ Depois abra http://localhost:5173.
 - `assets/models/`: modelos 3D gerados no Blender por `tools/build_models.sh`
 - `assets/ui/`: molduras e ícones em pixel art gerados por `tools/make_ui.py`
 - `check.mjs`: testes das regras do jogo (`node check.mjs`)
+
+## Verificações
+
+```bash
+node check.mjs
+node check-regressions.mjs
+```
+
+Ferramentas de teste (`dev`, `arm`, `bench` e tecla K) só ficam disponíveis em
+localhost com `?debug=1`. Essas partidas não são enviadas ao ranking.
+
+## Atualização de balanceamento e ranking
+
+A horda da Sobrevivência agora usa tempo em combate, exige amostras recentes,
+varia no máximo 10% a cada 30 segundos e tem multiplicador limitado a 8.
+A Torre usa sua progressão por andar e tempo, sem esse multiplicador adaptativo.
+Chefes secretos aguardam pelo menos 3 minutos e nível 12; na Torre, a Serpente
+aguarda o andar 6 e não aparece em andares de chefe.
+
+Recordes locais da Torre agora separam andares de segundos. O antigo campo misturado
+é preservado, mas o andar é recuperado apenas de partidas pendentes e do troféu de Ninrode.
+
+Para uma instalação existente do Supabase, execute **somente**
+`tools/fix-ranking-classic.sql` no SQL Editor para separar a classificação de
+vitórias do Clássico das partidas da Torre. O deploy do GitHub Pages não aplica SQL.
+O ranking continua baseado em resultados enviados pelo cliente; retirar ferramentas
+de debug da origem pública não equivale a uma validação antitrapaça no servidor.

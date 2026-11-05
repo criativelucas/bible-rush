@@ -32,7 +32,7 @@ export function pickWeighted(weights, rand) {
 export const HEROES = {
   davi: {
     name: 'Davi', role: 'Ágil, à distância', hp: 100, speed: 8.5, weapon: 'funda', color: 0xe8d3a8,
-    passive: ['Pedras Lisas', 'Cada 5º projétil causa 5× dano. +50% de dano em gigantes, elites e chefes.'],
+    passive: ['Pedras Lisas', 'Cada 5º projétil causa 5× dano. +50% em gigantes, elites e chefes; mira na cabeça dos chefes para causar críticos.'],
     move: ['Rolamento', 'Esquiva rápida e invencível.', 2.5],
     miracle: ['Harpa', 'Por 6 s, inimigos por perto ficam lentos e você se cura.'],
   },
@@ -126,6 +126,12 @@ export function statText(e, tier) {
 export function applyEntry(st, e, tier) {
   st[e.stat] += entryValue(e, tier);
   for (const k in e.extra || {}) st[k] += e.extra[k];
+}
+
+// Avoid spending rewards on stats already at their effective cap.
+export function entryUseful(st, e) {
+  const caps = { cd: 0.6, armor: 0.6, crit: 1, dodge: 1 };
+  return !(e.stat in caps) || (st[e.stat] || 0) < caps[e.stat] || !!e.extra;
 }
 
 export function rollRelic(luck, rand, min = 0, ids = Object.keys(RELICS)) {
@@ -310,7 +316,7 @@ export const EVOLUTIONS = Object.fromEntries(Object.entries(WEAPONS).filter(([, 
 export function readyToEvolve(weapons, relics) {
   return weapons.filter((w) => {
     const e = EVOLUTIONS[w.id];
-    return e && w.level >= MAX_LEVEL && relics.some((r) => r.id === e.needs);
+    return e && !w.evolving && w.level >= MAX_LEVEL && relics.some((r) => r.id === e.needs);
   });
 }
 
@@ -362,7 +368,7 @@ export function describeLevel(id, level) {
 
 // Level-up cards: new weapons (if a slot is free), upgrades for owned weapons, scrolls. No duplicates.
 // locked: weapons not bought yet (Arsenal); banned: weapons/scrolls the player banished this run.
-export function rollOffers({ weapons, luck, locked = new Set(), banned = new Set() }, rand, n = 3) {
+export function rollOffers({ weapons, luck, stats = {}, locked = new Set(), banned = new Set() }, rand, n = 3) {
   const owned = new Map(weapons.map((w) => [w.id, w.level]));
   const evolved = new Set(weapons.map((w) => WEAPONS[w.id].from).filter(Boolean));
   const pool = [];
@@ -373,7 +379,7 @@ export function rollOffers({ weapons, luck, locked = new Set(), banned = new Set
       if (weapons.length < MAX_WEAPONS) pool.push({ kind: 'weapon', id, w: 1.2 });
     } else if (lv < MAX_LEVEL) pool.push({ kind: 'upgrade', id, w: 2.5 });
   }
-  for (const id in SCROLLS) if (!banned.has(id)) pool.push({ kind: 'scroll', id, w: 0.5 });
+  for (const id in SCROLLS) if (!banned.has(id) && entryUseful(stats, SCROLLS[id])) pool.push({ kind: 'scroll', id, w: 0.5 });
   const out = [];
   while (out.length < n && pool.length) {
     const o = pool.splice(pickWeighted(pool.map((p) => p.w), rand), 1)[0];
@@ -772,6 +778,12 @@ export function migrateProfile(raw) {
   const p = isObj(raw) ? raw : {};
   const o = (k) => (isObj(p[k]) ? p[k] : {});
   const a = (k) => (Array.isArray(p[k]) ? p[k] : []);
+  const records = { ...o('records') };
+  if (isObj(records.babel) && records.babel.bestFloor === undefined) {
+    // Legacy 'best' mixes seconds and floors: never reinterpret that corrupted value as an altitude.
+    const floors = a('pending').filter(r => r?.p_mode === 'babel' && Number.isInteger(r.p_floor) && r.p_floor >= 1 && r.p_floor <= 500).map(r => r.p_floor);
+    records.babel = { ...records.babel, bestFloor: Math.max(o('trophies').babel ? 10 : 0, ...floors) };
+  }
   const unlocked = a('unlocked');
   if ((p.v ?? 1) < 3 && Object.keys(o('trophies')).length) for (const id in ARSENAL) if (!unlocked.includes(`weapon:${id}`)) unlocked.push(`weapon:${id}`);
   return {
@@ -782,7 +794,7 @@ export function migrateProfile(raw) {
     upgrades: o('upgrades'), tools: o('tools'), bag: o('bag'), heroes: o('heroes'), mastery: o('mastery'),
     stats: o('stats'), // kills, runs and seconds, summed over every run
     mapWins: isObj(p.mapWins) ? p.mapWins : Object.fromEntries(Object.values(o('wins')).flatMap((w) => Object.keys(w)).map((m) => [m, 0])), // best difficulty won
-    bestiary: o('bestiary'), records: o('records'), seen: o('seen'), tasks: o('tasks'),
+    bestiary: o('bestiary'), records, seen: o('seen'), tasks: o('tasks'),
     unlocked, owned: a('owned'),
   };
 }

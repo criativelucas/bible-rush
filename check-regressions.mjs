@@ -1,0 +1,105 @@
+// Runtime regressions without WebGL: execute the real functions with visual effects stubbed.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import * as C from './src/content.js';
+import { nextHordeScale } from './src/sim.js';
+const source = fs.readFileSync(new URL('./src/main.js', import.meta.url), 'utf8');
+const fn = name => source.match(new RegExp(`function ${name}\\([^]*?\\n\\}`))[0];
+const noop = () => {};
+let passed = 0;
+function test(name, run) { run(); passed++; console.log(`ok - ${name}`); }
+
+test('timeout ends the frame before regeneration or combat', () => {
+  const c=vm.createContext({time:0,state:'play',M:{shared:{uTime:{}}},updateSky:noop,
+    tower:{clear:false,left:0},P:{hp:100,st:{revives:1}},toast:noop,
+    updatePlayer:()=>assert.fail('regeneration must not run after timeout')});
+  vm.runInContext(fn('towerDirector')+'\n'+fn('step')+"\nfunction startDeath(){state='dying'}; function director(dt){towerDirector(dt)}; step(1/30)",c);
+  assert.equal(c.state,'dying'); assert.equal(c.P.hp,0); assert.equal(c.P.st.revives,0);
+});
+test('Tower record stores floor independently of elapsed time', () => {
+  const profile={records:{babel:{best:900,bestFloor:2}}};
+  const c=vm.createContext({BABEL:true,profile,tower:{n:3},HEROES:C.HEROES,P:{hero:'davi'},time:180,SURV:false,BIOME_ID:'babel',endScreen:noop});
+  vm.runInContext(fn('die')+'\ndie();',c);
+  vm.runInContext(source.match(/  const recordKey =[^]*?  if \(won\) rec.fastest/)[0].replace(/  if \(won\) rec.fastest$/,''),c);
+  assert.equal(profile.records.babel.bestFloor,3); assert.equal(profile.records.babel.bestSeconds,180);
+});
+test('a reserved weapon cannot be evolved by a second chest', () => {
+  const w={id:'funda',level:5}; const relics=[{id:'pedras'}];
+  assert.equal(C.readyToEvolve([w],relics).length,1);
+  w.evolving=true; assert.equal(C.readyToEvolve([w],relics).length,0);
+  const c=vm.createContext({w,WEAPONS:C.WEAPONS,EVOLUTIONS:C.EVOLUTIONS,RELICS:C.RELICS,MAX_LEVEL:5,refreshWeapons:noop,banner:noop,ICON:{weapon:{}},award:noop,burst:noop,chord:noop,P:{pos:{x:0,y:0,z:0}}});
+  vm.runInContext(fn('evolve')+'\nevolve(w);evolve(w);',c);
+  assert.equal(w.id,'funda_evo'); assert.equal(w.evolving,false);
+});
+test('Davi fifth projectile is 5x without a forced critical', () => {
+  const fields=['x','y','z','speed','life','bounce','pierce','last','dmg','seek','size','kind','crit','ret','glow','burn','src'];
+  const S={n:0,...Object.fromEntries(fields.map(k=>[k,new Float64Array(10)]))};
+  const E={type:[0],elite:[0],hp:[1000],engaged:[-1],lc:[0],flash:[0],x:[0],y:[0],z:[0],h:[1.6]};
+  const P={hero:'davi',shotCount:4,pos:{x:0,y:0,z:0},psalms:[],st:{crit:0.05,critDmg:0,burn:0},dmgBy:{}};
+  const c=vm.createContext({S,E,P,MAX_SHOTS:600,aimShot:noop,PROJ:['stone'],srcSlot:0,ENEMIES:C.ENEMIES,globalDmg:()=>1,dmgSrc:'funda',random:()=>0.9,dmgNumber:noop,burst:noop,time:0,lastHitSound:0,s:C.weaponStats('funda',1,C.baseStats(C.HEROES.davi))});
+  vm.runInContext(fn('fireShot')+'\n'+fn('damage')+'\nfireShot(s,0,0);damage(0,S.dmg[0],0,0,0,S.crit[0]>0);',c);
+  assert.equal(E.hp[0],940); assert.equal(E.engaged[0],0);
+});
+test('large swarms keep finite positions with more units than target slots', () => {
+  const E={n:30,hp:Array(30).fill(1),x:Array.from({length:30},(_,i)=>i/2),z:Array(30).fill(0)};
+  const c=vm.createContext({E,targets:new Int32Array(16),targetD:new Float32Array(16),P:{pos:{x:0,z:0}},time:0,terrainH:()=>0,hitArea:noop,swarmDraw:[],w:{timer:0},s:{count:32,cd:0.3,speed:10,radius:2,dmg:5}});
+  vm.runInContext(fn('nearestEnemies')+'\n'+fn('updateSwarms')+'\nupdateSwarms(w,s,1/30);',c);
+  assert.equal(c.w.swarm.length,32);
+  assert.ok(c.w.swarm.every(s=>[s.x,s.z,s.vx,s.vz].every(Number.isFinite)));
+});
+test('movement remains positive after repeated slow pacts', () => {
+  const P={st:C.baseStats(C.HEROES.davi),mods:{},hp:100};
+  const c=vm.createContext({P,refreshWeapons:noop,award:noop,toast:noop,pc:C.PACTS.find(p=>p.good[0]==='regen')});
+  vm.runInContext(fn('applyPact')+'\nfor(let i=0;i<10;i++) applyPact(pc);',c);
+  assert.equal(P.st.speed,-0.75);
+});
+test('adaptive pressure freezes on stale/insufficient samples and changes gradually', () => {
+  assert.equal(nextHordeScale(2,0,60,0,0),2);
+  assert.equal(nextHordeScale(2,0,60,100,11),2);
+  assert.equal(nextHordeScale(2,6,30,100,0),2);
+  assert.ok(Math.abs(nextHordeScale(2,0,30,100,0)-2.2)<1e-10);
+  assert.ok(nextHordeScale(2,12,30,100,0)<2);
+  assert.equal(nextHordeScale(8,0,30,100,0),8);
+  assert.equal(nextHordeScale(1,12,30,100,0),1);
+});
+test('capped cooldown and critical scrolls are not offered', () => {
+  const list=C.rollOffers({weapons:[],luck:0,stats:{cd:0.6,crit:1}},()=>0.5,100);
+  assert.ok(!list.some(o=>o.kind==='scroll'&&['prontidao','precisao'].includes(o.id)));
+});
+test('free chests count in the payout', () => {
+  const line=source.match(/  const pay = runDenarios\([^\n]+/)[0];
+  const c=vm.createContext({runDenarios:C.runDenarios,time:0,P:{kills:0,chests:3},stonesDone:0,chestsOpened:0,won:false});
+  assert.equal(vm.runInContext(line+'\npay.total',c),15);
+});
+test('floor transition removes all state of an abandoned secret boss', () => {
+  const pos={set:noop};
+  const mapFoe={model:'ninrode'};
+  const c=vm.createContext({boss:{spawned:true,idx:5},bossRig:{group:{visible:true}},$:()=>({hidden:false}),FOE:{model:'serpente'},MAP_FOE:mapFoe,KIT:{},BOSS_KITS:{ninrode:{}},hordeK:4,
+    tower:{layout:'trono'},floorTime:C.floorTime,floorGoal:C.floorGoal,world:{door:{set:noop},towerFloor:()=>({fire:false})},TOWER_LAYOUTS:C.TOWER_LAYOUTS,
+    random:()=>0,E:{n:1},EP:{n:3},hazards:[1],clearBossFx:noop,G:{n:0},reindexObstacles:noop,FLOOR_MAPS:C.FLOOR_MAPS,MOB_TYPES:[],B:{},BIOMES:C.BIOMES,
+    terrainH:()=>0,obstacles:[],P:{pos,vel:{set:noop}},heroRig:null,banner:noop,chord:noop});
+  vm.runInContext(fn('towerFloorStart')+'\ntowerFloorStart(2);',c);
+  assert.equal(c.E.n,0);assert.equal(c.boss.spawned,false);assert.equal(c.boss.idx,-1);
+  assert.equal(c.bossRig.group.visible,false);assert.equal(c.FOE,mapFoe);assert.equal(c.hordeK,1);
+});
+test('legacy Tower seconds are not migrated into a fake floor record', () => {
+  const old={records:{babel:{best:900}},trophies:{babel:1}};
+  const migrated=C.migrateProfile(old);
+  assert.equal(migrated.records.babel.bestFloor,10);
+  assert.equal(old.records.babel.bestFloor,undefined);
+  assert.deepEqual(C.migrateProfile(migrated),migrated);
+  assert.equal(C.migrateProfile({records:{babel:{best:180}},pending:[{p_mode:'babel',p_floor:3}]}).records.babel.bestFloor,3);
+});
+// Offline retry: use the real module with a mocked network; never contact the production server.
+const previousFetch=globalThis.fetch;
+let fail=true;
+globalThis.fetch=async()=>({ok:!fail,status:fail?400:200,json:async()=>fail?{message:'partidas sobrepostas'}:'ok'});
+try {
+  const {flushPending}=await import('./src/online.js');
+  const profile={pid:'test',name:'Tester',pending:[{p_seconds:300}]};
+  await flushPending(profile); assert.equal(profile.pending.length,1);
+  fail=false; await flushPending(profile); assert.equal(profile.pending.length,0);
+  passed++; console.log('ok - overlapping offline submissions stay queued until accepted');
+} finally { globalThis.fetch=previousFetch; }
+console.log(`${passed} regression checks passed`);

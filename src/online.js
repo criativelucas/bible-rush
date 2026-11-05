@@ -55,7 +55,7 @@ export async function submitRun(profile, run) {
     await rpc('submit_run', body);
     return 'sent';
   } catch (e) {
-    if (/Failed to fetch|NetworkError|erro 5/.test(e.message)) (profile.pending ??= []).push(body); // try again later
+    if (/Failed to fetch|NetworkError|erro 5|partidas sobrepostas/.test(e.message)) (profile.pending ??= []).push(body); // try again later
     return e.message;
   }
 }
@@ -70,7 +70,7 @@ export async function flushPending(profile) {
     await rpc('submit_run', body);
     profile.pending.shift();
   } catch (e) {
-    if (!/Failed to fetch|NetworkError|erro 5/.test(e.message)) profile.pending.shift(); // refused for good: drop it
+    if (!/Failed to fetch|NetworkError|erro 5|partidas sobrepostas/.test(e.message)) profile.pending.shift(); // refused for good: drop it
   }
 }
 

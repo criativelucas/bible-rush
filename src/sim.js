@@ -139,3 +139,11 @@ export class SpatialHash extends Grid {
     return m;
   }
 }
+
+// Adapt only to recent, sufficiently sampled combat. At most 10% change per 30 seconds;
+// stale observations must never wind up the controller while the player cannot kill.
+export function nextHordeScale(current, average, dt, samples, age) {
+  if (samples < 10 || age > 10 || dt <= 0) return current;
+  const error = Math.max(-1, Math.min(1, (6 - average) / 6));
+  return Math.max(1, Math.min(8, current * Math.exp(error * Math.log(1.1) * dt / 30)));
+}

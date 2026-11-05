@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { rng, FlowField, SpatialHash } from './sim.js';
+import { rng, FlowField, SpatialHash, nextHordeScale } from './sim.js';
 import {
   HEROES, WEAPONS, SCROLLS, RELICS, RARITY, ENEMIES, BOSS, BIOMES, EVOLUTIONS, PICKUPS, MAX_LEVEL, TROPHIES, TIERS, openSet, migrateProfile, exportCode, importCode, unlockedBy,
-  TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue,
+  TRAINING, TOOLS, ARSENAL, SUPPLIES, levelCost, trainingText, lockedWeapons, packSize, runDenarios, TROPHY_PAY, applyMarket, entryValue, entryUseful,
   STAGES, STAGE_XP, heroStage, runXp, stageBonus, stageText, COSMETICS, SLOT_NAME, BEAST_KINDS, RESEARCH, RESEARCH_KINDS, researchOf, MASTERY, masteryOf,
   TROPHY_CATS, DIFFS, diffOpen, GUARDIAN_EVERY, ENDLESS_NIGHT, PACTS, TASKS, TASK_PAY, TASK_BONUS, dayKey, weekKey, rollTasks, taskDef, addRunToTasks, BEAST_NAMES, hashStr, MOB_TYPES, BEAST_TYPE,
   SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS, TOWER, FLOOR_MAPS, TOWER_LAYOUTS, TONGUES, floorGoal, floorTime, PSALMS,
@@ -31,6 +31,8 @@ const unlockName = (key) => {
 
 // ---------- URL + settings ----------
 const params = new URLSearchParams(location.search);
+// Debug tools are local-only; these sessions never submit competitive scores.
+const DEBUG = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) && params.get('debug') === '1';
 const wantBiome = params.get('biome');
 let BABEL = params.get('mode') === 'babel'; // the Tower of Babel: its own arena, floor after floor
 const BIOME_ID = BABEL ? 'babel' : BIOMES[wantBiome] && isOpen('map', wantBiome) ? wantBiome : 'ela'; // a locked map in the URL falls back
@@ -431,7 +433,7 @@ function removeAt(p, i) {
   const last = --p.n;
   for (const f of p.fields) p[f][i] = p[f][last];
 }
-const E = pool(MAX_ENEMIES, ['x', 'y', 'z', 'hp', 'maxhp', 'kx', 'kz', 'flash', 'spd', 'face', 'type', 'elite', 'born', 'revived', 'lc',
+const E = pool(MAX_ENEMIES, ['x', 'y', 'z', 'hp', 'maxhp', 'kx', 'kz', 'flash', 'spd', 'face', 'type', 'elite', 'born', 'engaged', 'revived', 'lc',
   'st', 't', 'dx', 'dz', 'slow', 'stun', 'burn', 'cd', 'r', 'h', 'mark', 'sw']); // sw: last sweep that hit it
 // ret: boomerang (s until it turns back, 0 = coming back, -1 = not a boomerang); glow: from an evolved weapon
 const S = pool(MAX_SHOTS, ['x', 'y', 'z', 'vx', 'vy', 'vz', 'life', 'bounce', 'pierce', 'last', 'dmg', 'seek', 'speed', 'size', 'crit', 'kind',
@@ -848,7 +850,7 @@ const P = {
 let dmgSrc = 'other'; // who is dealing damage right now (a weapon id, 'move', 'miracle', 'passive', 'other'): fills P.dmgBy
 let srcSlot = -3; // the same for shots and strikes, kept on them: weapon slot, or -1 miracle, -2 passive, -3 other
 const srcName = (code) => (code >= 0 ? P.weapons[code]?.id ?? 'other' : ['other', 'passive', 'miracle'][code + 3]);
-const moveSpeed = () => HEROES[P.hero].speed * (1 + P.st.speed) * (P.netT > 0 ? 0.7 : 1) * (tower.tongue === 'pressa' ? 1.4 : 1); // caught in a net; the builders' haste
+const moveSpeed = () => HEROES[P.hero].speed * Math.max(0.25, 1 + P.st.speed) * (P.netT > 0 ? 0.7 : 1) * (tower.tongue === 'pressa' ? 1.4 : 1); // caught in a net; the builders' haste
 const pickupR = () => 3.5 * (1 + P.st.pickup);
 const globalDmg = () => (1 + P.st.dmg) * (P.hero === 'sansao' ? 1 + P.stacks / 100 : 1)
   * (P.hero === 'josue' ? 1 + Math.min(0.8, 0.08 * P.conquests) : 1);
@@ -914,6 +916,8 @@ const hiddenBeaten = [];
 const HORDE_LIFE = 6;
 let hordeK = 1;
 let lifeAvg = HORDE_LIFE;
+let lifeSamples = 0;
+let lastLifeSample = -Infinity;
 const hordeWave = () => (SURV ? Math.floor(time / 45) : 0);
 let challenge = null; // the sealed chest being fought for: { c, t, wave }
 let dustT = 0; // wind over the bones: dust closes in
@@ -958,7 +962,7 @@ addEventListener('keydown', (e) => {
     if (e.code === 'KeyE') useSpecial();
     if (e.code === 'KeyQ') useMiracle();
     if (e.code === 'Escape' || e.code === 'KeyP') pause();
-    if (e.code === 'KeyK') for (let i = 0; i < 100; i++) spawnEnemy(0);
+    if (DEBUG && e.code === 'KeyK') for (let i = 0; i < 100; i++) spawnEnemy(0);
   } else if (state === 'pause' && e.code === 'Escape') resume();
   else if (e.code === 'Escape' && !typing && !$('name-dlg').open && BACK[state]) { coachOn && endGuide(); go(BACK[state] === 'prev' ? prevScreen : BACK[state]); }
   else if (e.code === 'Enter' && state === 'menu' && !typing && !coachOn && document.activeElement === document.body) go('setup');
@@ -1099,7 +1103,7 @@ function syncMapVideo() {
     else v.pause();
   }
 }
-const playQuery = (biome = BIOME_ID) => ({ biome, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : BABEL ? 'babel' : 'classic', diff: DIFF_ID });
+const playQuery = (biome = BIOME_ID) => ({ biome, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : BABEL ? 'babel' : 'classic', diff: DIFF_ID, ...(DEBUG ? { debug: '1' } : {}) });
 // Map screen: the maps as tabs, a big view of the chosen one (its hero, its milestones), and the panel to
 // prepare the run (mode, difficulty, saddlebag, records).
 function renderSetup() {
@@ -1299,7 +1303,7 @@ function renderTower() {
   });
   renderPack('tw-');
   renderPsalmPick('tw-');
-  const best = profile.records.babel?.best || 0;
+  const best = profile.records.babel?.bestFloor || 0;
   $('tw-best').textContent = best ? `Recorde: andar ${best}` : 'Primeira subida';
   $('tw-marks').innerHTML = `<div>Andar mais alto · <b>${best || '—'}</b></div><div>Ninrode · ${profile.trophies?.babel ? '<b>vencido</b>' : 'ainda de pé'}</div>`;
   const board = $('tw-board');
@@ -1506,7 +1510,7 @@ function renderMenu() {
   $('pp-name').textContent = profile.name || 'Convidado';
   $('pp-title').textContent = titleOf() || (profile.name ? 'Peregrino' : 'Clique para escolher um nome');
   $('play-face').src = ICON.face[selHero];
-  $('babel-sub').textContent = profile.records.babel?.best ? `Andares · seu recorde: andar ${profile.records.babel.best}` : 'Andares · portais · Ninrode';
+  $('babel-sub').textContent = profile.records.babel?.bestFloor ? `Andares · seu recorde: andar ${profile.records.babel.bestFloor}` : 'Andares · portais · Ninrode';
   $('play-sub').textContent = `${BABEL ? 'Torre de Babel' : SURV ? 'Sobrevivência' : 'Clássico'} · ${HEROES[selHero].name} · ${BABEL ? 'Babel' : BIOMES[pickMap].name}${DIFF_ID ? ` · ${DIFF.name}` : ''}`;
   const sr = Object.keys(BIOMES).map((b) => profile.records[`surv:${b}`]?.best || 0);
   $('surv-sub').textContent = Math.max(...sr) ? `Sem fim · seu recorde ${fmt(Math.max(...sr))}` : 'Sem fim · um guardião a cada 5 min';
@@ -1959,7 +1963,7 @@ function attrRows() {
   const pct = (v) => `${Math.round(v * 100)}%`;
   const rows = [
     ['Dano', pct(globalDmg()), 'Multiplica o dano de todos os ataques.', st.dmg > base.dmg],
-    ['Recarga', `−${pct(st.cd)}`, 'Encurta o tempo entre os ataques das armas.', st.cd > base.cd],
+    ['Recarga', `−${pct(Math.min(0.6, st.cd))}`, 'Encurta o tempo entre ataques. Limite: 60%.', st.cd > base.cd],
     ['Área', `+${pct(st.area)}`, 'Aumenta o alcance de golpes, auras e explosões.', st.area > 0],
     ['Duração', `+${pct(st.dur)}`, 'Projéteis e efeitos duram mais.', st.dur > 0],
     ['Projéteis', `+${st.amount}`, 'Projéteis a mais em cada disparo.', st.amount > 0],
@@ -1967,7 +1971,7 @@ function attrRows() {
     ['Vida máx.', Math.round(st.maxHp), 'Vida total.', st.maxHp > base.maxHp],
     ['Vida/s', numTxt(st.regen), 'Vida recuperada por segundo.', st.regen > 0],
     ['Vida por abate', numTxt(st.vamp), 'Vida recuperada a cada inimigo derrotado.', st.vamp > 0],
-    ['Armadura', pct(st.armor), 'Reduz o dano recebido.', st.armor > 0],
+    ['Armadura', pct(Math.min(0.6, st.armor)), 'Reduz o dano recebido. Limite: 60%.', st.armor > 0],
     ['Esquiva', pct(st.dodge), 'Chance de não receber um golpe.', st.dodge > 0],
     ['Crítico', pct(st.crit), 'Chance de um golpe causar dano crítico.', st.crit > base.crit],
     ['Dano crítico', pct(2 + st.critDmg), 'Quanto vale um golpe crítico.', st.critDmg > 0],
@@ -2555,6 +2559,7 @@ function plague() {
 // ---------- Damage ----------
 function damage(i, base, kx = 0, kz = 0, knock = 0, forceCrit = false) {
   const type = ENEMIES[E.type[i]];
+  if (E.engaged[i] < 0) E.engaged[i] = time;
   let dmg = base * globalDmg();
   if (P.hero === 'davi' && (type.big || E.elite[i])) dmg *= 1.5;
   if (type.shield && dmgSrc !== 'miracle') dmg *= 1 - type.shield; // the shield-bearer's wall (miracles go through)
@@ -2630,6 +2635,8 @@ function spawnEnemy(type, x, z) {
     * (SURV && time > ENDLESS_NIGHT ? 1 + (time - ENDLESS_NIGHT) / 300 : 1) // the endless night keeps getting worse
     * ((SURV || BABEL) && !t.boss ? hordeK : 1) * (BABEL ? 1 + (tower.n - 1) * 0.28 : 1); // the tower: tougher floor by floor
   E.born[i] = time;
+  E.engaged[i] = -1;
+  E.sw[i] = -1;
   E.revived[i] = E.lc[i] = 0;
   E.spd[i] = t.speed + random() * t.speedVar;
   E.r[i] = t.r;
@@ -2692,6 +2699,7 @@ function mapEvent() {
 }
 
 function spawnBoss(enraged, guardian = false, foe = MAP_FOE) {
+  if (E.n >= MAX_ENEMIES) return false;
   FOE = foe;
   KIT = BOSS_KITS[foe.model];
   bossRig.group.visible = false;
@@ -2737,7 +2745,7 @@ function director(dt) {
   const k = (1 + night * 0.25) * (boss.spawned ? 0.5 : 1) * wave;
   const cap = Math.min(MAX_ENEMIES * 0.5, (14 + time * 0.5) * k * (1 + 0.02 * hordeWave()));
   spawnAcc += dt * (0.8 + time / 40) * k * P.mods.spawn * (SURV && time > ENDLESS_NIGHT ? 2 : 1) * (1 + 0.035 * hordeWave());
-  if (SURV) hordeK = clamp(hordeK * Math.exp((HORDE_LIFE - lifeAvg) * 0.012 * dt), 1, 400);
+  if (SURV) hordeK = nextHordeScale(hordeK, lifeAvg, dt, lifeSamples, time - lastLifeSample);
   for (; spawnAcc >= 1; spawnAcc--) {
     if (E.n >= cap) continue;
     const t = pickWeighted(spawnWeights(time), random);
@@ -2763,10 +2771,10 @@ function director(dt) {
     beep(45, 1.2, 'sawtooth', 0.09, 0, 25);
     toast('Um trecho da muralha desabou!', '#ffd66b');
   }
-  if (!boss.spawned && time >= serpentAt && bossRigs.serpente) { serpentAt = Infinity; spawnBoss(false, false, SERPENT); }
-  if (SECRET && !boss.spawned && time >= secretAt && bossRigs[SECRET.model]) { secretAt = Infinity; spawnBoss(false, false, SECRET); }
+  if (!boss.spawned && time >= serpentAt && time >= 180 && P.level >= 12 && (!BABEL || (!tower.boss && tower.n >= 6)) && bossRigs.serpente) { serpentAt = Infinity; spawnBoss(false, false, SERPENT); }
+  if (SECRET && !boss.spawned && time >= secretAt && time >= 180 && P.level >= 12 && bossRigs[SECRET.model]) { secretAt = Infinity; spawnBoss(false, false, SECRET); }
   if (!SURV && !boss.spawned && stonesDone === 3 && time >= bossWait) spawnBoss(false);
-  if (!SURV && !boss.spawned && time >= RUN_TIME) spawnBoss(true);
+  if (!SURV && !boss.spawned && time >= RUN_TIME && time >= bossWait) spawnBoss(true);
   if (SURV && !boss.spawned && time >= nextGuardian) spawnBoss(false, true);
 }
 
@@ -3716,7 +3724,12 @@ function reapEnemies() {
       tower.kills++;
       if (tower.tongue === 'fogo' && random() < 0.35) hazard(x, z, 1.2, 0.35, 8, 'fire', 2); // Língua de fogo: an ember where it fell
     }
-    if (!E.elite[i]) lifeAvg += (time - E.born[i] - lifeAvg) * 0.02; // how long the horde lasts (survival)
+    if (!E.elite[i] && E.engaged[i] >= 0) {
+      if (time - lastLifeSample > 10) { lifeSamples = 0; lifeAvg = HORDE_LIFE; }
+      lifeAvg += (time - E.engaged[i] - lifeAvg) * 0.1;
+      lifeSamples++;
+      lastLifeSample = time;
+    }
     const kt = E.elite[i] ? 'elite' : type.id;
     P.killsBy[kt] = (P.killsBy[kt] || 0) + 1;
     gainFe(E.elite[i] ? 15 : 0.6);
@@ -3742,7 +3755,9 @@ function refreshWeapons() {
 function evolve(w) {
   const from = WEAPONS[w.id];
   const evo = EVOLUTIONS[w.id];
+  if (!evo) return false;
   w.id = evo.into;
+  w.evolving = false;
   w.level = MAX_LEVEL;
   w.swarm = null;
   refreshWeapons();
@@ -3757,6 +3772,7 @@ function evolve(w) {
 const targets = new Int32Array(16);
 const targetD = new Float32Array(16);
 function nearestEnemies(x, z, k, maxR, skip) {
+  k = Math.min(k, targets.length);
   let m = 0;
   for (let i = 0; i < E.n; i++) {
     if (i === skip || E.hp[i] <= 0) continue;
@@ -3814,7 +3830,7 @@ function fireShot(s, t, spread) {
   if (P.hero === 'davi' && ++P.shotCount % 5 === 0) { // Pedras Lisas
     S.dmg[i] *= 5;
     S.size[i] *= 1.7;
-    S.crit[i] = 1;
+    // The advertised 5x is the passive multiplier; critical hits roll normally.
   }
 }
 
@@ -3992,7 +4008,8 @@ function updateSwarms(w, s, dt) {
   w.swarm.forEach((sw, k) => {
     let tx = P.pos.x + Math.cos(time + k * 2.1) * 3;
     let tz = P.pos.z + Math.sin(time + k * 2.1) * 3;
-    if (nearestEnemies(sw.x, sw.z, k + 1, 18, -1) > k) { tx = E.x[targets[k]]; tz = E.z[targets[k]]; }
+    const slot = k % targets.length;
+    if (nearestEnemies(sw.x, sw.z, slot + 1, 18, -1) > slot) { tx = E.x[targets[slot]]; tz = E.z[targets[slot]]; }
     const dx = tx - sw.x;
     const dz = tz - sw.z;
     const d = Math.hypot(dx, dz) || 1;
@@ -4237,6 +4254,10 @@ function gainXp(v) {
   }
 }
 
+// Keep a first copy of an evolution ingredient even if its stat is capped.
+const relicPool = () => Object.keys(RELICS).filter(id => isOpen('relic', id)
+  && (entryUseful(P.st, RELICS[id]) || (!P.relics.some(r => r.id === id) && Object.values(EVOLUTIONS).some(e => e.needs === id))));
+const scrollPool = () => Object.keys(SCROLLS).filter(id => entryUseful(P.st, SCROLLS[id]));
 const chestCost = () => (10 + 8 * chestsOpened) * P.mods.chest; // linear: every chest stays within reach of a run's siclos
 function openChest(c) {
   c.open = true;
@@ -4250,8 +4271,9 @@ function openChest(c) {
     for (let k = 0; k < 25; k++) dropGem(c.x + random() * 4 - 2, c.y + 0.6, c.z + random() * 4 - 2, 1, 1);
     dropPickup(c.x, c.y + 0.8, c.z + 1.4);
   }
-  const evoW = readyToEvolve(P.weapons, P.relics)[0]; // a weapon ready to evolve takes the chest's gift
-  const r = rollRelic(P.st.luck, random, Math.max(c.challenge ? 3 : c.free ? 1 : 0, P.star && !evoW ? 3 : 0), Object.keys(RELICS).filter((id) => isOpen('relic', id)));
+  const evoW = readyToEvolve(P.weapons, P.relics)[0]; // reserve before another chest can choose it
+  if (evoW) evoW.evolving = true;
+  const r = rollRelic(P.st.luck, random, Math.max(c.challenge ? 3 : c.free ? 1 : 0, P.star && !evoW ? 3 : 0), relicPool());
   if (!evoW) P.star = false;
   const e = RELICS[r.id];
   // The gift rises out of the chest, then flies into the hero: that is when it counts.
@@ -4294,7 +4316,7 @@ function luckyChest(c) {
   const roll = random();
   const extra = roll < k5 ? 4 : roll < k5 + k3 ? 2 : 0;
   if (!extra) return;
-  const ids = Object.keys(RELICS).filter((id) => isOpen('relic', id));
+  const ids = relicPool();
   const names = [];
   for (let k = 0; k < extra; k++) {
     const r = rollRelic(P.st.luck, random, 1, ids);
@@ -4326,7 +4348,7 @@ function relicBanner(r) {
   relicTimer = setTimeout(() => el.classList.remove('show'), 3400);
   if (r.tier >= 3) chord(r.tier === 4 ? [784, 988, 1175, 1568] : [659, 880, 1175], 'triangle');
 }
-function banner(icon, small, title, color, line, ref) {
+function banner(icon, small, title, color, line, ref = '') {
   const el = $('relic');
   el.innerHTML = `${iconImg(icon)}<div><small>${small}</small><b style="color:${color}">${title}</b><span>${line}</span><em>${ref}</em></div>`;
   el.classList.remove('show');
@@ -4368,7 +4390,7 @@ function updateWorld(dt) {
         burst(s.x, s.y + 1.5, s.z, 0xffe08f, 30, 6, 0.15, 8);
         toast(stonesDone < 3 ? `Pedra do Memorial erguida (${stonesDone}/3)` : 'As três pedras estão erguidas!', '#ffe08f');
         chord([392, 494, 587, 784]);
-        if (stonesDone === 3 && !boss.spawned && !SURV) spawnBoss(false);
+        if (stonesDone === 3 && !boss.spawned && !SURV && time >= bossWait) spawnBoss(false);
       }
     } else s.p = Math.max(0, s.p - dt / 90); // stepping away to fight costs little progress
     s.beam.material.opacity = 0.22 + 0.08 * Math.sin(time * 3) + (d < STONE_R ? 0.2 : 0);
@@ -4382,7 +4404,7 @@ function updateWorld(dt) {
       if (a.p >= 1) {
         a.used = true;
         burst(a.x, a.y + 1.2, a.z, 0xff8a3d, 20, 4, 0.12, 6);
-        const ids = Object.keys(SCROLLS);
+        const ids = scrollPool();
         const offers = [];
         while (offers.length < 3) {
           const id = ids.splice(Math.floor(random() * ids.length), 1)[0];
@@ -4580,8 +4602,8 @@ function bless() {
 // The caravan: a relic, a scroll and bread for siclos, dearer each time you buy.
 function openMerchant(t) {
   const up = t.sold * 15;
-  const r = rollRelic(P.st.luck, random, 1, Object.keys(RELICS).filter((id) => isOpen('relic', id)));
-  const ids = Object.keys(SCROLLS).filter((id) => !P.banned.has(id));
+  const r = rollRelic(P.st.luck, random, 1, relicPool());
+  const ids = scrollPool();
   const offersList = [
     { kind: 'buy', what: 'relic', relic: r, price: 45 + up, t },
     { kind: 'buy', what: 'scroll', id: ids[Math.floor(random() * ids.length)], tier: rollRarity(P.st.luck, random, 2), price: 25 + up, t },
@@ -4593,7 +4615,7 @@ function openMerchant(t) {
 
 // ---------- Choices (level-up cards and altars) ----------
 const cardCount = () => (P.hero === 'debora' ? 4 : 3) + (P.st.cards || 0); // Débora, the prophetess, sees one card more
-const offers = (n = cardCount()) => rollOffers({ weapons: P.weapons, luck: P.st.luck, locked: LOCKED, banned: P.banned }, random, n);
+const offers = (n = cardCount()) => rollOffers({ weapons: P.weapons, luck: P.st.luck, stats: P.st, locked: LOCKED, banned: P.banned }, random, n);
 function openLevelUp() {
   openChoice(`Nível ${P.level - pendingLevels + 1}!`, offers(), 'level');
 }
@@ -4926,7 +4948,7 @@ function endScreen(title, text, verse, won = false) {
     return `<div class="tro-line"><img class="ico" src="assets/ui/trophy-${t.tier}.png" alt=""><b>${t.name}</b>${t.unlock ? `<small>Desbloqueado: ${unlockName(t.unlock)}</small>` : ''}</div>`;
   }).join('')}` : '';
   // Denários: the run's pay line by line (trophies were paid as they were won), then the record for this map.
-  const pay = runDenarios({ time, kills: P.kills, stones: stonesDone, chests: chestsOpened, won });
+  const pay = runDenarios({ time, kills: P.kills, stones: stonesDone, chests: P.chests, won });
   if (P.guardians) { pay.lines.push([`Guardiões vencidos (${P.guardians})`, P.guardians * 40]); pay.total += P.guardians * 40; }
   if (BABEL && tower.n > 1) { pay.lines.push([`Andares vencidos (${tower.n - 1})`, (tower.n - 1) * 35]); pay.total += (tower.n - 1) * 35; }
   if (DIFF.pay > 1) { const extra = Math.round(pay.total * (DIFF.pay - 1)); pay.lines.push([`${DIFF.name} ×${DIFF.pay}`, extra]); pay.total += extra; }
@@ -4934,8 +4956,10 @@ function endScreen(title, text, verse, won = false) {
   for (const f of hiddenBeaten) { pay.lines.push([`${f.name} derrotado`, f.pay]); pay.total += f.pay; }
   const trophyPay = 0;
   profile.denarios += pay.total;
-  const rec = (profile.records[BIOME_ID] ??= { best: 0 });
-  rec.best = Math.max(rec.best, Math.floor(time));
+  const recordKey = SURV ? `surv:${BIOME_ID}` : BIOME_ID;
+  const rec = (profile.records[recordKey] ??= { best: 0 });
+  if (BABEL) rec.bestSeconds = Math.max(rec.bestSeconds || 0, Math.floor(time));
+  else rec.best = Math.max(rec.best, Math.floor(time));
   if (won) rec.fastest = Math.min(rec.fastest || Infinity, Math.floor(time));
   // The hero grows with the time played: a new stage changes the model, the portrait and the bonus.
   const hr = heroRec(P.hero);
@@ -4954,7 +4978,8 @@ function endScreen(title, text, verse, won = false) {
   $('end-report').innerHTML = `<div><h3>Dano por ataque</h3>${dmgRows()}</div><div><h3>Inimigos derrotados</h3>${killRows()}</div>`;
   // The season's ranking: this run goes online (or waits for the network).
   const online = $('end-online');
-  if (!onlineOn()) online.textContent = '';
+  if (DEBUG) online.textContent = 'Sessão de teste: não enviada ao ranking.';
+  else if (!onlineOn()) online.textContent = '';
   else {
     const lookF = heroRec(P.hero).look.frame;
     const runData = { map: BIOME_ID, mode: BABEL ? 'babel' : SURV ? 'surv' : 'classic', diff: DIFF_ID, hero: P.hero, kills: P.kills, seconds: Math.floor(time), won, floor: BABEL ? tower.n : 0,
@@ -5096,6 +5121,13 @@ const tower = { n: 0, kills: 0, goal: 0, spawned: 0, boss: null, clear: false, c
 let grav = 1; // Vento de Sinar: lighter
 const GUARDS = ['golias', 'gogue', 'rei'];
 function towerFloorStart(n) {
+  boss.spawned = false;
+  boss.idx = -1;
+  bossRig.group.visible = false;
+  $('bossbar').hidden = true;
+  FOE = MAP_FOE;
+  KIT = BOSS_KITS[FOE.model];
+  hordeK = 1;
   Object.assign(tower, { n, kills: 0, spawned: 0, clear: false, clearT: 0, still: 0, up: false });
   tower.boss = n % 10 === 0 ? 'ninrode' : n % 5 === 0 ? 'guardian' : null;
   tower.left = floorTime(n, tower.boss);
@@ -5126,7 +5158,10 @@ function towerFloorStart(n) {
   if (tower.boss === 'ninrode') spawnBoss(false);
   else if (tower.boss) {
     const model = GUARDS[Math.floor(random() * GUARDS.length)];
-    loadBossRig(model).then(() => spawnBoss(false, false, { model, name: 'Guardião da Torre', ref: 'Gn 11:4', intro: 'O guardião da torre barra a escada!', summon: 'Construtores, avante!', hp: 0.6, k: 1.1, pay: 0, tower: true }));
+    loadBossRig(model).then(() => {
+      if (tower.n !== n || tower.clear || ['dying', 'end'].includes(state)) return;
+      spawnBoss(false, false, { model, name: 'Guardião da Torre', ref: 'Gn 11:4', intro: 'O guardião da torre barra a escada!', summon: 'Construtores, avante!', hp: 0.6, k: 1.1, pay: 0, tower: true });
+    });
   }
   if (!tower.boss && n >= 3 && n % 2) spawnElite();
   const names = { anfiteatro: 'Anfiteatro', zigurate: 'Zigurate', pontes: 'Pontes sobre o fogo', espiral: 'Espiral quebrada', trono: 'Sala do trono' };
@@ -5161,6 +5196,8 @@ function towerBossDown(x, y, z) { // Ninrode (floor 10, 20...): the tower is won
   for (let k = 0; k < 30; k++) dropGem(x + random() * 6 - 3, y + 0.5, z + random() * 6 - 3, 4, k % 3 ? 0 : 1);
   if (tower.n === 10) {
     award('babel');
+    profile.mapWins.babel = Math.max(profile.mapWins.babel ?? -1, DIFF_ID);
+    saveProfile();
     banner('assets/ui/trophy-2.png', 'A subida continua: até onde você chega?', 'O cume de Sinar!', '#ffd66b', 'Gn 11:8');
   }
   towerClear();
@@ -5185,12 +5222,12 @@ function towerReward(path) {
   }
   let list;
   if (path === 'arsenal') {
-    list = rollOffers({ weapons: P.weapons, luck: P.st.luck, locked: LOCKED, banned: P.banned }, random, 12).filter((o) => o.kind !== 'scroll').slice(0, 3);
+    list = rollOffers({ weapons: P.weapons, luck: P.st.luck, stats: P.st, locked: LOCKED, banned: P.banned }, random, 12).filter((o) => o.kind !== 'scroll').slice(0, 3);
     if (!list.length) list = offers(3);
   } else {
-    const ids = Object.keys(RELICS).filter((id) => isOpen('relic', id));
+    const ids = relicPool();
     list = [0, 1].map(() => ({ kind: 'gift', what: 'relic', relic: rollRelic(P.st.luck, random, 0, ids) }));
-    const sc = Object.keys(SCROLLS);
+    const sc = scrollPool();
     list.push({ kind: 'scroll', id: sc[Math.floor(random() * sc.length)], tier: rollRarity(P.st.luck, random) });
   }
   openChoice(PORTALS[path][0], list, 'tower');
@@ -5211,10 +5248,11 @@ function towerDirector(dt) {
     toast('O tempo acabou: a torre desaba sobre você!', '#ff9a8a');
     P.st.revives = 0;
     P.hp = 0;
+    startDeath();
     return;
   }
-  hordeK = clamp(hordeK * Math.exp((HORDE_LIFE - lifeAvg) * 0.012 * dt), 1, 400); // the climb answers your strength too
-  if (!boss.spawned && time >= serpentAt && bossRigs.serpente) { serpentAt = Infinity; spawnBoss(false, false, SERPENT); }
+  // Floor and elapsed-time scaling already govern the Tower; no adaptive multiplier here.
+  if (!boss.spawned && time >= serpentAt && time >= 180 && P.level >= 12 && (!BABEL || (!tower.boss && tower.n >= 6)) && bossRigs.serpente) { serpentAt = Infinity; spawnBoss(false, false, SERPENT); }
   const cap = Math.min(50 + tower.n * 7, tower.goal - tower.kills); // never more out than are still needed
   if (!tower.boss) {
     spawnAcc += dt * (3 + tower.n * 0.5);
@@ -5256,9 +5294,10 @@ function guardianDown(x, y, z) {
   for (let k = 0; k < 16; k++) dropGem(x + random() * 4 - 2, y + 0.5, z + random() * 4 - 2, 3, 0);
   chord([523, 659, 784, 1046], 'square');
   toast(`Guardião ${P.guardians} vencido! O próximo vem em ${fmt(nextGuardian - time)}.`, '#ffd66b');
-  const pool = [...PACTS];
+  const pool = PACTS.filter((pc) => (pc.good[0] !== 'cd' || P.st.cd < 0.6)
+    && (pc.bad[0] !== 'speed' || P.st.speed + pc.bad[1] >= -0.75));
   const list = [];
-  while (list.length < 3) list.push({ kind: 'pact', pact: pool.splice(Math.floor(random() * pool.length), 1)[0] });
+  while (list.length < 3 && pool.length) list.push({ kind: 'pact', pact: pool.splice(Math.floor(random() * pool.length), 1)[0] });
   list.push({ kind: 'leave', pact: true });
   openChoice('Uma aliança?', list, 'pact');
 }
@@ -5269,6 +5308,7 @@ function applyPact(pc) {
   if (bs === 'hpMul') { P.st.maxHp *= bv; P.hp = Math.min(P.hp, P.st.maxHp); }
   else if (bs in P.mods) P.mods[bs] *= bv;
   else P.st[bs] += bv;
+  P.st.speed = Math.max(-0.75, P.st.speed);
   refreshWeapons();
   award('alianca');
   toast(`${pc.name} (${pc.ref}): ${pc.good[2]}, ${pc.bad[2]}`, '#ffd66b');
@@ -5393,9 +5433,9 @@ function updateOutro(dt) {
 function die() {
   if (BABEL) {
     const rec = (profile.records.babel ??= { best: 0 });
-    const best = tower.n > rec.best;
-    rec.best = Math.max(rec.best, tower.n);
-    return endScreen(`Você chegou ao andar ${tower.n}`, `${HEROES[P.hero].name} subiu a Torre de Babel até o andar ${tower.n}.${best ? ' Novo recorde!' : ` Recorde: andar ${rec.best}.`}`,
+    const best = tower.n > (rec.bestFloor || 0);
+    rec.bestFloor = Math.max(rec.bestFloor || 0, tower.n);
+    return endScreen(`Você chegou ao andar ${tower.n}`, `${HEROES[P.hero].name} subiu a Torre de Babel até o andar ${tower.n}.${best ? ' Novo recorde!' : ` Recorde: andar ${rec.bestFloor}.`}`,
       ['Deus resiste aos soberbos, mas dá graça aos humildes.', 'Tg 4:6'], tower.n > 10);
   }
   if (SURV) {
@@ -5448,6 +5488,7 @@ function step(dt) {
   M.shared.uTime.value = time;
   updateSky();
   director(dt);
+  if (state !== 'play') return;
   if ((flowTimer -= dt) <= 0) { flow.update(P.pos.x, P.pos.z); flowTimer = 0.25; }
   updatePlayer(dt);
   updateEnemies(dt);
@@ -6132,6 +6173,7 @@ else {
 
 // Debug: run `bench()` in the console. Steps + renders frames back to back with N enemies
 // and reports ms per frame (works even in a background tab). Leaves the run invulnerable.
+if (DEBUG) {
 window.bench = (enemies = 500, frames = 300) => {
   if (!runStarted) startRun();
   P.hp = P.st.maxHp = 1e9;
@@ -6246,3 +6288,5 @@ window.dev = {
     return frames;
   },
 };
+
+} // local debug tools
