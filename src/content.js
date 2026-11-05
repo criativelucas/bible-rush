@@ -30,6 +30,13 @@ export function pickWeighted(weights, rand) {
 // ---------- Heroes ----------
 // move: [name, text, cooldown s]
 export const HEROES = {
+  elias: {
+    name: 'Elias', role: 'Profeta, fogo à distância', hp: 95, speed: 8, weapon: 'brasas', color: 0xc5894c, noSprite: true,
+    passive: ['Zelo Ardente', 'Começa com +15% de chance de queimar e ganha Fé 20% mais rápido.'],
+    move: ['Passo de Fogo', 'Avança e incendeia os inimigos no caminho por 2 s.', 4],
+    miracle: ['Fogo do Carmelo', 'Doze colunas de fogo atingem inimigos próximos e os incendeiam.', '1 Rs 18:38'],
+    burn: 0.15, faith: 0.2,
+  },
   davi: {
     name: 'Davi', role: 'Ágil, à distância', hp: 100, speed: 8.5, weapon: 'funda', color: 0xe8d3a8,
     passive: ['Pedras Lisas', 'Cada 5º projétil causa 5× dano. +50% em gigantes, elites e chefes; mira na cabeça dos chefes para causar críticos.'],
@@ -65,8 +72,8 @@ export const HEROES = {
 export function baseStats(hero) {
   return {
     dmg: 0, cd: 0, area: 0, dur: 0, amount: 0, speed: 0, maxHp: hero.hp, regen: 0, armor: 0,
-    pickup: 0, luck: hero.luck || 0, crit: 0.05, xp: 0, burn: 0, airJumps: 0, revives: 0, rerolls: 1, skips: 1, bans: 1,
-    vamp: 0, gold: 0, faith: 0, // life per kill, extra siclos, extra Fé
+    pickup: 0, luck: hero.luck || 0, crit: 0.05, xp: 0, burn: hero.burn || 0, airJumps: 0, revives: 0, rerolls: 1, skips: 1, bans: 1,
+    vamp: 0, gold: 0, faith: hero.faith || 0, // life per kill, extra siclos, extra Fé
     critDmg: 0, dodge: 0, // Tábuas da Lei, Escudo de Abraão
   };
 }
@@ -146,6 +153,17 @@ export function rollRelic(luck, rand, min = 0, ids = Object.keys(RELICS)) {
 // ---------- Weapons ----------
 // Each weapon = one behaviour (kind) + numbers. levels[k] are the mods gained at level k + 2.
 export const WEAPONS = {
+  brasas: {
+    name: 'Brasas do Carmelo', unit: 'brasa', kind: 'shot', ref: '1 Rs 18:38',
+    desc: 'Brasas rápidas atravessam um inimigo e o incendeiam por 1 s.',
+    dmg: 10, cd: 1.1, count: 1, pierce: 1, speed: 30, life: 1.1, range: 26, size: 0.25, proj: 'ember', burn: 1,
+    levels: [{ dmg: 0.3 }, { count: 1 }, { cd: 0.15 }, { dmg: 0.4, pierce: 1 }],
+  },
+  brasas_evo: {
+    name: 'Labaredas do Carmelo', evo: true, from: 'brasas', needs: 'manto', kind: 'shot', unit: 'labareda', ref: '1 Rs 18:38',
+    desc: 'Três labaredas perfuram a horda e deixam chamas por 3 s.',
+    dmg: 28, cd: 0.9, count: 3, pierce: 4, speed: 34, life: 1.2, range: 30, size: 0.34, proj: 'ember', burn: 3, levels: [],
+  },
   funda: {
     name: 'Funda', unit: 'pedra', kind: 'shot', desc: 'Pedra no inimigo mais próximo; ricocheteia.',
     dmg: 12, cd: 0.8, count: 1, bounce: 1, speed: 32, life: 1.2, range: 26, size: 0.2, proj: 'stone',
@@ -761,7 +779,7 @@ export const TROPHIES = {
   selo: { name: 'Selo Rompido', desc: 'Resista à emboscada de um baú selado.', tier: 0, unlock: 'relic:paes', cat: 'mapas' },
   poco: { name: 'Água Viva', desc: 'Beba de um poço ou fonte.', tier: 0, cat: 'mapas' },
   ungido: { name: 'Ungido', desc: 'Alcance o nível 20 numa partida.', tier: 1, cat: 'progresso' },
-  noite: { name: 'Coluna de Fogo', desc: 'Atravesse uma noite inteira.', tier: 0, cat: 'progresso' },
+  noite: { name: 'Coluna de Fogo', desc: 'Atravesse uma noite inteira.', tier: 0, unlock: 'hero:elias', cat: 'progresso' },
   salomao: { name: 'Riqueza de Salomão', desc: 'Junte 300 siclos de uma vez.', tier: 1, cat: 'colecao' },
   relicario: { name: 'Relicário', desc: 'Tenha 8 relíquias numa partida.', tier: 1, cat: 'colecao' },
   maos: { name: 'Mãos Levantadas', desc: 'Faça 5 milagres numa partida.', tier: 0, cat: 'progresso' },
@@ -915,6 +933,8 @@ export const heroStage = (xp = 0) => (xp >= STAGE_XP[2] ? 2 : xp >= STAGE_XP[1] 
 export const runXp = (seconds, won) => Math.floor(seconds) + (won ? 300 : 0);
 // names: the three stages; stat: what each stage adds; gear: pieces worn at each stage (see gear.js).
 export const STAGES = {
+  elias: { names: ['Tisbita', 'Profeta do Carmelo', 'Profeta do Redemoinho'], stat: ['dmg', 0.05, 'de dano'], ref: '2 Rs 2:11',
+    gear: [[], ['capeTravel'], ['capeTravel', 'fireEyes', 'halo']] },
   davi: { names: ['Pastor', 'Guerreiro de Saul', 'Rei Davi'], stat: ['dmg', 0.05, 'de dano'], ref: '2 Sm 5:3',
     gear: [[], ['cuirass', 'swordBack'], ['crown', 'capeRoyal', 'harp']] },
   sansao: { names: ['Nazireu', 'Juiz de Israel', 'Sansão de Gaza'], stat: ['maxHp', 12, 'de vida máxima'], ref: 'Jz 16:3',

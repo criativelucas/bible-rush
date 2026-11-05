@@ -458,7 +458,7 @@ function instanced(geo, mat, max, colors = false, shadow = false) {
 const enemyMat = M.toon(0xffffff, { walk: true, fade: true, rim: true });
 const enemyMeshes = []; // by type (sparse: the boss is a rig)
 for (const t of MOB_TYPES) enemyMeshes[t] = instanced(ASSETS.mobs[`mob_${t}_${BABEL ? 'ela' : BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true); // the tower swaps them floor by floor
-const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca', 'scroll'];
+const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca', 'scroll', 'ember'];
 const shotMeshes = PROJ.map((k) => instanced(ASSETS.items[`proj_${k}`], M.toon(), MAX_SHOTS, true));
 const eshotMesh = instanced(new THREE.IcosahedronGeometry(0.25, 0), hdr(new THREE.MeshBasicMaterial({ color: 0xff3fb4 }), 2), MAX_ESHOTS);
 const manaMesh = instanced(ASSETS.items.proj_mana, hdr(new THREE.MeshBasicMaterial({ vertexColors: true }), 1.7), MAX_GEMS, true);
@@ -2360,7 +2360,7 @@ function useSpecial() {
   let dx = P.wishX;
   let dz = P.wishZ;
   if (!dx && !dz) { dx = P.faceX; dz = P.faceZ; }
-  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32], josue: [24, 0.28], debora: [22, 0.3] }[P.hero];
+  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32], josue: [24, 0.28], debora: [22, 0.3], elias: [23, 0.3] }[P.hero];
   Object.assign(P, { dashX: dx, dashZ: dz, dashSpeed: speed, dashT: dur, sliding: false });
   P.dashId++;
   P.iframes = Math.max(P.iframes, dur + 0.12);
@@ -2382,7 +2382,11 @@ function dashHits() {
     if (Math.hypot(ex, ez) > 2.2 + E.r[j]) continue;
     E.mark[j] = P.dashId;
     if (P.hero === 'sansao') damage(j, 40, P.dashX, P.dashZ, 16);
-    else if (P.hero === 'josue') { // Avançar: rams through and leaves them dazed
+    else if (P.hero === 'elias') {
+      damage(j, 20, P.dashX, P.dashZ, 8);
+      E.burn[j] = Math.max(E.burn[j], 2);
+      ember(E.x[j], E.y[j] + 0.5, E.z[j], 0xff8a3d, 4);
+    } else if (P.hero === 'josue') { // Avançar: rams through and leaves them dazed
       damage(j, 25, P.dashX, P.dashZ, 10);
       if (!ENEMIES[E.type[j]].boss) E.stun[j] = Math.max(E.stun[j], 1.2);
     } else { // Moisés and Débora: a wave that sweeps them aside
@@ -2411,6 +2415,14 @@ function useMiracle() {
   else if (P.hero === 'josue') { // "Sun, stand still" (Js 10:13): enemies freeze in time
     P.sunT = 7 * (1 + P.st.dur);
     toast('O sol parou!', '#ffe08f');
+  } else if (P.hero === 'elias') {
+    const m = nearestEnemies(x, z, 12, 26, -1);
+    for (let k = 0; k < 12; k++) {
+      const t = m ? targets[k % m] : -1;
+      const a = k * Math.PI / 6;
+      addStrike(t >= 0 ? E.x[t] : x + Math.cos(a) * 8, t >= 0 ? E.z[t] : z + Math.sin(a) * 8, 3, 90, 0.35 + k * 0.1, 1, 3);
+    }
+    toast('Fogo do Carmelo!', '#ffb347');
   } else if (P.hero === 'debora') { // "The stars fought from heaven" (Jz 5:20)
     const m = nearestEnemies(x, z, 16, 26, -1);
     for (let k = 0; k < 30; k++) {
@@ -6098,7 +6110,7 @@ function updateHud() {
   setText(hud['fe-text'], P.fe >= 100 ? `Fé cheia · Q ${h.miracle[0]}` : `Fé ${Math.floor(P.fe)}`);
   setText(hud.extra, {
     sansao: `Nazireu +${P.stacks}%`, davi: `Pedra Lisa em ${5 - (P.shotCount % 5)}`, moises: 'Praga a cada nível',
-    josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas',
+    josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas', elias: 'Zelo: +15% queimar · +20% Fé',
   }[P.hero]);
   document.body.classList.toggle('sunstop', P.sunT > 0);
   setText(hud.timer, BABEL ? (tower.clear ? 'Porta aberta' : fmt(Math.max(0, tower.left))) : fmt(time)); // the tower: time left on the floor

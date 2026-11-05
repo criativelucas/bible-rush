@@ -41,6 +41,8 @@ export async function claimName(profile, name) {
     return /Failed to fetch|NetworkError|erro 5|erro 404|claim_name/.test(e.message) ? 'ok' : e.message;
   }
 }
+// Keep new-hero runs until the database migration has been applied.
+const awaitingHeroMigration = (e, body) => body.p_hero === 'elias' && /dados inválidos/.test(e.message);
 // One finished run. Sent when the run ends; kept in profile.pending and sent later if the network fails.
 export async function submitRun(profile, run) {
   if (!onlineOn()) return 'offline';
@@ -55,7 +57,8 @@ export async function submitRun(profile, run) {
     await rpc('submit_run', body);
     return 'sent';
   } catch (e) {
-    if (/Failed to fetch|NetworkError|erro 5|partidas sobrepostas/.test(e.message)) (profile.pending ??= []).push(body); // try again later
+    if (awaitingHeroMigration(e, body) || /Failed to fetch|NetworkError|erro 5|partidas sobrepostas/.test(e.message)) (profile.pending ??= []).push(body);
+    if (awaitingHeroMigration(e, body)) return 'Partida salva: aguardando atualização do ranking para Elias.'; // try again later
     return e.message;
   }
 }
@@ -70,7 +73,8 @@ export async function flushPending(profile) {
     await rpc('submit_run', body);
     profile.pending.shift();
   } catch (e) {
-    if (!/Failed to fetch|NetworkError|erro 5|partidas sobrepostas/.test(e.message)) profile.pending.shift(); // refused for good: drop it
+    if (awaitingHeroMigration(e, body)) profile.pending.push(profile.pending.shift());
+    else if (!/Failed to fetch|NetworkError|erro 5|partidas sobrepostas/.test(e.message)) profile.pending.shift(); // refused for good: drop it
   }
 }
 

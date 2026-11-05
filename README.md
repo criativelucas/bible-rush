@@ -1,6 +1,6 @@
 # Bible Rush
 
-Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão, Moisés, Josué e Débora.
+Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão, Moisés, Josué, Débora e Elias.
 Escolha um herói e um dos quatro cenários, erga as três Pedras do Memorial e derrote o chefe.
 Cada jornada rende denários para o Mercado: melhorias permanentes, ferramentas para as cartas, armas, maestria e roupas.
 Os heróis evoluem com o tempo jogado; há tarefas diárias, bestiário, troféus com títulos, dificuldades e o modo Sobrevivência.
@@ -89,3 +89,23 @@ Para evoluir, chegue ao nível 5 da arma, encontre a relíquia e abra outro baú
 Lã dá esquiva (+3% na raridade Barro), Flor aumenta o ganho de Fé (+12%) e
 Selo aumenta o multiplicador de dano crítico (+0,15). A raridade amplia esses bônus.
 As mecânicas são adaptações lúdicas, inspiradas nas referências indicadas nos itens.
+
+## Elias — novo herói
+
+Desbloqueie Elias ao conquistar **Coluna de Fogo** (atravessar uma noite inteira).
+Perfis que já possuem esse troféu recebem o personagem automaticamente.
+
+- **Arma inicial:** Brasas do Carmelo, projéteis perfurantes que incendeiam.
+- **Passiva:** +15% de chance de queimar e +20% de ganho de Fé.
+- **E — Passo de Fogo:** investida que causa dano e deixa fogo por 2 s; recarga de 4 s.
+- **Q — Fogo do Carmelo:** 12 colunas de fogo sobre inimigos próximos, consumindo 100 de Fé.
+- **Evolução:** Brasas nível 5 + Manto de Elias + outro baú → Labaredas do Carmelo.
+- **Estágios:** Tisbita → Profeta do Carmelo → Profeta do Redemoinho.
+
+Brasas também podem aparecer nas cartas dos outros heróis. O modelo animado está em
+`assets/models/heroes/elias.glb`; sua fonte está em `tools/blender/heroes.py`.
+
+**Ranking:** execute `tools/add-elias-ranking.sql` no SQL Editor do Supabase. Essa
+migração preserva os dados existentes, permite Elias e inclui a separação do ranking
+Clássico/Torre. Enquanto o servidor não aceitar Elias, partidas recusadas por esse
+motivo ficam na fila local de reenvio (sujeita ao limite existente de 10 pendências).

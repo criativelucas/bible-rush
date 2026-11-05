@@ -134,15 +134,47 @@ test('new relic bonuses scale with rarity and survive profile export', () => {
   assert.deepEqual(C.importCode(C.exportCode(profile)),profile);
   assert.equal(C.masteryOf(profile,'espada_evo'),2);
 });
+test('Elias unlocks from existing dawn trophies and has a complete animated model', () => {
+  assert.ok(!C.openSet({}).has('hero:elias'));
+  assert.ok(C.openSet({trophies:{noite:1}}).has('hero:elias'));
+  const st=C.baseStats(C.HEROES.elias);
+  assert.equal(st.maxHp,95);assert.equal(st.burn,0.15);assert.equal(st.faith,0.2);
+  assert.equal(C.HEROES.elias.weapon,'brasas');
+  assert.equal(C.readyToEvolve([{id:'brasas',level:5}],[{id:'manto'}]).length,1);
+  const glb=fs.readFileSync(new URL('./assets/models/heroes/elias.glb',import.meta.url));
+  assert.equal(glb.toString('utf8',0,4),'glTF');
+  const model=JSON.parse(glb.toString('utf8',20,20+glb.readUInt32LE(12)));
+  const clips=new Set(model.animations.map(a=>a.name.split('|').at(-1)));
+  for(const name of ['idle','walk','attack','cast','jump','slide']) assert.ok(clips.has(name),name);
+  assert.ok(model.skins.length>0 && model.meshes.length>0);
+});
+test('Elias special move applies burn and miracle spends faith once', () => {
+  const P={hero:'elias',dashT:0.3,dashId:1,dashX:1,dashZ:0,pos:{x:0,y:0,z:0},fe:100,miracles:0};
+  const E={mark:[0],hp:[100],x:[1],y:[0],z:[0],r:[0.4],burn:[0]};
+  const strikes=[];
+  const c=vm.createContext({P,E,hash:{query:()=>1},near:[0],MAX_R:1.4,damage:noop,ember:noop,ENEMIES:C.ENEMIES,
+    flash:noop,yaw:0,terrainH:()=>0,nearestEnemies:()=>1,targets:[0],addStrike:(...args)=>strikes.push(args),toast:noop,burst:noop,chord:noop});
+  vm.runInContext(fn('dashHits')+'\n'+fn('useMiracle')+'\ndashHits();useMiracle();useMiracle();',c);
+  assert.equal(E.burn[0],2);assert.equal(P.fe,0);assert.equal(P.miracles,1);
+  assert.equal(strikes.length,12);assert.ok(strikes.every(s=>s[5]===1&&s[6]===3));
+});
 // Offline retry: use the real module with a mocked network; never contact the production server.
 const previousFetch=globalThis.fetch;
 let fail=true;
 globalThis.fetch=async()=>({ok:!fail,status:fail?400:200,json:async()=>fail?{message:'partidas sobrepostas'}:'ok'});
 try {
-  const {flushPending}=await import('./src/online.js');
+  const {flushPending,submitRun}=await import('./src/online.js');
   const profile={pid:'test',name:'Tester',pending:[{p_seconds:300}]};
   await flushPending(profile); assert.equal(profile.pending.length,1);
   fail=false; await flushPending(profile); assert.equal(profile.pending.length,0);
   passed++; console.log('ok - overlapping offline submissions stay queued until accepted');
+  globalThis.fetch=async()=>({ok:false,status:400,json:async()=>({message:'dados inválidos'})});
+  const next={pid:'test',name:'Tester',pending:[]};
+  const result=await submitRun(next,{hero:'elias',map:'ela',mode:'classic',diff:0,kills:0,seconds:60,won:false});
+  assert.match(result,/aguardando atualização/);assert.equal(next.pending.length,1);
+  await flushPending(next);assert.equal(next.pending.length,1);
+  globalThis.fetch=async()=>({ok:true,json:async()=>'ok'});
+  await flushPending(next);assert.equal(next.pending.length,0);
+  passed++; console.log('ok - Elias runs survive an outdated server and submit after migration');
 } finally { globalThis.fetch=previousFetch; }
 console.log(`${passed} regression checks passed`);

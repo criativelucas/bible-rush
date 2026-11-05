@@ -382,6 +382,29 @@ def moises():
     return s
 
 
+def elias():
+    # Camel-coloured mantle, leather belt and dark beard: a distinct prophet silhouette.
+    s = Sculpt('elias', 1.82)
+    skin_, hair, cloth, leather = 0xc99168, 0x493222, 0xc59b64, 0x664027
+    head(s, dict(skin=skin_, eye=0x251a13, brow=hair, hair=hair, brow_h=0.009))
+    s.add(ellipsoid((0, 0.92, -0.035), (0.079, 0.078, 0.065)), hair, 'head')
+    s.add(loft([(0.76, 0, 0.075, 0.022, 0.016), (0.82, 0, 0.065, 0.055, 0.035),
+                (0.88, 0, 0.05, 0.055, 0.035)]), hair, 'head')
+    s.add(loft([(0.16, 0, 0, 0.14, 0.1), (0.38, 0, 0, 0.125, 0.09),
+                (0.55, 0, 0, 0.11, 0.078), (0.76, 0, 0, 0.135, 0.08),
+                (0.82, 0, 0, 0.055, 0.05)], folds=0.09), cloth, lambda p: skirt(p, 0.6))
+    s.add(belt(0.55, 0.118, 0.085, 0.02), leather, 'spine')
+    s.add(shell([(0.32, 0, -0.035, 0.16, 0.115), (0.6, 0, -0.02, 0.15, 0.1),
+                 (0.78, 0, -0.01, 0.15, 0.09), (0.82, 0, 0, 0.075, 0.06)],
+                gap=1.0, thick=0.02, folds=0.12), 0x8b6038, cape)
+    arms(s, dict(skin=skin_, arm=cloth, fore=skin_), 0.14,
+         upper=(0.04, 0.042), fore=(0.03, 0.032))
+    for x in (-1, 1):
+        s.add(capsule((0.06*x, 0.21, 0), (0.06*x, 0.055, 0.02), 0.025, 0.022), skin_, f'shin.{"L" if x > 0 else "R"}')
+        s.add(ellipsoid((0.06*x, 0.026, 0.056), (0.03*FOOT, 0.02*FOOT, 0.05*FOOT)), leather, f'shin.{"L" if x > 0 else "R"}')
+    return s
+
+
 def josue():
     """Joshua: general of Israel. Bronze helmet and scale vest, blue cloak, sword, a ram's horn (Js 6:20)."""
     s = Sculpt('josue', 1.8)
@@ -453,6 +476,7 @@ HEROES = {
     'sansao': dict(make=sansao, sx=0.165, lx=0.07, attack='club', hair=True),
     'moises': dict(make=moises, sx=0.14, lx=0.06, attack='staff', staff=True, robe=True),
     'josue': dict(make=josue, sx=0.14, lx=0.062, attack='horn'),
+    'elias': dict(make=elias, sx=0.14, lx=0.06, attack='sling', robe=True),
     'debora': dict(make=debora, sx=0.13, lx=0.056, attack='bow', robe=True, hair=True),
 }
 

@@ -97,12 +97,19 @@ const seal = () => merge(
   part(ball(0.34), 0xd9a441, [0, 0.6, 0]),
 );
 
+const emberModel = () => merge(
+  part(ball(0.7), 0xff8a24, [0, 0, 0], [0, 0, 0], [0.8, 0.8, 1.5]),
+  part(ball(0.45), 0xffe38a, [0, 0.1, 0.55]),
+  part(new THREE.ConeGeometry(0.5, 1.8, 5), 0xd64a20, [0, 0, -1], [-Math.PI / 2, 0, 0]),
+);
+
 export function forgeModels() {
   return {
     weapon_lanca: spear(), proj_lanca: spear(),
     weapon_corvos: raven(), proj_raven: raven(),
     weapon_mo: mill(), proj_mill: mill(),
     weapon_estaca: peg(),
+    weapon_brasas: emberModel(), proj_ember: emberModel(),
     weapon_espada: sword(), weapon_incensario: censer(), weapon_rolo: scroll(), proj_scroll: scroll(),
     relic_la: fleece(), relic_amendoeira: blossom(), relic_selo: seal(),
   };
