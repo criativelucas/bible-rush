@@ -42,7 +42,9 @@ export async function claimName(profile, name) {
   }
 }
 // Keep new-hero runs until the database migration has been applied.
-const awaitingHeroMigration = (e, body) => body.p_hero === 'elias' && /dados inválidos/.test(e.message);
+const NEW_HEROES = ['elias', 'gideao', 'daniel'];
+const NEW_MAPS = ['carmelo', 'babilonia'];
+const awaitingHeroMigration = (e, body) => (NEW_HEROES.includes(body.p_hero) || NEW_MAPS.includes(body.p_map)) && /dados inválidos/.test(e.message);
 // One finished run. Sent when the run ends; kept in profile.pending and sent later if the network fails.
 export async function submitRun(profile, run) {
   if (!onlineOn()) return 'offline';
@@ -58,7 +60,7 @@ export async function submitRun(profile, run) {
     return 'sent';
   } catch (e) {
     if (awaitingHeroMigration(e, body) || /Failed to fetch|NetworkError|erro 5|partidas sobrepostas/.test(e.message)) (profile.pending ??= []).push(body);
-    if (awaitingHeroMigration(e, body)) return 'Partida salva: aguardando atualização do ranking para Elias.'; // try again later
+    if (awaitingHeroMigration(e, body)) return 'Partida salva: aguardando atualização do ranking para os novos heróis e cenários.'; // try again later
     return e.message;
   }
 }

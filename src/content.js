@@ -67,14 +67,28 @@ export const HEROES = {
     move: ['Torrente de Quisom', 'Avança numa onda que arrasta os inimigos para os lados.', 3.5],
     miracle: ['Estrelas na Batalha', 'Estrelas caem do céu sobre os inimigos por perto (Jz 5:20).'],
   },
+  gideao: {
+    name: 'Gideão', role: 'Juiz, corpo a corpo', hp: 125, speed: 8.2, weapon: 'espada', color: 0xb8463a, noSprite: true,
+    passive: ['Valente de Ofra', 'Começa com +10% de chance de crítico e +25% de dano crítico (Jz 6:12).'],
+    move: ['Grito dos Trezentos', 'Avança gritando; quem estiver no caminho fica atordoado.', 4],
+    miracle: ['Cântaros e Tochas', 'Tochas cercam você e a horda por perto se confunde, atordoada por 4 s (Jz 7:20-22).'],
+    crit: 0.1, critDmg: 0.25,
+  },
+  daniel: {
+    name: 'Daniel', role: 'Sábio, à distância', hp: 100, speed: 8.3, weapon: 'escrita', color: 0x2f4f8a, noSprite: true,
+    passive: ['Espírito Excelente', 'Ganha +15% de experiência e +1 renovação de cartas (Dn 6:3).'],
+    move: ['Firme na Oração', 'Avança numa onda de luz que empurra os inimigos para os lados.', 3.5],
+    miracle: ['Cova dos Leões', 'Deus fecha a boca dos leões: 5 s intocável e leões de luz ferem a horda (Dn 6:22).'],
+    xp: 0.15, rerolls: 1,
+  },
 };
 
 export function baseStats(hero) {
   return {
     dmg: 0, cd: 0, area: 0, dur: 0, amount: 0, speed: 0, maxHp: hero.hp, regen: 0, armor: 0,
-    pickup: 0, luck: hero.luck || 0, crit: 0.05, xp: 0, burn: hero.burn || 0, airJumps: 0, revives: 0, rerolls: 1, skips: 1, bans: 1,
+    pickup: 0, luck: hero.luck || 0, crit: 0.05 + (hero.crit || 0), xp: hero.xp || 0, burn: hero.burn || 0, airJumps: 0, revives: 0, rerolls: 1 + (hero.rerolls || 0), skips: 1, bans: 1,
     vamp: 0, gold: 0, faith: hero.faith || 0, // life per kill, extra siclos, extra Fé
-    critDmg: 0, dodge: 0, // Tábuas da Lei, Escudo de Abraão
+    critDmg: hero.critDmg || 0, dodge: 0, // Tábuas da Lei, Escudo de Abraão
   };
 }
 
@@ -266,6 +280,13 @@ export const WEAPONS = {
     levels: [{ count: 1 }, { dmg: 0.25 }, { cd: 0.15 }, { count: 1, dmg: 0.3 }],
   },
 
+  escrita: {
+    name: 'Mão que Escreve', unit: 'sentença', kind: 'sky', target: 'strong', ref: 'Dn 5:5',
+    desc: 'Uma luz cai do alto sobre o inimigo mais forte por perto: pesado na balança e achado em falta.',
+    dmg: 45, cd: 2.2, count: 1, radius: 2.4, range: 24, delay: 0.6,
+    levels: [{ count: 1 }, { dmg: 0.3 }, { cd: 0.15, area: 0.2 }, { count: 1, dmg: 0.3 }],
+  },
+
   // Evolutions: a weapon at its last level, plus its relic, becomes one of these at the next chest.
   funda_evo: {
     name: 'Pedra do Gigante', evo: true, from: 'funda', needs: 'pedras', unit: 'pedra', kind: 'shot', ref: '1 Sm 17:49',
@@ -356,6 +377,11 @@ export const WEAPONS = {
     name: 'Sentença Voante', evo: true, from: 'rolo', needs: 'selo', kind: 'boomerang', unit: 'rolo', ref: 'Zc 5:4',
     desc: 'Três rolos atravessam a horda, voltam ao herói e incendeiam quem tocam.',
     dmg: 38, cd: 1.25, count: 3, speed: 22, range: 20, life: 1.8, size: 0.7, proj: 'scroll', burn: 2, levels: [],
+  },
+  escrita_evo: {
+    name: 'Mene, Tequel, Parsim', evo: true, from: 'escrita', needs: 'candelabro', kind: 'sky', target: 'strong', unit: 'sentença', ref: 'Dn 5:25-28',
+    desc: 'Três sentenças caem de uma vez e incendeiam: o reino foi pesado e dividido.',
+    dmg: 110, cd: 1.6, count: 3, radius: 3, range: 28, delay: 0.5, burn: 2, levels: [],
   },
   mo_evo: {
     name: 'Pedra da Torre', evo: true, from: 'mo', needs: 'arco', unit: 'mó', kind: 'sky', target: 'strong', mill: true, ref: 'Jz 9:53',
@@ -545,6 +571,20 @@ const dune = (x, z) => { // windward slope gentle, slip face steep: dunes you cl
   const f = u - Math.floor(u);
   return (f < 0.86 ? (f / 0.86) ** 1.6 : 1 - smooth(0.86, 1, f)) * (0.65 + 0.35 * Math.sin(z * 0.05 + x * 0.013));
 };
+// Mount Carmel (1 Rs 18): the summit plateau with the two altars, ramps up its terraces, the sea to the west.
+const CARMEL_TOP = { x: 50, z: -38, r: 16 };
+const CARMEL_RAMPS = [[18, -10, CARMEL_TOP.x - 10, CARMEL_TOP.z + 8], [86, -14, CARMEL_TOP.x + 10, CARMEL_TOP.z + 4],
+  [CARMEL_TOP.x, -100, CARMEL_TOP.x, CARMEL_TOP.z - 12], [-10, 70, -10, 100], [70, 60, 96, 72]];
+const carmelCoast = (x, z) => x + 96 + 12 * Math.sin(z * 0.035) + 5 * Math.sin(z * 0.11); // < 0: the sea
+// Babylon (Dn 1-5): a walled city on the Euphrates; the Hanging Gardens and the ziggurat are terraces of
+// glazed blue brick with ramps up them; the processional way runs from the Ishtar Gate.
+const GARDENS = { x: -54, z: -46, r: 46 };
+const ZIGGURAT = { x: 52, z: 40, r: 22 };
+const BAB_RAMPS = [[GARDENS.x + 34, GARDENS.z, GARDENS.x + 6, GARDENS.z], [GARDENS.x, GARDENS.z - 34, GARDENS.x, GARDENS.z - 6],
+  [ZIGGURAT.x - 28, ZIGGURAT.z, ZIGGURAT.x - 4, ZIGGURAT.z], [ZIGGURAT.x, ZIGGURAT.z + 28, ZIGGURAT.x, ZIGGURAT.z + 6],
+  [0, 104, 0, 124], [104, -20, 124, -20], [-90, 60, -106, 74]];
+const euphrates = (x) => -100 + 7 * Math.sin(x * 0.03) + 4 * Math.sin(x * 0.09); // the river's line (z) across the south
+const square = (x, z, c) => ((x - c.x) ** 8 + (z - c.z) ** 8) ** 0.125; // a square with softened corners
 export const BIOMES = {
   ela: {
     name: 'Vale de Elá', ref: '1 Sm 17',
@@ -695,6 +735,81 @@ export const BIOMES = {
       return n > 0.4 ? 0xd9be8a : n > -0.4 ? 0xcfb27c : 0xc4a670;
     },
   },
+  carmelo: {
+    name: 'Monte Carmelo', ref: '1 Rs 18',
+    tags: ['Montanha', 'Litoral', 'Altares'],
+    desc: 'Um monte verde de oliveiras sobre o mar. No alto, dois altares: o de Baal e o do Senhor.',
+    radius: 126, water: -0.4,
+    water2: { shallow: 0x6fd6c8, deep: 0x2a78b8 },
+    sky: { top: 0x6aa8e0, horizon: 0xf3dcb0, nightTop: 0x0b1028, nightHorizon: 0x3a2c50 },
+    boss: 'Acabe', bossIntro: 'O rei Acabe sobe o monte com os profetas de Baal!', summon: 'Profetas de Baal, clamai!',
+    elite: 'Um guardião de Baal se ergueu! Ele guarda um baú.', win: 'O fogo do Senhor caiu no Monte Carmelo.',
+    verse: ['O Senhor é Deus! O Senhor é Deus!', '1 Rs 18:39'],
+    flyer: 'swoop', climber: 'wall', // the flier's and the climber's tricks (main.js flyerAct, climberTop)
+    bossModel: 'acabe', groundKind: 1, death: [0xc2602a, 0x3a7a6a, 0x8a5a2b, 0x4f7a2e], summonChariots: true,
+    well: ['Nuvem que sobe do mar', '1 Rs 18:44'], event: 'Os profetas de Baal clamam e descem do monte!', carrier: 'Um servo de Jezabel foge com ouro!',
+    top: CARMEL_TOP, coast: carmelCoast,
+    terrain(x, z) {
+      const r = Math.hypot(x, z);
+      const [wx, wz] = warp(x, z, 0.014, 14);
+      const dt = Math.hypot(wx - CARMEL_TOP.x, wz - CARMEL_TOP.z);
+      // The mountain: a broad terraced peak (its top flattened for the altars), a ridge running away to the
+      // south-east, and hills round the rim; the west falls in limestone steps to the beach.
+      const peak = Math.min(21, 30 * Math.exp(-(dt ** 2) / 1500));
+      const ridge = 13 * Math.exp(-((wx - wz * 0.55 - 92) ** 2) / 260) * smooth(-20, 10, wz);
+      const rim = 16 * smooth(92, 124, r + 8 * fbm(x * 0.02, z * 0.02)) * smooth(-10, 30, carmelCoast(x, z));
+      const v = (Math.max(peak, ridge, rim) + 5 * ridged(wx * 0.03, wz * 0.03) * smooth(30, 60, r) * smooth(26, 40, dt)) * smooth(12, 26, r); // a level start
+      const land = 1.6 + 0.9 * Math.sin(x * 0.04) * Math.cos(z * 0.037) + 0.5 * fbm(x * 0.05, z * 0.05)
+        + stepped(v, 4.8, x, z, CARMEL_RAMPS);
+      const t = smooth(10, -8, carmelCoast(x, z)); // down to the sea
+      return land * (1 - t) + (-1.4 + 0.3 * Math.sin(x * 0.2) * Math.cos(z * 0.17)) * t - 7 * smooth(120, 134, r);
+    },
+    ground(h, ny, n, x, z) {
+      if (h < 0.0) return 0xc9b48a; // wet sand under the water
+      if (h < 0.6) return n > 0 ? 0xeedfba : 0xe4d3ac; // the beach
+      if (ny < 0.72) return Math.floor(h * 1.3) % 2 ? 0xd2c4a6 : 0xbcae90; // white limestone steps
+      if (ny < 0.84) return n > 0 ? 0xa8a080 : 0x9a9274;
+      if (Math.hypot(x - CARMEL_TOP.x, z - CARMEL_TOP.z) < CARMEL_TOP.r) return n > 0.2 ? 0xb3a96a : 0xa49a5e; // the dry summit
+      if (h > 12) return n > 0.4 ? 0x6f9a3e : n > -0.3 ? 0x5f8a36 : 0x547c30; // the "garden" of God (Ct 7:5): deep green
+      return n > 0.5 ? 0x8aac4e : n > -0.2 ? 0x7a9e46 : 0x6e9040;
+    },
+  },
+  babilonia: {
+    name: 'Batalha na Babilônia', ref: 'Dn 5',
+    tags: ['Jardins Suspensos', 'Zigurate', 'Tijolo vidrado'],
+    desc: 'A grande cidade às margens do Eufrates: jardins suspensos em terraços e templos de tijolos azuis vidrados.',
+    radius: 126, water: -0.6,
+    water2: { shallow: 0x6fc8c8, deep: 0x2a6a8a },
+    sky: { top: 0x6ab0e0, horizon: 0xf6dcb0, nightTop: 0x0a0e2a, nightHorizon: 0x2e2a5a },
+    boss: 'Nabucodonosor', bossIntro: 'Nabucodonosor sai do palácio: "Não é esta a grande Babilônia que eu edifiquei?"', summon: 'Exércitos da Babilônia, avante!',
+    elite: 'Uma estátua de ouro ganhou vida! Ela guarda um baú.', win: 'A Babilônia caiu: pesada na balança e achada em falta.',
+    verse: ['O meu Deus enviou o seu anjo e fechou a boca dos leões.', 'Dn 6:22'],
+    flyer: 'swoop', climber: 'net', // the flier's and the climber's tricks (main.js flyerAct, climberTop)
+    bossModel: 'nabucodonosor', groundKind: 2, death: [0x2a5aa8, 0xe8a83a, 0xe8b84a, 0x3a2a6a], summonChariots: true,
+    well: ['Canal do Eufrates', 'Sl 137:1'], event: 'Ao som dos instrumentos, a guarda manda todos adorarem a estátua!', carrier: 'Um tesoureiro do rei foge com os vasos de ouro!',
+    gardens: GARDENS, ziggurat: ZIGGURAT, euphrates,
+    terrain(x, z) {
+      const r = Math.hypot(x, z);
+      const g = square(x, z, GARDENS);
+      const t = square(x, z, ZIGGURAT);
+      // Square terraces: five for the gardens, six (steeper) for the ziggurat; the city wall on a rampart round the rim.
+      const v = Math.max(25 * smooth(GARDENS.r, 10, g), 30 * smooth(ZIGGURAT.r, 4, t), 18 * smooth(108, 118, r + 4 * fbm(x * 0.02, z * 0.02)));
+      const river = Math.exp(-((z - euphrates(x)) ** 2) / 40);
+      return 1.6 + 0.3 * Math.sin(x * 0.05) * Math.cos(z * 0.045) + stepped(v, 5, x, z, BAB_RAMPS) * (1 - river) - 4 * river;
+    },
+    ground(h, ny, n, x, z) {
+      if (h < -0.2) return 0x8a8a6a; // river bed
+      if (Math.abs(z - euphrates(x)) < 9) return n > 0 ? 0x8aa04e : 0x7a9446; // green banks of the Euphrates
+      const g = square(x, z, GARDENS);
+      const t = square(x, z, ZIGGURAT);
+      if (ny < 0.72) return n > 0.3 ? 0x2f62b0 : n > -0.3 ? 0x2a5aa8 : 0x234c94; // the terrace faces: glazed blue brick
+      if (ny < 0.85) return 0xe8b84a; // a gold rim along every terrace edge
+      if (g < GARDENS.r - 2 && h > 3) return n > 0.3 ? 0x5f9a3e : n > -0.3 ? 0x4f8a36 : 0x6aa448; // the gardens on every terrace
+      if (t < ZIGGURAT.r + 2 && h > 3) return n > 0 ? 0xc99a62 : 0xb88a56; // the ziggurat's brick
+      if (Math.abs(x) < 4) return Math.floor(z / 2.5) % 2 ? 0xd8c8a0 : 0xcdbd94; // the processional way, paved
+      return n > 0.4 ? 0xd9c08e : n > -0.4 ? 0xcfb582 : 0xc4a876; // packed earth of the city
+    },
+  },
 };
 export const BOSS = 4;
 
@@ -753,6 +868,10 @@ export const SECRET_BOSSES = {
     intro: 'Ogue, o último dos refains, sai de Basã!', summon: 'Refains, levantai-vos!' },
   jerico: { model: 'adonizedeque', name: 'Adoni-Zedeque', ref: 'Js 10:3', hp: 3.5, k: 1.3, pay: 1500,
     intro: 'Adoni-Zedeque, rei de Jerusalém, chama os cinco reis!', summon: 'Os cinco reis atacam!' },
+  carmelo: { model: 'jezabel', name: 'Jezabel', ref: '1 Rs 19:2', hp: 3.5, k: 1.3, pay: 1500,
+    intro: 'Jezabel jura vingança contra os profetas do Senhor!', summon: 'Profetas de Aserá, à mesa da rainha!' },
+  babilonia: { model: 'belsazar', name: 'Belsazar', ref: 'Dn 5:1', hp: 3.5, k: 1.3, pay: 1500,
+    intro: 'Belsazar ergue os vasos do templo no seu banquete!', summon: 'Mil grandes do rei, avante!' },
 };
 export const SERPENT = { model: 'serpente', name: 'A Antiga Serpente', ref: 'Ap 12:9', hp: 10, k: 1.55, pay: 10000, r: 1.8, h: 4.4,
   intro: 'A antiga serpente, o dragão, ergue a cabeça!', summon: 'Serpentes ardentes!' };
@@ -772,19 +891,21 @@ export const TROPHIES = {
   gogue: { name: 'Ossos que Vivem', desc: 'Vença no Vale dos Ossos Secos.', tier: 2, unlock: 'hero:josue', cat: 'mapas' },
   rei: { name: 'As Muralhas Caíram', desc: 'Vença em Jericó.', tier: 2, unlock: 'relic:arco', cat: 'mapas' },
   perseveranca: { name: 'Perseverança', desc: 'Sobreviva 8 minutos numa partida.', tier: 1, unlock: 'hero:debora', cat: 'progresso' },
+  carmelo: { name: 'O Senhor é Deus', desc: 'Vença no Monte Carmelo.', tier: 2, unlock: 'hero:daniel', cat: 'mapas', title: 'Profeta do Carmelo' },
   evolucao: { name: 'Transformação', desc: 'Evolua uma arma.', tier: 1, unlock: 'relic:tabuas', cat: 'colecao' },
   pedras: { name: 'Cinco Pedras Lisas', desc: 'Junte as 5 pedras do ribeiro em Elá.', tier: 0, unlock: 'relic:escudo', cat: 'mapas' },
   mil: { name: 'Mil Abates', desc: 'Derrote 1000 inimigos numa partida.', tier: 1, unlock: 'relic:candelabro', cat: 'progresso' },
   tesouro: { name: 'Tesouro Recuperado', desc: 'Alcance um tesouro em fuga.', tier: 0, unlock: 'relic:sal', cat: 'mapas' },
   selo: { name: 'Selo Rompido', desc: 'Resista à emboscada de um baú selado.', tier: 0, unlock: 'relic:paes', cat: 'mapas' },
   poco: { name: 'Água Viva', desc: 'Beba de um poço ou fonte.', tier: 0, cat: 'mapas' },
-  ungido: { name: 'Ungido', desc: 'Alcance o nível 20 numa partida.', tier: 1, cat: 'progresso' },
+  ungido: { name: 'Ungido', desc: 'Alcance o nível 20 numa partida.', tier: 1, unlock: 'hero:gideao', cat: 'progresso' },
   noite: { name: 'Coluna de Fogo', desc: 'Atravesse uma noite inteira.', tier: 0, unlock: 'hero:elias', cat: 'progresso' },
   salomao: { name: 'Riqueza de Salomão', desc: 'Junte 300 siclos de uma vez.', tier: 1, cat: 'colecao' },
-  relicario: { name: 'Relicário', desc: 'Tenha 8 relíquias numa partida.', tier: 1, cat: 'colecao' },
+  relicario: { name: 'Relicário', desc: 'Tenha 8 relíquias numa partida.', tier: 1, unlock: 'map:babilonia', cat: 'colecao' },
+  babilonia: { name: 'Pesada e Achada em Falta', desc: 'Vença na Babilônia.', tier: 2, cat: 'mapas', title: 'Sábio de Babilônia' },
   maos: { name: 'Mãos Levantadas', desc: 'Faça 5 milagres numa partida.', tier: 0, cat: 'progresso' },
-  valentes: { name: 'Os Valentes', desc: 'Vença com 3 heróis diferentes.', tier: 2, cat: 'progresso' },
-  conquista: { name: 'Terra Prometida', desc: 'Vença nos 4 cenários.', tier: 2, cat: 'mapas', title: 'Conquistador de Canaã' },
+  valentes: { name: 'Os Valentes', desc: 'Vença com 3 heróis diferentes.', tier: 2, unlock: 'map:carmelo', cat: 'progresso' },
+  conquista: { name: 'Terra Prometida', desc: 'Vença nos 6 cenários.', tier: 2, cat: 'mapas', title: 'Conquistador de Canaã' },
   veterano: { name: 'Veterano', desc: 'Derrote 5.000 inimigos, somando as partidas.', tier: 1, cat: 'progresso', goal: ['kills', 5000] },
   lenda: { name: 'Lenda de Israel', desc: 'Derrote 25.000 inimigos, somando as partidas.', tier: 2, cat: 'progresso', goal: ['kills', 25000], title: 'Lenda de Israel' },
   constancia: { name: 'Constância', desc: 'Jogue 10 partidas.', tier: 0, cat: 'progresso', goal: ['runs', 10] },
@@ -793,7 +914,7 @@ export const TROPHIES = {
   plenitude: { name: 'Plenitude', desc: 'Leve um herói ao estágio 3.', tier: 2, cat: 'colecao', title: 'Ungido do Senhor' },
   vestes: { name: 'Vestes Novas', desc: 'Tenha 5 itens no guarda-roupa.', tier: 0, cat: 'colecao' },
   pesquisador: { name: 'Pesquisador', desc: 'Complete a pesquisa de um cenário no Bestiário.', tier: 1, cat: 'colecao' },
-  sabio: { name: 'Sábio como Salomão', desc: 'Complete a pesquisa dos 4 cenários.', tier: 2, cat: 'colecao', title: 'Sábio' },
+  sabio: { name: 'Sábio como Salomão', desc: 'Complete a pesquisa dos 6 cenários.', tier: 2, cat: 'colecao', title: 'Sábio' },
   contente: { name: 'Contentamento', desc: 'Vença com 3 relíquias ou menos.', tier: 2, cat: 'desafios', title: 'Contente com pouco' },
   intocavel: { name: 'Intocável', desc: 'Vença levando no máximo 15 golpes.', tier: 2, cat: 'desafios', title: 'Intocável' },
   porumfio: { name: 'Por um Fio', desc: 'Vença com menos de 10% da vida.', tier: 1, cat: 'desafios' },
@@ -945,6 +1066,10 @@ export const STAGES = {
     gear: [[], ['capeTravel', 'grapes'], ['armor', 'banner']] },
   debora: { names: ['Profetisa', 'Juíza de Israel', 'Mãe em Israel'], stat: ['luck', 0.05, 'de sorte'], ref: 'Jz 5:7',
     gear: [[], ['veil'], ['veil', 'leafCrown', 'quiverGold']] },
+  gideao: { names: ['Lavrador de Ofra', 'Valente de Israel', 'Juiz de Israel'], stat: ['crit', 0.03, 'de crítico'], ref: 'Jz 8:28',
+    gear: [[], ['armor'], ['armor', 'mantoRubro', 'banner']] },
+  daniel: { names: ['Cativo de Judá', 'Sábio da Babilônia', 'Príncipe dos Sátrapas'], stat: ['xp', 0.05, 'de experiência'], ref: 'Dn 6:2',
+    gear: [[], ['turbante'], ['turbante', 'capeBlue', 'halo']] },
 };
 // Stage 2 and 3 add the stat once and twice; stage 3 also fills Fé 25% faster (the miracle comes sooner).
 export function stageBonus(st, hero, stage) {
@@ -1070,4 +1195,6 @@ export const BEAST_NAMES = {
   mar: ['Soldado egípcio', 'Arqueiro egípcio', 'Carro do Faraó', 'Colosso de pedra', 'Corredor egípcio', 'Guarda do Faraó', 'Gafanhoto da praga', 'Escorpião do Sinai'],
   ossos: ['Esqueleto', 'Esqueleto atirador', 'Carro de ossos', 'Gigante de ossos', 'Esqueleto ligeiro', 'Muralha de ossos', 'Crânio alado', 'Ossada rastejante'],
   jerico: ['Guarda de Jericó', 'Fundeiro cananeu', 'Carro cananeu', 'Guardião da muralha', 'Espião cananeu', 'Porta-escudo de Jericó', 'Vigia de fogo', 'Sitiador da muralha'],
+  carmelo: ['Profeta de Baal', 'Arqueiro de Samaria', 'Carro de Acabe', 'Guardião de Baal', 'Servo de Jezabel', 'Porta-escudo de Samaria', 'Abutre de Jezreel', 'Profeta de Aserá'],
+  babilonia: ['Soldado babilônio', 'Arqueiro caldeu', 'Carro babilônio', 'Estátua de ouro', 'Mago caldeu', 'Guarda da Porta de Ishtar', 'Leão alado', 'Escalador dos jardins'],
 };

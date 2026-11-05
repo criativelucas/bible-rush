@@ -296,7 +296,7 @@ scene.add(motes);
 const moteSeed = Array.from({ length: MOTES }, () => [random() * 40, random() * 40, random(), random() * 6.28, 0.4 + random() * 0.6]);
 const moteGround = new Float32Array(MOTES); // the ground under each mote, refreshed a few at a time (terrainH is not cheap)
 let moteNext = 0;
-const MOTE_COL = { babel: [1.7, 1.35, 0.9], ela: [1.5, 1.45, 0.75], mar: [1.7, 1.5, 1.1], ossos: [1.8, 0.95, 0.45], jerico: [1.7, 1.4, 0.65] }; // pollen, sea glitter, embers, gold dust
+const MOTE_COL = { babel: [1.7, 1.35, 0.9], ela: [1.5, 1.45, 0.75], mar: [1.7, 1.5, 1.1], ossos: [1.8, 0.95, 0.45], jerico: [1.7, 1.4, 0.65], carmelo: [1.8, 1.3, 0.6], babilonia: [1.6, 1.5, 0.9] }; // pollen, sea glitter, embers, gold dust
 const FIREFLY = [1.1, 2.1, 0.7];
 const SHAFT_DAY = new THREE.Color(1, 0.84, 0.58);
 const SHAFT_NIGHT = new THREE.Color(0.55, 0.65, 1);
@@ -2360,12 +2360,12 @@ function useSpecial() {
   let dx = P.wishX;
   let dz = P.wishZ;
   if (!dx && !dz) { dx = P.faceX; dz = P.faceZ; }
-  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32], josue: [24, 0.28], debora: [22, 0.3], elias: [23, 0.3] }[P.hero];
+  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32], josue: [24, 0.28], debora: [22, 0.3], elias: [23, 0.3], gideao: [25, 0.28], daniel: [22, 0.3] }[P.hero];
   Object.assign(P, { dashX: dx, dashZ: dz, dashSpeed: speed, dashT: dur, sliding: false });
   P.dashId++;
   P.iframes = Math.max(P.iframes, dur + 0.12);
   P.specialCd = HEROES[P.hero].move[2] * Math.max(0.4, 1 - P.st.cd) * (tower.tongue === 'pressa' ? 0.5 : 1);
-  burst(P.pos.x, P.pos.y + 0.2, P.pos.z, P.hero === 'moises' || P.hero === 'debora' ? 0x9fd8ff : 0xcbb89a, 10, 4, 0.13, 1);
+  burst(P.pos.x, P.pos.y + 0.2, P.pos.z, P.hero === 'moises' || P.hero === 'debora' ? 0x9fd8ff : P.hero === 'daniel' ? 0xfff1b8 : 0xcbb89a, 10, 4, 0.13, 1);
   beep(260, 0.18, 'sawtooth', 0.04, 0, 900);
 }
 
@@ -2373,6 +2373,7 @@ function dashHits() {
   dmgSrc = 'move';
   if (P.dashT <= 0 || P.hero === 'davi') return;
   if (P.hero === 'debora' && random() < 0.6) burst(P.pos.x, P.pos.y + 0.3, P.pos.z, 0x9fd8ff, 2, 3, 0.14, 2); // the torrent of Kishon
+  if (P.hero === 'daniel' && random() < 0.6) burst(P.pos.x, P.pos.y + 0.3, P.pos.z, 0xfff1b8, 2, 3, 0.14, 2); // a wave of light
   const n = hash.query(P.pos.x, P.pos.z, 2.2 + MAX_R, near);
   for (let q = 0; q < n; q++) {
     const j = near[q];
@@ -2386,10 +2387,13 @@ function dashHits() {
       damage(j, 20, P.dashX, P.dashZ, 8);
       E.burn[j] = Math.max(E.burn[j], 2);
       ember(E.x[j], E.y[j] + 0.5, E.z[j], 0xff8a3d, 4);
+    } else if (P.hero === 'gideao') { // the shout of the three hundred: they reel, confused (Jz 7:21)
+      damage(j, 22, P.dashX, P.dashZ, 8);
+      if (!ENEMIES[E.type[j]].boss) E.stun[j] = Math.max(E.stun[j], 1.5);
     } else if (P.hero === 'josue') { // Avançar: rams through and leaves them dazed
       damage(j, 25, P.dashX, P.dashZ, 10);
       if (!ENEMIES[E.type[j]].boss) E.stun[j] = Math.max(E.stun[j], 1.2);
-    } else { // Moisés and Débora: a wave that sweeps them aside
+    } else { // Moisés, Débora and Daniel: a wave that sweeps them aside
       const side = ex * -P.dashZ + ez * P.dashX >= 0 ? 1 : -1;
       damage(j, 8, -P.dashZ * side, P.dashX * side, 18);
     }
@@ -2423,6 +2427,27 @@ function useMiracle() {
       addStrike(t >= 0 ? E.x[t] : x + Math.cos(a) * 8, t >= 0 ? E.z[t] : z + Math.sin(a) * 8, 3, 90, 0.35 + k * 0.1, 1, 3);
     }
     toast('Fogo do Carmelo!', '#ffb347');
+  } else if (P.hero === 'gideao') { // jars broken, torches lit: the camp turns on itself (Jz 7:20-22)
+    const n = hash.query(x, z, 18 + MAX_R, near);
+    for (let q = 0; q < n; q++) {
+      const j = near[q];
+      if (E.hp[j] <= 0 || Math.hypot(E.x[j] - x, E.z[j] - z) > 18 + E.r[j]) continue;
+      if (!ENEMIES[E.type[j]].boss) E.stun[j] = Math.max(E.stun[j], 4 * (1 + P.st.dur));
+    }
+    for (let k = 0; k < 10; k++) { // a ring of torches
+      const a = k * Math.PI / 5;
+      addStrike(x + Math.cos(a) * 7, z + Math.sin(a) * 7, 2.6, 60, 0.2 + k * 0.05, 1, 2);
+    }
+    toast('Pela espada do Senhor e de Gideão!', '#ffb347');
+  } else if (P.hero === 'daniel') { // God shut the lions' mouths (Dn 6:22)
+    P.iframes = Math.max(P.iframes, 5 * (1 + P.st.dur));
+    const m = nearestEnemies(x, z, 8, 22, -1);
+    for (let k = 0; k < 8; k++) {
+      const t = m ? targets[k % m] : -1;
+      const a = k * Math.PI / 4;
+      addStrike(t >= 0 ? E.x[t] : x + Math.cos(a) * 6, t >= 0 ? E.z[t] : z + Math.sin(a) * 6, 3, 85, 0.3 + k * 0.12, 2);
+    }
+    toast('O Senhor fechou a boca dos leões!', '#fff1b8');
   } else if (P.hero === 'debora') { // "The stars fought from heaven" (Jz 5:20)
     const m = nearestEnemies(x, z, 16, 26, -1);
     for (let k = 0; k < 30; k++) {
@@ -2696,6 +2721,10 @@ function mapEvent() {
     lineAcross(30, 1.8, (x, z, fx, fz, k) => spawnEnemy(k % 5 === 2 ? 1 : 0, x, z));
   } else if (BIOME_ID === 'mar') { // a row of chariots charging across the island
     chariotRow(9);
+  } else if (BIOME_ID === 'babilonia') { // the music plays and the guard comes to make everyone bow (Dn 3:5-6)
+    lineAcross(28, 2, (x, z, fx, fz, k) => spawnEnemy(k % 7 === 3 ? 6 : k % 5 === 1 ? 1 : 0, x, z));
+  } else if (BIOME_ID === 'carmelo') { // the prophets of Baal come down from their altar in a line (1 Rs 18:26)
+    lineAcross(30, 1.8, (x, z, fx, fz, k) => spawnEnemy(k % 6 === 3 ? 1 : k % 9 === 4 ? 6 : 0, x, z));
   } else { // the wind blows and the nearest heaps of bones stand up (Ez 37:9-10)
     dustT = 16;
     const piles = [...world.bonePiles].sort((p, q) => Math.hypot(p.x - P.pos.x, p.z - P.pos.z) - Math.hypot(q.x - P.pos.x, q.z - P.pos.z)).slice(0, 5);
@@ -3084,6 +3113,11 @@ const BOSS_KITS = {
     speed: 2.6, keep: [9, 16], rage: 'O rei fecha as portas de Jericó!', rageMove: 'gates', // Js 6:1
     pick: (d, n) => (d < 5 ? 'thrust' : ['arrows', 'thrust', 'arrows', 'gates'][n % 4]),
   },
+  acabe: { // the king stays behind his prophets: arrows and javelins, fire called down, a lunge when cornered
+    speed: 2.8, keep: [8, 15], rage: 'Acabe: "És tu o perturbador de Israel?"', rageMove: 'challenge', // 1 Rs 18:17
+    pick: (d, n) => (d < 5 ? 'thrust' : ['volley', 'javelins', 'brimstone', 'thrust', 'challenge'][n % 5]),
+    names: { volley: 'Arqueiros de Samaria', javelins: 'Lanças de marfim', brimstone: 'Fogo de Baal', thrust: 'Golpe do rei', challenge: 'Profetas de Baal, avante!' },
+  },
   // ----- Hidden bosses (content.js SECRET_BOSSES, SERPENT): old blows, harder mixes, their own names -----
   isbi: { // Goliath's kin, quicker and never still: leaps, the bronze spear, the sweep and the stomp (2 Sm 21:16)
     speed: 3.4, rage: 'Isbi-Benobe cinge a espada nova: "Eu matarei Davi!"', rageMove: 'leap',
@@ -3104,6 +3138,21 @@ const BOSS_KITS = {
     speed: 3, keep: [8, 15], rage: 'Os cinco reis sobem contra Gibeão!', rageMove: 'arrows',
     pick: (d, n) => (d < 5 ? 'thrust' : ['arrows', 'volley', 'thrust', 'gates', 'challenge'][n % 5]),
     names: { volley: 'Fundas de Jerusalém', challenge: 'Os cinco reis atacam!', arrows: 'Arqueiros dos amorreus', thrust: 'Estocada do rei', gates: 'Escudo de Jerusalém' },
+  },
+  nabucodonosor: { // the great king: hurls his spear, heats the furnace seven times, quakes the ground, calls his armies
+    speed: 2.8, rage: 'Nabucodonosor: "Aquecei a fornalha sete vezes mais!"', rageMove: 'brimstone', // Dn 3:19
+    pick: (d, n) => (d > 15 ? 'leap' : ['spear', 'brimstone', 'stomp', 'challenge', 'brimstone'][n % 5]),
+    names: { spear: 'Lança do rei', brimstone: 'Fornalha ardente', stomp: 'Pés de ferro e barro', challenge: 'Exércitos da Babilônia!', leap: 'Salto do leão' },
+  },
+  belsazar: { // the feasting king keeps away behind his lords and their arrows (Dn 5)
+    speed: 3.2, keep: [9, 16], rage: 'Mene, Mene, Tequel, Parsim!', rageMove: 'volley', // Dn 5:25
+    pick: (d, n) => (d < 5 ? 'thrust' : ['volley', 'javelins', 'challenge', 'brimstone', 'thrust'][n % 5]),
+    names: { volley: 'Arqueiros caldeus', javelins: 'Taças lançadas', challenge: 'Mil grandes do rei!', brimstone: 'Lâmpadas do banquete', thrust: 'Espada do rei' },
+  },
+  jezabel: { // the queen keeps away and sends her prophets and her fire (1 Rs 18:19; 19:2)
+    speed: 3.2, keep: [10, 18], rage: 'Jezabel: "Assim me façam os deuses, se amanhã eu não fizer a ti!"', rageMove: 'bones', // 1 Rs 19:2
+    pick: (d, n) => (d < 5 ? 'stomp' : ['brimstone', 'volley', 'javelins', 'brimstone', 'bones'][n % 5]),
+    names: { brimstone: 'Fogo de Baal', volley: 'Arqueiros de Jezreel', javelins: 'Ira da rainha', bones: 'Os 400 profetas de Aserá!', stomp: 'A rainha pisa' },
   },
   ninrode: { // Nimrod, the mighty hunter (Gn 10:9): keeps away and shoots, leaps in, calls the builders
     speed: 3.2, keep: [9, 17], rage: 'Ninrode: "Façamos um nome!"', rageMove: 'volley', // Gn 11:4
@@ -5467,7 +5516,7 @@ function win() {
   $('bossbar').hidden = true;
   profile.wins[P.hero] = { ...profile.wins[P.hero], [BIOME_ID]: true };
   saveProfile();
-  award({ ela: 'golias', mar: 'farao', ossos: 'gogue', jerico: 'rei' }[BIOME_ID]);
+  award({ ela: 'golias', mar: 'farao', ossos: 'gogue', jerico: 'rei', carmelo: 'carmelo', babilonia: 'babilonia' }[BIOME_ID]);
   if (Object.keys(profile.wins).length >= 3) award('valentes');
   const mapsWon = new Set(Object.values(profile.wins).flatMap((w) => Object.keys(w)));
   if (Object.keys(BIOMES).every((m) => mapsWon.has(m))) award('conquista');
@@ -6110,7 +6159,7 @@ function updateHud() {
   setText(hud['fe-text'], P.fe >= 100 ? `Fé cheia · Q ${h.miracle[0]}` : `Fé ${Math.floor(P.fe)}`);
   setText(hud.extra, {
     sansao: `Nazireu +${P.stacks}%`, davi: `Pedra Lisa em ${5 - (P.shotCount % 5)}`, moises: 'Praga a cada nível',
-    josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas', elias: 'Zelo: +15% queimar · +20% Fé',
+    josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas', elias: 'Zelo: +15% queimar · +20% Fé', gideao: 'Valente: +10% crítico', daniel: 'Sábio: +15% XP',
   }[P.hero]);
   document.body.classList.toggle('sunstop', P.sunT > 0);
   setText(hud.timer, BABEL ? (tower.clear ? 'Porta aberta' : fmt(Math.max(0, tower.left))) : fmt(time)); // the tower: time left on the floor

@@ -103,6 +103,14 @@ const emberModel = () => merge(
   part(new THREE.ConeGeometry(0.5, 1.8, 5), 0xd64a20, [0, 0, -1], [-Math.PI / 2, 0, 0]),
 );
 
+// Daniel's weapon: a clay tablet with a glowing line of writing, a hand above it (Dn 5:5).
+const writing = () => merge(
+  part(new THREE.BoxGeometry(1.4, 1.0, 0.18), 0xd8c49a),
+  ...[-0.25, 0, 0.25].map((y, k) => part(new THREE.BoxGeometry(0.9 - k * 0.15, 0.08, 0.06), 0xffe08a, [0, y, 0.11])),
+  part(ball(0.28), 0xf0d0b0, [0.45, 0.7, 0.15], [0, 0, 0], [1, 0.8, 0.6]),
+  part(cyl(0.06, 0.05, 0.4), 0xf0d0b0, [0.25, 0.62, 0.15], [0, 0, 1.2]),
+);
+
 export function forgeModels() {
   return {
     weapon_lanca: spear(), proj_lanca: spear(),
@@ -110,6 +118,7 @@ export function forgeModels() {
     weapon_mo: mill(), proj_mill: mill(),
     weapon_estaca: peg(),
     weapon_brasas: emberModel(), proj_ember: emberModel(),
+    weapon_escrita: writing(),
     weapon_espada: sword(), weapon_incensario: censer(), weapon_rolo: scroll(), proj_scroll: scroll(),
     relic_la: fleece(), relic_amendoeira: blossom(), relic_selo: seal(),
   };

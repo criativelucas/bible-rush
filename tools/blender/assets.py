@@ -855,7 +855,7 @@ def rigged(name, m, bones, clips, scale):
     skin(mesh, arm, [{b: 1.0} for b in m.BONE])
     actions(arm, clips)
     export_glb(os.path.join(ROOT, 'assets/models/bosses', f'{name}.glb'), [mesh, arm], animations=True, draco=True)
-    arm.location.x = {'golias': 8, 'farao': -8, 'rei': 24, 'isbi': 32, 'janes': 40, 'ogue': 48, 'adonizedeque': 56, 'ninrode': 64}.get(name, 16)
+    arm.location.x = {'golias': 8, 'farao': -8, 'rei': 24, 'isbi': 32, 'janes': 40, 'ogue': 48, 'adonizedeque': 56, 'ninrode': 64, 'acabe': 72, 'jezabel': 80, 'nabucodonosor': 88, 'belsazar': 96}.get(name, 16)
 
 
 # ---------- Hidden bosses (main.js BOSS_KITS isbi/janes/ogue/adonizedeque; 10% of runs) ----------
@@ -2058,9 +2058,279 @@ def bone_props(P):
     out('props', m)
 
 
+# ---------- Mount Carmel (1 Rs 18): Ahab's men and the prophets of Baal and Asherah ----------
+BAAL, BAAL2, IVORY, SAMARIA, SAMARIA2 = 0xc2602a, 0x9a3a1e, 0xf0e6cc, 0x3a7a6a, 0x2a5a4e
+
+
+def carmel_mobs():
+    # Prophet of Baal: orange robe, tall conical cap, a curved knife (they cut themselves, 1 Rs 18:28).
+    m = humanoid(Model('mob_0_carmelo', 71), 1, dict(skin=SKIN2, top=BAAL, bottom=BAAL2, leg=SKIN2, feet=LEATHER, fringe=GOLD, beard=BLACK, belt=GOLD))
+    m.part('cone', 0.17, 0.5, 8, p=(0, 1.72, 0), color=BAAL2)
+    m.part('cyl', 0.18, 0.18, 0.05, 10, p=(0, 1.47, 0), color=GOLD)
+    m.part('ball', 0.05, 1, p=(0, 1.98, 0), color=GOLD)
+    m.part('torus', 0.16, 0.025, PI * 0.9, 8, p=(0.32, 0.55, 0.14), r=(0, PI / 2, PI), color=IRON, **RH(1))
+    m.part('cyl', 0.022, 0.022, 0.14, 6, p=(0.32, 0.68, 0.1), color=DARKWOOD, **RH(1))
+    m.part('ball', 0.07, 1, p=(-0.32, 0.66, 0.06), color=0xd94a3a, **LH(1))  # a bowl of fire for the altar
+    out('mobs', m)
+    # Archer of Samaria: teal tunic, ivory headband, a bow.
+    m = humanoid(Model('mob_1_carmelo', 72), 0.95, dict(skin=SKIN, top=SAMARIA, bottom=CREAM, leg=SKIN, feet=LEATHER, beard=0x3a2214))
+    m.part('box', 0.3, 0.06, 0.28, p=(0, 1.38, 0), color=IVORY)
+    m.part('torus', 0.36, 0.022, PI, 12, p=(-0.35, 0.82, 0.16), r=(0, PI / 2, -PI / 2), color=DARKWOOD, **LH(0.95))
+    m.part('box', 0.008, 0.72, 0.008, p=(-0.35, 0.82, 0.16), color=WHITE, **LH(0.95))
+    m.part('cyl', 0.07, 0.06, 0.5, 8, p=(0.1, 1.0, -0.17), r=(0.3, 0, 0.3), color=SAMARIA2, bevel=0.01)
+    out('mobs', m)
+    # Ahab's chariot (1 Rs 18:44): teal and ivory.
+    m = Model('mob_2_carmelo', 73)
+    chariot(m, IVORY, GOLD, GOLD, 0x4a3a2a, SAMARIA)
+    humanoid_driver(m, SAMARIA, SKIN, philistine='canaan')
+    out('mobs', m)
+    # Guardian of Baal: a giant with a bull-horned helmet and a great club.
+    m = humanoid(Model('mob_3_carmelo', 74), 1.8, dict(skin=SKIN2, top=BAAL2, sleeve=BAAL, bottom=BAAL, leg=SKIN2, feet=LEATHER, beard=BLACK, belt=GOLD))
+    m.part('ball', 0.3, 2, p=(0, 2.62, 0), s=(1, 0.8, 1), color=BRONZE)
+    for x in (-1, 1):
+        m.part('cone', 0.08, 0.55, 6, p=(x * 0.38, 2.82, 0.05), r=(0, 0, -x * 1.0), color=IVORY)
+    m.part('cyl', 0.06, 0.13, 1.7, 8, p=(0.56, 1.5, 0.2), color=DARKWOOD, **RH(1.8))
+    for k in range(4):
+        m.part('cone', 0.05, 0.14, 4, p=(0.56 + (k % 2 - 0.5) * 0.24, 2.0 + k * 0.1, 0.2), r=(0, 0, (k % 2 - 0.5) * 3), color=IRON, **RH(1.8))
+    out('mobs', m)
+    # Servant of Jezebel (runner): small, dark purple hood, a dagger.
+    m = humanoid(Model('mob_5_carmelo', 75), 0.85, dict(skin=SKIN2, top=0x4a2a5a, bottom=0x6a4a7a, leg=SKIN2, feet=LEATHER))
+    m.part('box', 0.3, 0.24, 0.3, p=(0, 1.19, -0.02), color=0x3a1f4a, bevel=0.06)
+    m.part('box', 0.04, 0.26, 0.02, p=(0.29, 0.5, 0.1), color=IRON, **RH(0.85))
+    m.part('box', 0.09, 0.03, 0.05, p=(0.29, 0.64, 0.1), color=GOLD, **RH(0.85))
+    out('mobs', m)
+    # Shield-bearer of Samaria: an ivory-faced tower shield (the ivory house, 1 Rs 22:39).
+    m = humanoid(Model('mob_6_carmelo', 76), 1.25, dict(skin=SKIN, top=SAMARIA2, sleeve=SAMARIA, bottom=SAMARIA, leg=SKIN, feet=LEATHER, beard=0x3a2214, belt=GOLD))
+    m.part('ball', 0.24, 2, p=(0, 1.84, 0), s=(1, 0.7, 1), color=GOLD)
+    m.part('cone', 0.05, 0.25, 6, p=(0, 2.05, 0), color=SAMARIA)
+    tower_shield(m, 1.25, IVORY, GOLD, SAMARIA)
+    m.part('cyl', 0.022, 0.022, 1.4, 6, p=(0.4, 1.2, 0.16), color=WOOD, **RH(1.25))
+    m.part('cone', 0.05, 0.18, 6, p=(0.4, 1.97, 0.16), color=IRON, **RH(1.25))
+    out('mobs', m)
+    # Vulture of Jezreel: bare pink head and neck, a dark ruff, broad ragged wings.
+    m = Model('mob_7_carmelo', 77)
+    PLUME, PLUME2, NECK = 0x3a2e28, 0x5a4a3e, 0xd98a7a
+    m.part('ball', 0.3, 2, p=(0, 0.58, 0), s=(1, 0.85, 1.5), color=PLUME)
+    m.part('torus', 0.16, 0.07, 2 * PI, 10, p=(0, 0.72, 0.32), r=(PI / 2.5, 0, 0), color=IVORY)  # the ruff
+    m.part('cyl', 0.06, 0.08, 0.3, 8, p=(0, 0.82, 0.42), r=(0.6, 0, 0), color=NECK)
+    m.part('ball', 0.12, 1, p=(0, 0.95, 0.52), color=NECK)
+    m.part('cone', 0.05, 0.2, 5, p=(0, 0.9, 0.68), r=(PI / 2 + 0.4, 0, 0), color=0xe8d36a)
+    for x in (-0.05, 0.05):
+        m.part('ball', 0.025, 1, p=(x, 0.98, 0.6), color=DARK)
+    for x in (-1, 1):
+        m.part('box', 0.95, 0.05, 0.48, p=(x * 0.65, 0.66, -0.02), r=(0, -x * 0.2, x * 0.18), color=PLUME2, bevel=0.02)
+        for k in range(5):
+            m.part('box', 0.09, 0.04, 0.34, p=(x * (0.8 + k * 0.1), 0.7 + k * 0.02, -0.22), r=(0, -x * 0.45, x * 0.18), color=PLUME if k % 2 else PLUME2)
+        m.part('cone', 0.04, 0.16, 4, p=(x * 0.1, 0.3, 0.12), r=(PI, 0, 0), color=0xe8d36a)
+    m.part('box', 0.34, 0.04, 0.4, p=(0, 0.55, -0.58), r=(-0.2, 0, 0), color=PLUME2, bevel=0.02)
+    out('mobs', m)
+    # Prophet of Asherah (climber): green robe, a carved sacred pole on the back, iron hooks to climb.
+    m = humanoid(Model('mob_8_carmelo', 78), 1, dict(skin=SKIN2, top=0x4f7a2e, bottom=0x3a5a22, leg=SKIN2, feet=LEATHER, beard=0x2a1a10, belt=BRONZE))
+    m.part('box', 0.3, 0.1, 0.3, p=(0, 1.47, 0), color=0x3a5a22, bevel=0.02)
+    m.part('cyl', 0.05, 0.06, 1.3, 8, p=(0, 1.05, -0.2), color=DARKWOOD)  # the Asherah pole
+    for k in range(3):
+        m.part('ball', 0.09, 1, p=(0, 1.3 + k * 0.18, -0.2), s=(1, 0.6, 1), color=0x6f9a3e if k % 2 else GOLD)
+    for x, hand in ((-0.285, LH(1)), (0.285, RH(1))):
+        for k in range(3):
+            m.part('cone', 0.02, 0.14, 4, p=(x + (k - 1) * 0.03, 0.6, 0.06), r=(PI, 0, 0), color=IRON, **hand)
+    out('mobs', m)
+
+
+def acabe():
+    """Ahab, king of Israel, who served Baal (1 Rs 16:30-33): a crown, teal robes, an ivory shield and a spear."""
+    m = Model('acabe', 35)
+    giant(m, SKIN, 0x3a2e2a, SAMARIA, SAMARIA2, GOLD, belt=GOLD, boots=LEATHER, beard=0x3a2214, robe=SAMARIA, sleeve=SAMARIA2)
+    body = dict(bone='hips')
+    m.part('ball', 0.72, 2, p=(0, 3.0, 0.42), s=(1, 0.85, 0.32), color=IVORY, **body)  # ivory breastplate
+    for k in range(3):
+        m.part('box', 1.2 - k * 0.2, 0.06, 0.05, p=(0, 2.6 + k * 0.3, 0.66), color=GOLD, **body)
+    m.part('box', 1.85, 2.7, 0.12, p=(0, 2.4, -0.62), r=(-0.08, 0, 0), color=BAAL2, bevel=0.03, **body)  # cape
+    hd = dict(bone='head')
+    m.part('box', 0.86, 0.3, 0.84, p=(0, 4.9, 0), color=0x3a2214, bevel=0.08, **hd)
+    m.part('cyl', 0.5, 0.48, 0.3, 12, p=(0, 5.08, 0), color=GOLD, **hd)
+    for k in range(5):
+        a = k / 5 * 2 * PI
+        m.part('cone', 0.1, 0.36, 5, p=(math.sin(a) * 0.46, 5.38, math.cos(a) * 0.46), color=GOLD, **hd)
+    m.part('ball', 0.09, 1, p=(0, 5.12, 0.5), color=SAMARIA, **hd)
+    sh = dict(bone='arm.L')
+    m.part('cyl', 0.9, 0.9, 0.16, 16, p=(-1.5, 2.65, 0.25), r=(0, 0, PI / 2), color=IVORY, **sh)
+    m.part('torus', 0.88, 0.06, 2 * PI, 18, p=(-1.6, 2.65, 0.25), r=(0, PI / 2, 0), color=GOLD, **sh)
+    m.part('ball', 0.22, 1, p=(-1.62, 2.65, 0.25), color=SAMARIA, **sh)
+    sp = dict(bone='arm.R')
+    m.part('cyl', 0.1, 0.1, 4.6, 8, p=(1.2, 2.75, 0.3), color=DARKWOOD, **sp)
+    m.part('cone', 0.22, 0.8, 6, p=(1.2, 5.45, 0.3), color=0xd8dde3, bevel=0.01, **sp)
+    m.part('ball', 0.2, 1, p=(1.2, 4.9, 0.3), color=GOLD, **sp)
+    rigged('acabe', m, GIANT_BONES, giant_clips(22, 3), 0.84)
+
+
+def jezabel():
+    """Jezebel, queen of Israel, who fed the prophets of Baal (1 Rs 18:19); she painted her eyes (2 Rs 9:30)."""
+    m = Model('jezabel', 36)
+    ROBE, ROBE2, FIRE = 0x6a1f4a, 0x8a2a5e, 0xff8a3d
+    giant(m, SKIN, ROBE, ROBE, ROBE2, GOLD, belt=GOLD, boots=ROBE, beard=None, robe=ROBE, sleeve=ROBE2)
+    body = dict(bone='hips')
+    m.part('cyl', 1.02, 1.0, 0.2, 18, p=(0, 3.62, 0), s=(1, 1, 0.66), color=GOLD, **body)  # a broad collar
+    for k in range(7):
+        a = (k - 3) * 0.3
+        m.part('ball', 0.08, 1, p=(math.sin(a) * 0.7, 3.45, 0.6), color=0xd94a4a if k % 2 else 0x3a8ad9, **body)
+    m.part('box', 1.9, 2.9, 0.12, p=(0, 2.3, -0.62), r=(-0.08, 0, 0), color=0x2a1a3a, bevel=0.03, **body)
+    hd = dict(bone='head')
+    for x in (-0.19, 0.19):  # painted eyes
+        m.part('box', 0.22, 0.12, 0.05, p=(x, 4.57, 0.42), color=0x2a1a3a, **hd)
+    m.part('box', 0.2, 0.06, 0.05, p=(0, 4.25, 0.42), color=0xb8283a, **hd)  # lips
+    m.part('box', 0.92, 0.9, 0.9, p=(0, 4.55, -0.08), color=BLACK, bevel=0.1, **hd)  # hair
+    m.part('box', 0.86, 1.2, 0.3, p=(0, 3.9, -0.4), color=BLACK, bevel=0.08, **hd)
+    m.part('cyl', 0.42, 0.52, 0.8, 12, p=(0, 5.3, 0), color=GOLD, **hd)  # a tall queen's headdress
+    m.part('cyl', 0.44, 0.44, 0.08, 12, p=(0, 5.0, 0), color=ROBE2, **hd)
+    m.part('ball', 0.12, 1, p=(0, 5.3, 0.48), color=0xd94a4a, **hd)
+    st = dict(bone='arm.R')
+    m.part('cyl', 0.08, 0.08, 4.0, 8, p=(1.2, 2.6, 0.35), color=GOLD, **st)  # a sceptre topped by Baal's flame
+    m.part('ball', 0.3, 2, p=(1.2, 4.75, 0.35), color=FIRE, **st)
+    m.part('cone', 0.2, 0.6, 6, p=(1.2, 5.15, 0.35), color=0xffd66b, **st)
+    ob = dict(bone='arm.L')
+    m.part('ball', 0.28, 2, p=(-1.2, 1.75, 0.2), color=FIRE, **ob)
+    m.part('torus', 0.36, 0.03, 2 * PI, 14, p=(-1.2, 1.75, 0.2), r=(PI / 2, 0, 0), color=GOLD, **ob)
+    rigged('jezabel', m, GIANT_BONES, giant_clips(18, 2), 0.8)
+
+
+
+# ---------- Babylon (Dn 1-5): Nebuchadnezzar's army, glazed blue and gold ----------
+LAPIS, LAPIS2, SAFFRON = 0x2a5aa8, 0x1d3f7a, 0xe8a83a
+
+
+def babylon_mobs():
+    # Babylonian soldier: blue tunic, conical iron helmet, round wicker shield, spear.
+    m = humanoid(Model('mob_0_babilonia', 81), 1, dict(skin=SKIN3, top=LAPIS, bottom=CREAM, leg=SKIN3, feet=LEATHER, fringe=GOLD, beard=BLACK, belt=GOLD))
+    m.part('cone', 0.17, 0.36, 8, p=(0, 1.6, 0), color=IRON)
+    m.part('cyl', 0.24, 0.24, 0.05, 14, p=(-0.38, 0.84, 0.13), r=(PI / 2, 0, 0), color=0xc9a46e, bevel=0.01, **LH(1))
+    m.part('torus', 0.24, 0.025, 2 * PI, 16, p=(-0.38, 0.84, 0.16), color=GOLD, **LH(1))
+    m.part('cyl', 0.02, 0.02, 1.6, 6, p=(0.34, 0.95, 0.12), color=WOOD, **RH(1))
+    m.part('cone', 0.05, 0.2, 6, p=(0.34, 1.84, 0.12), color=IRON, **RH(1))
+    out('mobs', m)
+    # Chaldean archer: saffron robe, a curled beard, a composite bow.
+    m = humanoid(Model('mob_1_babilonia', 82), 0.95, dict(skin=SKIN3, top=SAFFRON, bottom=LAPIS2, leg=SKIN3, feet=LEATHER, beard=BLACK))
+    m.part('cyl', 0.15, 0.16, 0.16, 10, p=(0, 1.45, 0), color=LAPIS)  # a round cap
+    m.part('torus', 0.36, 0.022, PI, 12, p=(-0.35, 0.82, 0.16), r=(0, PI / 2, -PI / 2), color=DARKWOOD, **LH(0.95))
+    m.part('box', 0.008, 0.72, 0.008, p=(-0.35, 0.82, 0.16), color=WHITE, **LH(0.95))
+    m.part('cyl', 0.07, 0.06, 0.5, 8, p=(0.1, 1.0, -0.17), r=(0.3, 0, 0.3), color=GOLD, bevel=0.01)
+    out('mobs', m)
+    # Babylonian chariot: blue and gold.
+    m = Model('mob_2_babilonia', 83)
+    chariot(m, LAPIS, GOLD, GOLD, 0xe8dcc0, SAFFRON)
+    humanoid_driver(m, LAPIS, SKIN3, philistine='canaan')
+    out('mobs', m)
+    # Golden colossus: the image on the plain of Dura come alive (Dn 3:1).
+    m = humanoid(Model('mob_3_babilonia', 84), 1.8, dict(skin=GOLD, top=GOLD, sleeve=0xc99a2e, bottom=0xc99a2e, leg=GOLD, feet=0xc99a2e, beard=0xb8862a, belt=LAPIS, buckle=LAPIS, wrap=0xc99a2e, bracer=LAPIS, brow=0xb8862a))
+    m.part('cyl', 0.32, 0.28, 0.42, 10, p=(0, 2.68, 0), color=0xc99a2e)  # a tall crown
+    for k in range(6):
+        a = k / 6 * 2 * PI
+        m.part('cone', 0.06, 0.2, 5, p=(math.sin(a) * 0.3, 2.98, math.cos(a) * 0.3), color=GOLD)
+    m.part('cyl', 0.05, 0.05, 2.6, 6, p=(0.56, 1.6, 0.2), color=GOLD, **RH(1.8))
+    m.part('ball', 0.18, 1, p=(0.56, 2.95, 0.2), color=LAPIS, **RH(1.8))
+    out('mobs', m)
+    # Chaldean magician (runner): a pointed hat with stars, a short wand.
+    m = humanoid(Model('mob_5_babilonia', 85), 0.85, dict(skin=SKIN3, top=0x3a2a6a, bottom=0x4a3a7a, leg=SKIN3, feet=LEATHER, beard=0x2a1a10))
+    m.part('cone', 0.15, 0.42, 8, p=(0, 1.38, 0), color=0x3a2a6a)
+    for k in range(3):
+        m.part('ball', 0.025, 0, p=(math.sin(k * 2.1) * 0.1, 1.3 + k * 0.08, math.cos(k * 2.1) * 0.1), color=GOLD)
+    m.part('cyl', 0.015, 0.015, 0.35, 6, p=(0.29, 0.55, 0.1), color=GOLD, **RH(0.85))
+    m.part('ball', 0.04, 1, p=(0.29, 0.36, 0.1), color=0x7ff0ff, **RH(0.85))
+    out('mobs', m)
+    # Guard of the Ishtar Gate: a tall blue shield with a gold lion, a bronze helmet.
+    m = humanoid(Model('mob_6_babilonia', 86), 1.25, dict(skin=SKIN3, top=LAPIS2, sleeve=LAPIS, bottom=LAPIS, leg=SKIN3, feet=LEATHER, beard=BLACK, belt=GOLD))
+    m.part('cone', 0.22, 0.4, 8, p=(0, 1.98, 0), color=BRONZE)
+    tower_shield(m, 1.25, LAPIS, GOLD, GOLD)
+    m.part('cyl', 0.022, 0.022, 1.4, 6, p=(0.4, 1.2, 0.16), color=WOOD, **RH(1.25))
+    m.part('cone', 0.05, 0.18, 6, p=(0.4, 1.97, 0.16), color=IRON, **RH(1.25))
+    out('mobs', m)
+    # Winged lion (Dn 7:4): a lion's body with eagle wings.
+    m = Model('mob_7_babilonia', 87)
+    FUR, MANE = 0xd9a44a, 0x9a5a24
+    m.part('ball', 0.3, 2, p=(0, 0.55, -0.05), s=(0.9, 0.8, 1.6), color=FUR)
+    m.part('ball', 0.26, 2, p=(0, 0.72, 0.42), color=MANE)  # the mane
+    m.part('ball', 0.17, 2, p=(0, 0.72, 0.6), color=FUR)
+    m.part('box', 0.12, 0.08, 0.08, p=(0, 0.66, 0.74), color=0x5a3418)
+    for x in (-0.07, 0.07):
+        m.part('ball', 0.03, 1, p=(x, 0.78, 0.72), color=DARK)
+        m.part('cyl', 0.04, 0.035, 0.3, 6, p=(x * 2.5, 0.28, 0.35), color=FUR)
+        m.part('cyl', 0.04, 0.035, 0.3, 6, p=(x * 2.5, 0.28, -0.35), color=FUR)
+    for x in (-1, 1):
+        m.part('box', 0.85, 0.05, 0.42, p=(x * 0.6, 0.78, -0.05), r=(0, -x * 0.2, x * 0.35), color=0xf2e6c4, bevel=0.02)
+        for k in range(4):
+            m.part('box', 0.09, 0.04, 0.32, p=(x * (0.78 + k * 0.1), 0.84 + k * 0.04, -0.24), r=(0, -x * 0.5, x * 0.35), color=GOLD if k % 2 else 0xf2e6c4)
+    m.part('cyl', 0.02, 0.015, 0.5, 4, p=(0, 0.6, -0.6), r=(-0.9, 0, 0), color=FUR)  # tail
+    m.part('ball', 0.05, 1, p=(0, 0.78, -0.8), color=MANE)
+    out('mobs', m)
+    # Climber of the hanging gardens: a gardener-soldier with a rope and hooks, vines on his back.
+    m = humanoid(Model('mob_8_babilonia', 88), 1, dict(skin=SKIN3, top=0x5a7a3a, bottom=CREAM, leg=SKIN3, feet=LEATHER, beard=BLACK, belt=LAPIS))
+    m.part('box', 0.3, 0.08, 0.28, p=(0, 1.42, 0), color=LAPIS)
+    m.part('torus', 0.2, 0.035, 2 * PI, 12, p=(0.05, 1.0, -0.15), r=(0.3, 0, 0.6), color=0xc9b48a)
+    for k in range(4):
+        m.part('ball', 0.07, 1, p=((k % 2 - 0.5) * 0.15, 0.8 + k * 0.12, -0.19), color=0x6f9a3e)
+    for x, hand in ((-0.285, LH(1)), (0.285, RH(1))):
+        for k in range(3):
+            m.part('cone', 0.02, 0.14, 4, p=(x + (k - 1) * 0.03, 0.6, 0.06), r=(PI, 0, 0), color=IRON, **hand)
+    out('mobs', m)
+
+
+def nabucodonosor():
+    """Nebuchadnezzar, king of Babylon (Dn 3-4): a tall blue and gold tiara, a curled beard, a sceptre and a mace."""
+    m = Model('nabucodonosor', 37)
+    giant(m, SKIN3, LAPIS2, LAPIS, LAPIS2, GOLD, belt=GOLD, boots=LEATHER, beard=BLACK, robe=LAPIS, sleeve=LAPIS2)
+    body = dict(bone='hips')
+    for row in range(4):  # gold rosettes on the robe
+        for k in range(5):
+            m.part('ball', 0.08, 1, p=(-0.6 + k * 0.3, 2.4 + row * 0.35, 0.62), s=(1, 1, 0.4), color=GOLD, **body)
+    m.part('cyl', 1.02, 1.0, 0.2, 18, p=(0, 3.62, 0), s=(1, 1, 0.66), color=GOLD, **body)
+    m.part('box', 1.9, 2.9, 0.12, p=(0, 2.3, -0.62), r=(-0.08, 0, 0), color=0xb8283a, bevel=0.03, **body)
+    hd = dict(bone='head')
+    for k in range(4):  # the curled beard in rows
+        m.part('box', 0.7 - k * 0.08, 0.12, 0.32, p=(0, 4.2 - k * 0.14, 0.42), color=BLACK if k % 2 else 0x2a1d14, bevel=0.04, **hd)
+    m.part('cyl', 0.44, 0.5, 0.95, 12, p=(0, 5.35, 0), color=LAPIS, **hd)  # the tiara
+    m.part('cyl', 0.5, 0.5, 0.12, 12, p=(0, 4.9, 0), color=GOLD, **hd)
+    m.part('cyl', 0.46, 0.46, 0.1, 12, p=(0, 5.8, 0), color=GOLD, **hd)
+    m.part('cone', 0.18, 0.4, 8, p=(0, 6.0, 0), color=GOLD, **hd)
+    sp = dict(bone='arm.R')
+    m.part('cyl', 0.1, 0.1, 4.4, 8, p=(1.2, 2.75, 0.3), color=GOLD, **sp)
+    m.part('ball', 0.4, 2, p=(1.2, 5.0, 0.3), color=LAPIS, **sp)
+    for k in range(6):
+        a = k / 6 * 2 * PI
+        m.part('cone', 0.1, 0.3, 4, p=(1.2 + math.sin(a) * 0.38, 5.0 + math.cos(a) * 0.38, 0.3), r=(0, 0, -a), color=GOLD, **sp)
+    sh = dict(bone='arm.L')
+    m.part('cyl', 0.95, 0.95, 0.16, 18, p=(-1.5, 2.65, 0.25), r=(0, 0, PI / 2), color=LAPIS, **sh)
+    m.part('torus', 0.92, 0.06, 2 * PI, 18, p=(-1.6, 2.65, 0.25), r=(0, PI / 2, 0), color=GOLD, **sh)
+    m.part('ball', 0.3, 1, p=(-1.62, 2.65, 0.25), color=GOLD, **sh)
+    rigged('nabucodonosor', m, GIANT_BONES, giant_clips(22, 3), 0.9)
+
+
+def belsazar():
+    """Belshazzar at his feast (Dn 5): purple robes, a gold cup from the temple, a crown of gold points."""
+    m = Model('belsazar', 38)
+    ROBE, ROBE2 = 0x5a2a7a, 0x7a3a9a
+    giant(m, SKIN3, ROBE, ROBE, ROBE2, GOLD, belt=GOLD, boots=ROBE, beard=0x2a1d14, robe=ROBE, sleeve=ROBE2)
+    body = dict(bone='hips')
+    m.part('cyl', 1.02, 1.0, 0.2, 18, p=(0, 3.62, 0), s=(1, 1, 0.66), color=GOLD, **body)
+    m.part('box', 1.9, 2.9, 0.12, p=(0, 2.3, -0.62), r=(-0.08, 0, 0), color=LAPIS, bevel=0.03, **body)
+    hd = dict(bone='head')
+    m.part('cyl', 0.5, 0.48, 0.34, 12, p=(0, 5.0, 0), color=GOLD, **hd)
+    for k in range(8):
+        a = k / 8 * 2 * PI
+        m.part('cone', 0.09, 0.45, 5, p=(math.sin(a) * 0.46, 5.38, math.cos(a) * 0.46), color=GOLD, **hd)
+    cup = dict(bone='arm.R')
+    m.part('cyl', 0.36, 0.14, 0.5, 12, p=(1.2, 1.75, 0.35), color=GOLD, **cup)  # the temple cup (Dn 5:2)
+    m.part('cyl', 0.06, 0.06, 0.3, 6, p=(1.2, 1.4, 0.35), color=GOLD, **cup)
+    m.part('cyl', 0.22, 0.22, 0.06, 10, p=(1.2, 1.25, 0.35), color=GOLD, **cup)
+    sw = dict(bone='arm.L')
+    m.part('box', 0.1, 2.4, 0.26, p=(-1.2, 1.1, 0.45), color=0xe2e8ee, bevel=0.02, **sw)
+    m.part('box', 0.6, 0.12, 0.16, p=(-1.2, 2.25, 0.45), color=GOLD, **sw)
+    rigged('belsazar', m, GIANT_BONES, giant_clips(20, 2), 0.82)
+
+
 if __name__ == '__main__':
     reset()
     mobs()
+    carmel_mobs()
+    babylon_mobs()
     goliath()
     pharaoh()
     gogue()
@@ -2070,6 +2340,10 @@ if __name__ == '__main__':
     ogue()
     adonizedeque()
     ninrode()
+    acabe()
+    jezabel()
+    nabucodonosor()
+    belsazar()
     items()
     props()
     for group, objs in built.items():
