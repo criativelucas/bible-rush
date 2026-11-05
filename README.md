@@ -1,7 +1,7 @@
 # Bible Rush
 
-Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão, Moisés, Josué, Débora e Elias.
-Escolha um herói e um dos quatro cenários, erga as três Pedras do Memorial e derrote o chefe.
+Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão, Moisés, Josué, Débora, Elias, Gideão e Daniel.
+Escolha um herói e um dos seis cenários, erga as três Pedras do Memorial e derrote o chefe.
 Cada jornada rende denários para o Mercado: melhorias permanentes, ferramentas para as cartas, armas, maestria e roupas.
 Os heróis evoluem com o tempo jogado; há tarefas diárias, bestiário, troféus com títulos, dificuldades e o modo Sobrevivência.
 
@@ -109,3 +109,21 @@ Brasas também podem aparecer nas cartas dos outros heróis. O modelo animado es
 migração preserva os dados existentes, permite Elias e inclui a separação do ranking
 Clássico/Torre. Enquanto o servidor não aceitar Elias, partidas recusadas por esse
 motivo ficam na fila local de reenvio (sujeita ao limite existente de 10 pendências).
+
+## Gideão, Daniel, Monte Carmelo e Batalha na Babilônia
+
+- **Gideão** (troféu *Ungido*: nível 20): Espada de Gideão; +10% crítico e +25% dano crítico.
+  E — Grito dos Trezentos (investida que atordoa). Q — Cântaros e Tochas: atordoa a horda por 4 s e acende tochas ao redor.
+  Estágios: Lavrador de Ofra → Valente de Israel → Juiz de Israel.
+- **Daniel** (troféu *O Senhor é Deus*: vencer no Monte Carmelo): arma nova Mão que Escreve
+  (luz do alto sobre o inimigo mais forte; evolui com o Candelabro de Ouro em Mene, Tequel, Parsim).
+  +15% XP e +1 renovação. E — Firme na Oração. Q — Cova dos Leões: 5 s intocável e leões de luz.
+  Estágios: Cativo de Judá → Sábio da Babilônia → Príncipe dos Sátrapas.
+- **Monte Carmelo** (troféu *Os Valentes*): monte em terraços sobre o mar, altar de Elias com 12 pedras e o altar de Baal.
+  Inimigos próprios (profetas de Baal e de Aserá, soldados de Samaria, abutres de Jezreel), chefe **Acabe**, chefe secreto **Jezabel**.
+- **Batalha na Babilônia** (troféu *Relicário*): Jardins Suspensos em terraços largos cheios de árvores, zigurate e templos
+  de tijolos azuis vidrados, Porta de Ishtar, rio Eufrates. Inimigos próprios (soldados babilônios, arqueiros e magos caldeus,
+  estátua de ouro, guardas de Ishtar, leões alados), chefe **Nabucodonosor**, chefe secreto **Belsazar**.
+
+Modelos: `tools/blender/heroes.py` (`ONLY=gideao,daniel` reconstrói só esses) e `tools/blender/assets.py`.
+**Ranking:** execute `tools/add-new-content-ranking.sql` no SQL Editor do Supabase; até lá as partidas novas ficam na fila local.

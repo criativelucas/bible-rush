@@ -869,6 +869,130 @@ export function buildWorld(scene, id, random, PROPS) {
       piece('tentI', geo('prop_tentI'), x, z);
       collide(x, z, 1.5, H(x, z) + 2.2);
     }
+  } else if (B.gardens) {
+    // Babylon (Dn 1-5): the Ishtar Gate on the processional way, temples of glazed blue brick with gold bands,
+    // trees and palms up the terraces of the Hanging Gardens, palms along the Euphrates, houses round about.
+    const blue = brickMat(GLAZE);
+    const blue2 = brickMat(0x234c94);
+    const gold = M.toon(0xe8b84a, { vc: false, fade: true });
+    const solidBox = (g, w, h, d, x, y, z, mat) => { const b = new THREE.Mesh(box(w, h, d), mat); b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; g.add(b); return b; };
+    const crenels = (g, w, d, y, mat) => {
+      for (let u = -w / 2 + 0.5; u <= w / 2 - 0.4; u += 1.4) for (const v of [-d / 2 + 0.4, d / 2 - 0.4]) solidBox(g, 0.8, 0.8, 0.8, u, y, v, mat);
+    };
+    { // the Ishtar Gate, astride the processional way north of the start
+      const gz = 46;
+      const y0 = H(0, gz) - 0.2;
+      const g = new THREE.Group();
+      g.position.set(0, y0, gz);
+      for (const x of [-5.2, 5.2]) {
+        solidBox(g, 4.4, 11, 5, x, 0, 0, blue);
+        for (const ly of [2.5, 5.5, 8.5]) for (const lz of [-2.55, 2.55]) solidBox(g, 1.6, 0.9, 0.12, x, ly, lz, gold); // gold beasts in relief
+        const top = new THREE.Group();
+        top.position.set(x, 11, 0);
+        crenels(top, 4.4, 5, 0, blue2);
+        g.add(top);
+        for (const lz of [-1.6, 0, 1.6]) collide(x, gz + lz, 1.9, y0 + 11);
+      }
+      solidBox(g, 6, 3, 5, 0, 8, 0, blue); // the lintel over the way
+      solidBox(g, 6.2, 0.4, 5.2, 0, 7.8, 0, gold);
+      scene.add(g);
+      placed.push({ x: 0, z: gz }, { x: -5, z: gz }, { x: 5, z: gz });
+    }
+    for (let k = 0; k < 4; k++) { // temples of blue brick on level ground
+      const rot = random() * Math.PI * 2;
+      const s = levelSpot(24, 90 * S, 22, 9, rot);
+      if (!s) continue;
+      const y = H(s.x, s.z) - 0.2;
+      const g = new THREE.Group();
+      g.position.set(s.x, y, s.z);
+      g.rotation.y = rot;
+      solidBox(g, 9, 6, 7, 0, 0, 0, k % 2 ? blue : blue2);
+      solidBox(g, 9.2, 0.5, 7.2, 0, 4.4, 0, gold);
+      const top = new THREE.Group();
+      top.position.y = 6;
+      crenels(top, 9, 7, 0, k % 2 ? blue2 : blue);
+      g.add(top);
+      solidBox(g, 2.4, 4, 0.3, 0, 0, 3.55, M.toon(0x2a1a10, { vc: false })); // the doorway
+      scene.add(g);
+      const c = Math.cos(rot);
+      const sn = Math.sin(rot);
+      for (let lx = -3.5; lx <= 3.5; lx += 2.3) for (let lz = -2.5; lz <= 2.5; lz += 2.5) collide(s.x + lx * c + lz * sn, s.z - lx * sn + lz * c, 1.6, y + 6);
+      placed.push(s);
+    }
+    const G = B.gardens;
+    const garden = (x, z) => Math.max(Math.abs(x - G.x), Math.abs(z - G.z)) < G.r - 3 && H(x, z) > 3 && slopeAt(x, z) < 0.5;
+    // ponytail: rejection sampling over the whole map, so dense counts here; a garden-only sampler if it ever gets slow
+    scatter(40, 'cypress', geo('prop_cypress'), 0.5, 6, 0.8, 1.2, { minD: 4, gap: 2.5, test: garden });
+    scatter(34, 'tree-green', geo('prop_tree_green'), 0.6, 6, 0.8, 1.15, { minD: 4, gap: 2.5, test: garden });
+    scatter(26, 'palm', geo('prop_palm'), 0.45, 6, 0.85, 1.2, { minD: 4, gap: 2.5, test: garden });
+    scatter(14, 'olive', geo('prop_olive'), 0.6, 6, 0.85, 1.2, { minD: 4, gap: 2.5, test: garden });
+    scatter(8, 'bigTree', geo('prop_bigTree'), 0.8, 7, 0.8, 1.0, { minD: 4, gap: 4, test: garden });
+    const bank = (x, z) => Math.abs(z - B.euphrates(x));
+    scatter(16, 'palm', geo('prop_palm'), 0.45, 6, 0.85, 1.25, { test: (x, z) => bank(x, z) > 5 && bank(x, z) < 10 && dry(x, z, 0.5) });
+    for (let k = 0; k < n2(8); k++) { // mud-brick houses round the temples
+      const s = spot(18, 95 * S, 9);
+      if (s) build('house', geo('prop_house'), s.x, s.z, random() * 6.28, [[0, 0, 2.2, 3.2]]);
+    }
+    for (let k = 0; k < n2(2); k++) {
+      const s = spot(14, 70 * S, 22);
+      if (s) ruinSite(s.x, s.z);
+    }
+    scatter(6, 'obelisk', geo('prop_obelisk'), 0.9, 7, 0.9, 1.2);
+    scatter(10, 'sandstone', geo('prop_sandstone'), 1.1, 1.0, 0.9, 1.5);
+    for (let k = 0; k < n2(2); k++) {
+      const s = spot(14, 70 * S, 10);
+      if (s) build('cart', geo('prop_cart'), s.x, s.z, random() * 6.28, [[0, 0, 1.2, 1.0]]);
+    }
+  } else if (B.top) {
+    // Mount Carmel (1 Rs 18): on the summit, Elijah's altar of twelve stones with the fire of the Lord on it
+    // and Baal's altar across from it; olive groves and vineyards down the terraces, Israel's camp below.
+    const A = B.top;
+    const ex = A.x + 6;
+    const ez = A.z;
+    for (let k = 0; k < 12; k++) { // one stone for each tribe (1 Rs 18:31)
+      const a = (k / 12) * Math.PI * 2;
+      build('boulder', geo('prop_boulder'), ex + Math.cos(a) * 2.2, ez + Math.sin(a) * 2.2, a, [[0, 0, 0.9, 1.1]], 0.55);
+    }
+    piece('plinth', geo('prop_plinth'), ex, ez, 0, 0.9);
+    collide(ex, ez, 1.3, H(ex, ez) + 1.4);
+    const fire = new THREE.Mesh(flameGeo, flameMat);
+    fire.position.set(ex, H(ex, ez) + 1.6, ez);
+    fire.scale.setScalar(2.4);
+    scene.add(fire);
+    const bx = A.x - 7;
+    const bz = A.z + 2;
+    build('plinth', geo('prop_plinth'), bx, bz, 0.3, [[0, 0, 1.5, 1.57]]);
+    build('obelisk', geo('prop_obelisk'), bx - 2.5, bz - 2, 0.3, [[0, 0, 0.9, 7]]);
+    build('obelisk', geo('prop_obelisk'), bx + 2.5, bz + 2, 0.3, [[0, 0, 0.9, 7]]);
+    placed.push({ x: ex, z: ez }, { x: bx, z: bz });
+    for (let k = 0; k < n2(3); k++) {
+      const s = spot(20, 80 * S, 22);
+      if (s) ruinSite(s.x, s.z);
+    }
+    const RAMP = [[0, 0, 3.0, 3.6], [-1.6, -1.4, 0.5, 6.7], [1.0, -1.4, 0.5, 5.7]];
+    for (let lx = 6.6; lx > 3.2; lx -= 0.5) RAMP.push([lx, 0, 1.2, Math.min(3.6, 2.17 + (5.2 - lx) * 1.557)]);
+    tall('ruinramp', null, 2, 20, 75 * S, 18, 7, RAMP);
+    tall('columns', null, 2, 16, 70 * S, 16, 9.2, [1.5, 2.7, 3.9, 5.1, 6.3].map((h, k) => [k * 2.3, Math.sin(k * 0.9) * 1.2, 0.85, h]));
+    const land = (x, z) => B.coast(x, z) > 6;
+    scatter(30, 'olive', geo('prop_olive'), 0.6, 6, 0.9, 1.35, { test: (x, z) => land(x, z) && dry(x, z, 0.5) });
+    scatter(12, 'cypress', geo('prop_cypress'), 0.5, 6, 0.8, 1.3);
+    scatter(8, 'tree-green', geo('prop_tree_green'), 0.6, 6, 0.85, 1.25);
+    scatter(4, 'bigTree', geo('prop_bigTree'), 0.8, 7, 0.9, 1.15, { gap: 8 });
+    scatter(8, 'palm', geo('prop_palm'), 0.45, 6, 0.85, 1.2, { test: (x, z) => !land(x, z) && dry(x, z, 0.3) });
+    scatter(16, 'boulder', geo('prop_boulder'), 1.1, 1.1, 0.9, 1.7);
+    scatter(4, 'wall', geo('prop_wall'), 0.9, 1.4, 0.9, 1.1, { gap: 8 });
+    scatter(12, 'sheep', geo('prop_sheep'), 0.45, 0.8, 0.9, 1.1, { minD: 8 });
+    for (let k = 0; k < n2(2); k++) {
+      const s = spot(20, 70 * S, 10);
+      if (s) build('cart', geo('prop_cart'), s.x, s.z, random() * 6.28, [[0, 0, 1.2, 1.0]]);
+    }
+    for (let k = 0; k < 10; k++) { // Israel's camp on the lower slope, watching (1 Rs 18:21)
+      const x = -30 + k * 7 + random() * 3;
+      const z = 58 + random() * 8;
+      if (!inside(x, z, 0.96) || !dry(x, z, 0.5)) continue;
+      piece('tentI', geo('prop_tentI'), x, z);
+      collide(x, z, 1.5, H(x, z) + 2.2);
+    }
   } else {
     // Valley of dry bones (Ez 37): ruins, dead trees, great ribcages and skulls, heaps of bones, red rock.
     for (let k = 0; k < n2(3); k++) {
@@ -985,6 +1109,26 @@ export function buildWorld(scene, id, random, PROPS) {
     decor(geo('decor_shrub'), 240, (x, z, h) => h > B.water + 1 && Math.hypot(x - C.x, z - C.z) > C.r + 3);
     decor(geo('decor_drygrass'), 600, (x, z, h) => h > B.water + 1 && Math.hypot(x - C.x, z - C.z) > C.r + 3);
     decor(geo('decor_pebble'), 200, () => true, 0.6, 1.4);
+  } else if (B.gardens) {
+    const G = B.gardens;
+    const inGarden = (x, z, h) => Math.max(Math.abs(x - G.x), Math.abs(z - G.z)) < G.r - 2 && h > 3 && slopeAt(x, z) < 0.9;
+    decor(geo('decor_grass'), 3000, inGarden);
+    decor(geo('decor_leaves'), 1800, inGarden);
+    for (const k of [0, 1, 2]) decor(geo(`decor_flower${k}`), 300, inGarden);
+    const bank = (x, z) => Math.abs(z - B.euphrates(x));
+    decor(geo('decor_reed'), 260, (x, z, h) => bank(x, z) < 7 && h > B.water - 0.3 && h < B.water + 0.6);
+    decor(geo('decor_grass'), 600, (x, z, h) => bank(x, z) < 9 && h > B.water + 0.3);
+    decor(geo('decor_shrub'), 160, (x, z, h) => h > 1 && h < 3 && slopeAt(x, z) < 0.5);
+    decor(geo('decor_pebble'), 200, () => true, 0.6, 1.4);
+  } else if (B.top) {
+    const level = (x, z) => slopeAt(x, z) < 0.9;
+    const green = (x, z, h) => h > B.water + 0.8 && level(x, z) && Math.hypot(x - B.top.x, z - B.top.z) > B.top.r;
+    decor(geo('decor_grass'), 2600, green);
+    decor(geo('decor_leaves'), 800, green);
+    for (const k of [0, 1, 2]) decor(geo(`decor_flower${k}`), 120, green);
+    decor(geo('decor_drygrass'), 300, (x, z) => Math.hypot(x - B.top.x, z - B.top.z) < B.top.r);
+    decor(geo('decor_shell'), 220, (x, z, h) => h > B.water && h < B.water + 0.8, 0.8, 1.6);
+    decor(geo('decor_pebble'), 260, () => true, 0.6, 1.4);
   } else if (!T) {
     decor(geo('decor_drygrass'), 1600, (x, z, h) => h < 20 && slopeAt(x, z) < 0.9);
     decor(geo('decor_bone'), 500, (x, z, h) => h < 8 && slopeAt(x, z) < 0.9, 0.8, 1.6);

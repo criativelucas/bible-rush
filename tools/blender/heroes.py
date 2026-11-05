@@ -471,6 +471,65 @@ def debora():
     return s
 
 
+def gideao():
+    """Gideon: farmer of Ofra made a judge (Jz 6-7). Red cloak, leather vest, a sword at the belt,
+    a clay jar with a torch inside in the left hand (Jz 7:16)."""
+    s = Sculpt('gideao', 1.8)
+    skin_, hair, tunic, vest, red, leather, clay = 0xc98d64, 0x4a2a18, 0xd9c49a, 0x7a5232, 0xb8463a, 0x5e3a20, 0xb86a3a
+    head(s, dict(skin=skin_, eye=0x2a1a12, brow=hair, hair=hair, brow_h=0.007))
+    s.add(ellipsoid((0, 0.866, 0.036), (0.058, 0.04, 0.044)), hair, 'head')  # full beard
+    s.add(ellipsoid((0, 0.888, 0.068), (0.027, 0.007, 0.01)), hair, 'head', shade=0)
+    s.add(belt(0.95, 0.074, 0.079, 0.009, cz=-0.004), red, 'head')  # headband
+    s.add(loft([(0.4, 0, 0.004, 0.122, 0.097), (0.47, 0, 0, 0.11, 0.082), (0.54, 0, 0, 0.102, 0.074), (0.64, 0, 0, 0.104, 0.072),
+                (0.72, 0, 0, 0.116, 0.074), (0.78, 0, -0.003, 0.13, 0.072), (0.808, 0, -0.005, 0.1, 0.06), (0.828, 0, -0.005, 0.05, 0.046)], folds=0.05),
+          tunic, skirt)
+    s.add(loft([(0.53, 0, 0, 0.112, 0.082), (0.62, 0, 0, 0.113, 0.081), (0.71, 0, 0.002, 0.125, 0.083), (0.775, 0, -0.002, 0.138, 0.08),
+                (0.8, 0, -0.004, 0.11, 0.068)]), vest, torso, shade=0.3)
+    s.add(belt(0.535, 0.112, 0.083, 0.014), leather, 'spine')
+    arms(s, dict(skin=skin_), 0.14)
+    for x in (-1, 1):
+        s.add(capsule((0.153 * x, 0.6, 0.0), (0.158 * x, 0.51, 0.008), 0.032, 0.029), leather, f'forearm.{"L" if x > 0 else "R"}')
+    legs(s, dict(thigh=skin_, shin=leather, foot=skin_), 0.062, thigh=(0.05, 0.04), shin=(0.036, 0.028))
+    s.add(shell([(0.3, 0, -0.045, 0.158, 0.118), (0.5, 0, -0.035, 0.152, 0.106), (0.68, 0, -0.022, 0.15, 0.096),
+                  (0.78, 0, -0.014, 0.158, 0.092), (0.812, 0, -0.01, 0.13, 0.075)], gap=0.85, thick=0.012, folds=0.06), red, cape)
+    s.add(capsule((-0.125, 0.5, 0.05), (-0.165, 0.26, 0.09), 0.016, 0.013), leather, 'spine')  # sword in its scabbard
+    s.add(capsule((-0.115, 0.53, 0.045), (-0.11, 0.6, 0.04), 0.009, 0.009), 0xd8dee6, 'spine')
+    # Jar in the left hand, a torch rising out of it.
+    s.add(ellipsoid((0.165, 0.43, 0.06), (0.042, 0.05, 0.042)), clay, 'forearm.L')
+    s.add(capsule((0.165, 0.47, 0.06), (0.165, 0.56, 0.06), 0.01, 0.01), 0x5a3418, 'forearm.L')
+    s.add(ellipsoid((0.165, 0.58, 0.06), (0.024, 0.04, 0.024)), 0xff8a3d, 'forearm.L', shade=0)
+    s.add(ellipsoid((0.165, 0.6, 0.06), (0.013, 0.024, 0.013)), 0xffe08a, 'forearm.L', shade=0)
+    return s
+
+
+def daniel():
+    """Daniel, the wise man of Judah at Babylon's court (Dn 1-6): a blue turban, a long blue robe with
+    gold trim, a sash, and a scroll in the right hand."""
+    s = Sculpt('daniel', 1.76)
+    skin_, hair, blue, blue2, gold, cream = 0xd29a72, 0x2e1c12, 0x2f4f8a, 0x223c6e, 0xe8b84a, 0xece0bf
+    head(s, dict(skin=skin_, eye=0x2a1a12, brow=hair, hair=hair, brow_h=0.006))
+    s.add(ellipsoid((0, 0.868, 0.034), (0.05, 0.03, 0.04)), hair, 'head')  # a short beard
+    s.add(ellipsoid((0, 0.95, -0.01), (0.08, 0.06, 0.084)), cream, 'head')  # turban
+    s.add(belt(0.935, 0.077, 0.081, 0.012, cz=-0.004), blue, 'head')
+    s.add(ellipsoid((0, 0.975, 0.07), (0.016, 0.016, 0.01)), gold, 'head', shade=0)
+    s.add(loft([(0.05, 0, 0.006, 0.14, 0.112), (0.2, 0, 0, 0.13, 0.102), (0.4, 0, 0, 0.118, 0.088), (0.53, 0, 0, 0.104, 0.076),
+                (0.64, 0, 0, 0.108, 0.076), (0.73, 0, 0, 0.122, 0.078), (0.79, 0, -0.004, 0.13, 0.07), (0.82, 0, -0.006, 0.055, 0.048)],
+               folds=0.07, nf=9), blue, lambda p: skirt(p, 0.6))
+    s.add(belt(0.56, 0.106, 0.078, 0.014), gold, 'spine')
+    s.add(capsule((0.04, 0.55, 0.078), (0.06, 0.38, 0.09), 0.012, 0.009), gold, 'spine')  # sash end
+    s.add(belt(0.1, 0.136, 0.108, 0.008), gold, lambda p: skirt(p, 0.6))  # gold hem
+    arms(s, dict(skin=skin_, arm=blue2, fore=blue2), 0.14, upper=(0.04, 0.042), fore=(0.034, 0.038))
+    for x in (-1, 1):
+        s.add(ellipsoid((0.058 * x, 0.026, 0.05), (0.028 * FOOT, 0.018 * FOOT, 0.048 * FOOT)), 0x8a5a32, f'shin.{"L" if x > 0 else "R"}')
+    s.add(shell([(0.3, 0, -0.045, 0.16, 0.12), (0.5, 0, -0.035, 0.152, 0.106), (0.68, 0, -0.022, 0.15, 0.096),
+                  (0.78, 0, -0.014, 0.158, 0.092), (0.812, 0, -0.01, 0.13, 0.075)], gap=0.9, thick=0.012, folds=0.08), 0x6a3a7a, cape)
+    # Scroll in the right hand.
+    s.add(capsule((-0.17, 0.44, 0.03), (-0.17, 0.44, 0.12), 0.022, 0.022), 0xf3e6c4, 'forearm.R')
+    for z in (0.025, 0.125):
+        s.add(capsule((-0.17, 0.44, z), (-0.17, 0.44, z + 0.008), 0.028, 0.028), 0x7a4a26, 'forearm.R')
+    return s
+
+
 HEROES = {
     'davi': dict(make=davi, sx=0.135, lx=0.058, attack='sling'),
     'sansao': dict(make=sansao, sx=0.165, lx=0.07, attack='club', hair=True),
@@ -478,6 +537,8 @@ HEROES = {
     'josue': dict(make=josue, sx=0.14, lx=0.062, attack='horn'),
     'elias': dict(make=elias, sx=0.14, lx=0.06, attack='sling', robe=True),
     'debora': dict(make=debora, sx=0.13, lx=0.056, attack='bow', robe=True, hair=True),
+    'gideao': dict(make=gideao, sx=0.14, lx=0.062, attack='club'),
+    'daniel': dict(make=daniel, sx=0.14, lx=0.058, attack='sling', robe=True),
 }
 
 
@@ -579,7 +640,9 @@ def build(name, cfg):
 if __name__ == '__main__':
     reset()
     os.makedirs(os.path.join(ROOT, 'assets/blender'), exist_ok=True)
-    rigs = [build(name, cfg) for name, cfg in HEROES.items()]
+    only = os.environ.get('ONLY', '').split(',') if os.environ.get('ONLY') else None  # ONLY=gideao,daniel rebuilds just those
+    rigs = [build(name, cfg) for name, cfg in HEROES.items() if not only or name in only]
     for k, rig in enumerate(rigs):  # side by side in the .blend for editing
         rig.location.x = (k - 1) * 1.6
-    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT, 'assets/blender/heroes.blend'))
+    if not only:
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT, 'assets/blender/heroes.blend'))

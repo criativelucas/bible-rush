@@ -158,6 +158,23 @@ test('Elias special move applies burn and miracle spends faith once', () => {
   assert.equal(E.burn[0],2);assert.equal(P.fe,0);assert.equal(P.miracles,1);
   assert.equal(strikes.length,12);assert.ok(strikes.every(s=>s[5]===1&&s[6]===3));
 });
+test('Gideão, Daniel, Monte Carmelo and Babilônia unlock and ship their own models', () => {
+  const glbJson=(path)=>{const b=fs.readFileSync(new URL(path,import.meta.url));assert.equal(b.toString('utf8',0,4),'glTF',path);return JSON.parse(b.toString('utf8',20,20+b.readUInt32LE(12)));};
+  for (const [hero,trophy] of [['gideao','ungido'],['daniel','carmelo']]) {
+    assert.ok(!C.openSet({}).has(`hero:${hero}`));assert.ok(C.openSet({trophies:{[trophy]:1}}).has(`hero:${hero}`));
+    const clips=new Set(glbJson(`./assets/models/heroes/${hero}.glb`).animations.map(a=>a.name.split('|').at(-1)));
+    for(const name of ['idle','walk','attack','cast','jump','slide']) assert.ok(clips.has(name),`${hero} ${name}`);
+  }
+  assert.ok(Math.abs(C.baseStats(C.HEROES.gideao).crit-0.15)<1e-9);assert.equal(C.baseStats(C.HEROES.daniel).rerolls,2);
+  assert.equal(C.readyToEvolve([{id:'escrita',level:5}],[{id:'candelabro'}]).length,1);
+  const mobs=new Set(glbJson('./assets/models/mobs.glb').nodes.map(n=>n.name));
+  for (const [map,trophy] of [['carmelo','valentes'],['babilonia','relicario']]) {
+    assert.ok(C.openSet({trophies:{[trophy]:1}}).has(`map:${map}`));
+    for (const t of C.MOB_TYPES) assert.ok(mobs.has(`mob_${t}_${map}`),`mob_${t}_${map}`);
+    for (const model of [C.BIOMES[map].bossModel,C.SECRET_BOSSES[map].model]) assert.ok(glbJson(`./assets/models/bosses/${model}.glb`).skins.length,model);
+    assert.equal(C.BEAST_NAMES[map].length,8);
+  }
+});
 // Offline retry: use the real module with a mocked network; never contact the production server.
 const previousFetch=globalThis.fetch;
 let fail=true;
