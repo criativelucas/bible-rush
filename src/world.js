@@ -69,13 +69,18 @@ export function buildWorld(scene, id, random, PROPS) {
     }
   }
   const reachable = (x, z) => reach[Math.floor((z + B.radius) / RC) * RN + Math.floor((x + B.radius) / RC)] === 1;
+  // Firm footing: no ledge within 1.6 m that the ground drops off (nothing hangs over a cliff edge).
+  const footing = (x, z, r = 1.6) => {
+    const h = H(x, z);
+    return [[r, 0], [-r, 0], [0, r], [0, -r], [r * 0.7, r * 0.7], [-r * 0.7, -r * 0.7]].every(([dx, dz]) => h - H(x + dx, z + dz) < 0.8);
+  };
   function spot(minD, maxD, gap, test = (x, z) => dry(x, z, 0.5) && reachable(x, z)) {
     for (let t = 0; t < 400; t++) {
       const a = random() * Math.PI * 2;
       const r = minD + random() * (maxD - minD);
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
-      if (inside(x, z, 0.97) && test(x, z) && clear(x, z, gap)) return { x, z };
+      if (inside(x, z, 0.97) && test(x, z) && footing(x, z) && clear(x, z, gap)) return { x, z };
     }
     return null;
   }
@@ -319,7 +324,7 @@ export function buildWorld(scene, id, random, PROPS) {
     tree.position.set(s.x, y - 0.15, s.z);
     tree.rotation.y = random() * 6;
     const fruit = new THREE.Group();
-    const fm = M.toon(green ? (k % 2 ? 0xd7303a : 0x6a3a7a) : 0x8a4a22); // pomegranates and figs; dates on the palms
+    const fm = M.toon(green ? (k % 2 ? 0xd7303a : 0x6a3a7a) : 0xb8622a, { vc: false }); // pomegranates and figs; dates on the palms
     for (let q = 0; q < 9; q++) {
       const f = new THREE.Mesh(fruitGeo, fm);
       const a = random() * Math.PI * 2;
@@ -349,9 +354,9 @@ export function buildWorld(scene, id, random, PROPS) {
   }
   // The shofar on its post (Js 6:20): blow it and the horde round you is thrown back. Baskets of manna
   // (Êx 16:15): heal, and fill again after a while.
-  const hornMat = M.toon(0xe8d8b0, { emissive: 0x3a2a10 });
-  const postMat = M.toon(0x6b4426);
-  const mannaMat = M.toon(0xfff6dc, { emissive: 0x6a5a3a });
+  const hornMat = M.toon(0xe8d8b0, { vc: false, emissive: 0x3a2a10 });
+  const postMat = M.toon(0x6b4426, { vc: false });
+  const mannaMat = M.toon(0xfff6dc, { vc: false, emissive: 0x6a5a3a });
   for (let k = 0; k < (T ? 0 : n2(3)); k++) {
     const s = spot(16, B.radius * 0.85, 14);
     if (!s) continue;
@@ -377,8 +382,8 @@ export function buildWorld(scene, id, random, PROPS) {
     const y = H(s.x, s.z);
     const g = new THREE.Group();
     g.position.set(s.x, y, s.z);
-    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.1, 8).translate(0, 0.55, 0), M.toon(0x5a4a5a, { grain: true })));
-    for (const x of [-0.75, 0.75]) g.add(new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.5, 4).translate(x, 1.35, 0), M.toon(0xc8243a))); // horns of the altar
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.1, 8).translate(0, 0.55, 0), M.toon(0x5a4a5a, { vc: false, grain: true })));
+    for (const x of [-0.75, 0.75]) g.add(new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.5, 4).translate(x, 1.35, 0), M.toon(0xc8243a, { vc: false }))); // horns of the altar
     const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(1.2, 0.7, 2.4) })); // a violet fire
     flame.position.y = 1.2;
     g.add(flame);
@@ -393,7 +398,7 @@ export function buildWorld(scene, id, random, PROPS) {
     const y = H(s.x, s.z);
     const g = new THREE.Group();
     g.position.set(s.x, y, s.z);
-    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.42, 0.55, 10).translate(0, 0.27, 0), M.toon(0xb8894e)));
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.42, 0.55, 10).translate(0, 0.27, 0), M.toon(0xb8894e, { vc: false })));
     const manna = new THREE.Group();
     for (let q = 0; q < 9; q++) {
       const b = new THREE.Mesh(fruitGeo, mannaMat);
@@ -714,12 +719,14 @@ export function buildWorld(scene, id, random, PROPS) {
     const c = Math.cos(rot);
     const sn = Math.sin(rot);
     const at = (lx, lz) => [cx + lx * c + lz * sn, cz - lx * sn + lz * c];
+    const firm = (lx, lz) => footing(...at(lx, lz), 1.4); // a piece of the ruin only where the ground holds it
     build('stairs', geo('prop_stairs'), ...at(0, 0), rot, STAIRS);
-    build('plinth', geo('prop_plinth'), ...at(-3.3, 0.4), rot, [[0, 0, 1.5, 1.57]]);
-    build('plinth', geo('prop_plinth'), ...at(3.3, 0.4), rot, [[0, 0, 1.5, 1.57]]);
-    build('wall', geo('prop_wall'), ...at(0, 4), rot, WALL);
-    if (random() < 0.5) build('tower', geo('prop_tower'), ...at(random() < 0.5 ? 6 : -6, 3), rot, [[0, 0, 1.1, 5]]);
-    else build('arch', geo('prop_arch'), ...at(random() < 0.5 ? 6.5 : -6.5, 2.5), rot, [[-1.4, 0, 0.6, 3], [1.4, 0, 0.6, 2.2]]);
+    if (firm(-3.3, 0.4)) build('plinth', geo('prop_plinth'), ...at(-3.3, 0.4), rot, [[0, 0, 1.5, 1.57]]);
+    if (firm(3.3, 0.4)) build('plinth', geo('prop_plinth'), ...at(3.3, 0.4), rot, [[0, 0, 1.5, 1.57]]);
+    if (firm(0, 4)) build('wall', geo('prop_wall'), ...at(0, 4), rot, WALL);
+    const side = random() < 0.5 ? 1 : -1;
+    if (random() < 0.5) { if (firm(6 * side, 3)) build('tower', geo('prop_tower'), ...at(6 * side, 3), rot, [[0, 0, 1.1, 5]]); }
+    else if (firm(6.5 * side, 2.5)) build('arch', geo('prop_arch'), ...at(6.5 * side, 2.5), rot, [[-1.4, 0, 0.6, 3], [1.4, 0, 0.6, 2.2]]);
     for (let k = 0; k < 6; k++) {
       const [x, z] = at((random() - 0.5) * 9, -2.5 - random() * 3);
       flags.push({ x, y: H(x, z) - 0.02, z, rot: random() * 6, s: 0.8 + random() * 0.5 });
