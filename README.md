@@ -1,6 +1,6 @@
 # Bible Rush
 
-Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão, Moisés, Josué, Débora, Elias, Gideão, Daniel e Ester.
+Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão, Moisés, Josué, Débora, Elias, Gideão, Daniel, Ester e Neemias.
 Escolha um herói e um dos seis cenários, erga as três Pedras do Memorial e derrote o chefe.
 Cada jornada rende denários para o Mercado: melhorias permanentes, ferramentas para as cartas, armas, maestria e roupas.
 Os heróis evoluem com o tempo jogado; há tarefas diárias, bestiário, troféus com títulos, dificuldades e o modo Sobrevivência.
@@ -151,3 +151,11 @@ Modelos: `tools/blender/heroes.py` (`ONLY=gideao,daniel` reconstrói só esses) 
 - **Desafio da semana:** mesmo cenário, herói e 2 regras para todos; ranking "Semana" (mais abates numa partida) e 400 denários na 1ª vitória.
 - **Música:** gerada no navegador, com modo e ritmo próprios de cada cenário, mais intensa na horda e no chefe; sons próprios para cada evento. Volume em Configurações (`src/music.js`).
 - **Ranking:** rode de novo `tools/add-new-content-ranking.sql` (aceita o modo semanal e cria o quadro "Semana").
+
+## Neemias e mapas ainda maiores
+
+- **Neemias** (troféu *Constância*: jogar 10 partidas): arma nova **Tijolos de Jerusalém** (tijolos que ricocheteiam;
+  evolui com as Tábuas da Lei em Muralha Reconstruída). +12% de armadura e 1 de vida por segundo.
+  E — Trolha e Espada (arremessa longe). Q — Muralha em 52 Dias (um anel de pedra empurra a horda para fora por 8 s).
+- **Mapas** agora 44% maiores que o desenho original (`MAP_K = 1.44`) e relevo 56% mais alto (`MAP_V = 1.56`).
+- **Ranking:** rode de novo `tools/add-new-content-ranking.sql` (inclui Neemias).
