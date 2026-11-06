@@ -172,8 +172,18 @@ test('Gideão, Daniel, Monte Carmelo and Babilônia unlock and ship their own mo
     assert.ok(C.openSet({trophies:{[trophy]:1}}).has(`map:${map}`));
     for (const t of C.MOB_TYPES) assert.ok(mobs.has(`mob_${t}_${map}`),`mob_${t}_${map}`);
     for (const model of [C.BIOMES[map].bossModel,C.SECRET_BOSSES[map].model]) assert.ok(glbJson(`./assets/models/bosses/${model}.glb`).skins.length,model);
-    assert.equal(C.BEAST_NAMES[map].length,8);
+    assert.equal(C.BEAST_NAMES[map].length,12);
   }
+});
+test('Ester, the new enemies, the mini-bosses and the 20% larger maps', () => {
+  assert.ok(C.openSet({trophies:{salomao:1}}).has('hero:ester'));
+  const st=C.baseStats(C.HEROES.ester);assert.equal(st.gold,0.25);assert.equal(st.area,0.1);
+  assert.equal(C.readyToEvolve([{id:'cetro',level:5}],[{id:'anel'}]).length,1);
+  const b=fs.readFileSync(new URL('./assets/models/heroes/ester.glb',import.meta.url));assert.equal(b.toString('utf8',0,4),'glTF');
+  for (const t of [9,10,11,12]) assert.ok(C.MOB_TYPES.includes(t));
+  assert.ok(C.ENEMIES[9].lobber && C.ENEMIES[10].healer && C.ENEMIES[11].mini && C.ENEMIES[12].mini);
+  assert.equal(C.spawnWeights(600)[11],0,'mini-bosses only come by event');assert.ok(C.spawnWeights(600)[9]>0&&C.spawnWeights(600)[10]>0);
+  for (const [id,bm] of Object.entries(C.BIOMES)) { assert.ok(bm.radius>=144,id); assert.equal(C.BEAST_NAMES[id].length,12,id); }
 });
 // Offline retry: use the real module with a mocked network; never contact the production server.
 const previousFetch=globalThis.fetch;

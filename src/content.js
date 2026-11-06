@@ -81,13 +81,20 @@ export const HEROES = {
     miracle: ['Cova dos Leões', 'Deus fecha a boca dos leões: 5 s intocável e leões de luz ferem a horda (Dn 6:22).'],
     xp: 0.15, rerolls: 1,
   },
+  ester: {
+    name: 'Ester', role: 'Rainha, à distância', hp: 95, speed: 8.5, weapon: 'cetro', color: 0x7a3a9a, noSprite: true,
+    passive: ['Para um Tempo Como Este', 'Ganha +25% de siclos e +10% de área (Et 4:14).'],
+    move: ['Diante do Rei', 'Avança com graça; quem estiver no caminho fica lento por 2,5 s.', 3.5],
+    miracle: ['Decreto do Rei', 'Um decreto de ouro fere e deixa lenta a horda por perto, e cura 30% da vida (Et 8:11).'],
+    gold: 0.25, area: 0.1,
+  },
 };
 
 export function baseStats(hero) {
   return {
-    dmg: 0, cd: 0, area: 0, dur: 0, amount: 0, speed: 0, maxHp: hero.hp, regen: 0, armor: 0,
+    dmg: 0, cd: 0, area: hero.area || 0, dur: 0, amount: 0, speed: 0, maxHp: hero.hp, regen: 0, armor: 0,
     pickup: 0, luck: hero.luck || 0, crit: 0.05 + (hero.crit || 0), xp: hero.xp || 0, burn: hero.burn || 0, airJumps: 0, revives: 0, rerolls: 1 + (hero.rerolls || 0), skips: 1, bans: 1,
-    vamp: 0, gold: 0, faith: hero.faith || 0, // life per kill, extra siclos, extra Fé
+    vamp: 0, gold: hero.gold || 0, faith: hero.faith || 0, // life per kill, extra siclos, extra Fé
     critDmg: hero.critDmg || 0, dodge: 0, // Tábuas da Lei, Escudo de Abraão
   };
 }
@@ -287,6 +294,13 @@ export const WEAPONS = {
     levels: [{ count: 1 }, { dmg: 0.3 }, { cd: 0.15, area: 0.2 }, { count: 1, dmg: 0.3 }],
   },
 
+  cetro: {
+    name: 'Cetro de Ouro', unit: 'raio', kind: 'seeker', ref: 'Et 5:2',
+    desc: 'Um raio de favor sai do cetro, busca os inimigos e atravessa dois.',
+    dmg: 13, cd: 1.15, count: 1, pierce: 2, speed: 18, life: 2.6, turn: 6, range: 24, size: 0.3, proj: 'cetro',
+    levels: [{ count: 1 }, { dmg: 0.3 }, { cd: 0.15, pierce: 1 }, { count: 1, dmg: 0.3 }],
+  },
+
   // Evolutions: a weapon at its last level, plus its relic, becomes one of these at the next chest.
   funda_evo: {
     name: 'Pedra do Gigante', evo: true, from: 'funda', needs: 'pedras', unit: 'pedra', kind: 'shot', ref: '1 Sm 17:49',
@@ -382,6 +396,11 @@ export const WEAPONS = {
     name: 'Mene, Tequel, Parsim', evo: true, from: 'escrita', needs: 'candelabro', kind: 'sky', target: 'strong', unit: 'sentença', ref: 'Dn 5:25-28',
     desc: 'Três sentenças caem de uma vez e incendeiam: o reino foi pesado e dividido.',
     dmg: 110, cd: 1.6, count: 3, radius: 3, range: 28, delay: 0.5, burn: 2, levels: [],
+  },
+  cetro_evo: {
+    name: 'Favor da Rainha', evo: true, from: 'cetro', needs: 'anel', kind: 'seeker', unit: 'raio', ref: 'Et 8:2',
+    desc: 'Quatro raios de ouro caçam a horda, atravessam muitos e incendeiam.',
+    dmg: 30, cd: 0.9, count: 4, pierce: 5, speed: 22, life: 3, turn: 8, range: 28, size: 0.4, proj: 'cetro', burn: 2, levels: [],
   },
   mo_evo: {
     name: 'Pedra da Torre', evo: true, from: 'mo', needs: 'arco', unit: 'mó', kind: 'sky', target: 'strong', mill: true, ref: 'Jz 9:53',
@@ -482,8 +501,13 @@ export const ENEMIES = [
   // Nobody else gets up the rock faces: these two do (BIOMES flyer/climber: each map's own trick).
   { id: 'voador', hp: 12, speed: 5, speedVar: 1, dmg: 8, r: 0.5, h: 1, xp: 2, mass: 1.2, fly: true }, // over everything, swooping
   { id: 'escalador', hp: 30, speed: 3.6, speedVar: 0.6, dmg: 12, r: 0.45, h: 1.5, xp: 3, mass: 0.8, climb: true }, // up any wall
+  { id: 'lancador', hp: 22, speed: 3, speedVar: 0.5, dmg: 12, r: 0.45, h: 1.5, xp: 3, mass: 0.9, lobber: true }, // fire pots in an arc
+  { id: 'sacerdote', hp: 28, speed: 2.8, speedVar: 0.3, dmg: 8, r: 0.45, h: 1.7, xp: 4, mass: 0.8, healer: true }, // heals the horde round him
+  // Mini-bosses: two a run, each at a spot marked on the map (main.js spawnMini); they leave a chest.
+  { id: 'minichefe1', hp: 1400, speed: 2.7, speedVar: 0, dmg: 26, r: 1.1, h: 3.4, xp: 3, mass: 0.1, big: true, charger: true, mini: true },
+  { id: 'minichefe2', hp: 1100, speed: 2.8, speedVar: 0, dmg: 16, r: 1.0, h: 3.2, xp: 3, mass: 0.1, big: true, ranged: true, fan: 5, mini: true },
 ];
-export const MOB_TYPES = [0, 1, 2, 3, 5, 6, 7, 8]; // every kind but the boss (4), drawn from mobs.glb as mob_<type>_<map>
+export const MOB_TYPES = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]; // every kind but the boss (4), drawn from mobs.glb as mob_<type>_<map>
 
 // ---------- Biomes ----------
 export const smooth = (a, b, x) => {
@@ -811,6 +835,30 @@ export const BIOMES = {
     },
   },
 };
+// Every map is drawn 20% wider than it was laid out (MAP_K) and its land rises higher (MAP_V), with extra
+// rolling slopes away from the start: the shapes above stay in their own design units.
+export const MAP_K = 1.2;
+export const MAP_V = 1.3;
+for (const b of Object.values(BIOMES)) {
+  const K = MAP_K;
+  const T = b.terrain;
+  const G = b.ground;
+  b.scale = K;
+  b.radius = Math.round(b.radius * K);
+  b.terrain = (x, z) => {
+    const h = T(x / K, z / K);
+    if (h <= 0) return h; // water, shallows and riverbeds keep their depth
+    const r = Math.hypot(x, z);
+    const roll = 3.2 * fbm(x * 0.017 + 40, z * 0.017 - 20) * smooth(22, 46, r) * smooth(0.6, 2.4, h); // hills and hollows
+    return h * MAP_V + Math.max(-h * 0.5, roll);
+  };
+  b.ground = (h, ny, n, x, z) => G(h > 0 ? h / MAP_V : h, ny, n, x / K, z / K);
+  const pt = (o) => o && { ...o, x: o.x * K, z: o.z * K, ...(o.r ? { r: o.r * K } : {}) };
+  for (const key of ['city', 'oasis', 'top', 'gardens', 'ziggurat']) if (b[key]) b[key] = pt(b[key]);
+  for (const key of ['brookZ', 'wadi', 'euphrates']) if (b[key]) { const f = b[key]; b[key] = (u) => K * f(u / K); }
+  if (b.coast) { const f = b.coast; b.coast = (x, z) => K * f(x / K, z / K); }
+  if (b.ledgeX) b.ledgeX *= K;
+}
 export const BOSS = 4;
 
 // ---------- The Tower of Babel (mode 'babel', PLANO.md 4) ----------
@@ -900,7 +948,7 @@ export const TROPHIES = {
   poco: { name: 'Água Viva', desc: 'Beba de um poço ou fonte.', tier: 0, cat: 'mapas' },
   ungido: { name: 'Ungido', desc: 'Alcance o nível 20 numa partida.', tier: 1, unlock: 'hero:gideao', cat: 'progresso' },
   noite: { name: 'Coluna de Fogo', desc: 'Atravesse uma noite inteira.', tier: 0, unlock: 'hero:elias', cat: 'progresso' },
-  salomao: { name: 'Riqueza de Salomão', desc: 'Junte 300 siclos de uma vez.', tier: 1, cat: 'colecao' },
+  salomao: { name: 'Riqueza de Salomão', desc: 'Junte 300 siclos de uma vez.', tier: 1, unlock: 'hero:ester', cat: 'colecao' },
   relicario: { name: 'Relicário', desc: 'Tenha 8 relíquias numa partida.', tier: 1, unlock: 'map:babilonia', cat: 'colecao' },
   babilonia: { name: 'Pesada e Achada em Falta', desc: 'Vença na Babilônia.', tier: 2, cat: 'mapas', title: 'Sábio de Babilônia' },
   maos: { name: 'Mãos Levantadas', desc: 'Faça 5 milagres numa partida.', tier: 0, cat: 'progresso' },
@@ -943,7 +991,8 @@ export const unlockedBy = (key) => Object.keys(TROPHIES).find((id) => TROPHIES[i
 
 // Which enemy types join the horde as the minutes pass.
 export function spawnWeights(t) { // by type; slingers survive longer, so keep them rare; runner packs count four
-  return [1, t > 60 ? 0.12 : 0, t > 120 ? 0.15 : 0, t > 180 ? 0.1 : 0, 0, t > 45 ? 0.09 : 0, t > 150 ? 0.08 : 0, t > 75 ? 0.1 : 0, t > 100 ? 0.09 : 0];
+  return [1, t > 60 ? 0.12 : 0, t > 120 ? 0.15 : 0, t > 180 ? 0.1 : 0, 0, t > 45 ? 0.09 : 0, t > 150 ? 0.08 : 0, t > 75 ? 0.1 : 0, t > 100 ? 0.09 : 0,
+    t > 90 ? 0.07 : 0, t > 135 ? 0.05 : 0, 0, 0]; // fire-pot throwers, priests; the mini-bosses come by event only
 }
 
 // ---------- Save ----------
@@ -1070,6 +1119,8 @@ export const STAGES = {
     gear: [[], ['armor'], ['armor', 'mantoRubro', 'banner']] },
   daniel: { names: ['Cativo de Judá', 'Sábio da Babilônia', 'Príncipe dos Sátrapas'], stat: ['xp', 0.05, 'de experiência'], ref: 'Dn 6:2',
     gear: [[], ['turbante'], ['turbante', 'capeBlue', 'halo']] },
+  ester: { names: ['Hadassa', 'Rainha da Pérsia', 'Libertadora do seu povo'], stat: ['gold', 0.1, 'de siclos'], ref: 'Et 9:22',
+    gear: [[], ['veil'], ['veil', 'crown', 'capeRoyal']] },
 };
 // Stage 2 and 3 add the stat once and twice; stage 3 also fills Fé 25% faster (the miracle comes sooner).
 export function stageBonus(st, hero, stage) {
@@ -1106,9 +1157,9 @@ export const COSMETICS = {
 export const SLOT_NAME = { head: 'Cabeça', back: 'Costas', trail: 'Rastro', frame: 'Moldura' };
 
 // ---------- Bestiary: kills by map and kind; enough of each completes the map's research (a frame) ----------
-export const BEAST_KINDS = ['soldado', 'fundeiro', 'carro', 'gigante', 'batedor', 'escudeiro', 'voador', 'escalador', 'elite', 'chefe'];
-export const BEAST_TYPE = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 5, escudeiro: 6, voador: 7, escalador: 8, elite: 3 }; // the model each kind shows
-export const RESEARCH = { soldado: 100, fundeiro: 50, carro: 40, gigante: 25, batedor: 80, escudeiro: 30, voador: 40, escalador: 40, elite: 2, chefe: 1 };
+export const BEAST_KINDS = ['soldado', 'fundeiro', 'carro', 'gigante', 'batedor', 'escudeiro', 'voador', 'escalador', 'lancador', 'sacerdote', 'minichefe1', 'minichefe2', 'elite', 'chefe'];
+export const BEAST_TYPE = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 5, escudeiro: 6, voador: 7, escalador: 8, lancador: 9, sacerdote: 10, minichefe1: 11, minichefe2: 12, elite: 3 }; // the model each kind shows
+export const RESEARCH = { soldado: 100, fundeiro: 50, carro: 40, gigante: 25, batedor: 80, escudeiro: 30, voador: 40, escalador: 40, lancador: 40, sacerdote: 30, minichefe1: 2, minichefe2: 2, elite: 2, chefe: 1 };
 // The map's frame: the kinds it had when the frames came out (fliers and climbers came later and do not take it away).
 export const RESEARCH_KINDS = ['soldado', 'fundeiro', 'carro', 'gigante', 'batedor', 'escudeiro', 'elite', 'chefe'];
 export const researchOf = (profile, biome) => RESEARCH_KINDS.every((k) => (profile.bestiary?.kills?.[`${biome}:${k}`] || 0) >= RESEARCH[k]);
@@ -1191,10 +1242,10 @@ export function addRunToTasks(list, run) {
 
 // ---------- Bestiary names, by map and kind ----------
 export const BEAST_NAMES = {
-  ela: ['Soldado filisteu', 'Fundeiro filisteu', 'Carro filisteu', 'Gigante anaquim', 'Batedor filisteu', 'Escudeiro filisteu', 'Corvo de rapina', 'Batedor de Gate'],
-  mar: ['Soldado egípcio', 'Arqueiro egípcio', 'Carro do Faraó', 'Colosso de pedra', 'Corredor egípcio', 'Guarda do Faraó', 'Gafanhoto da praga', 'Escorpião do Sinai'],
-  ossos: ['Esqueleto', 'Esqueleto atirador', 'Carro de ossos', 'Gigante de ossos', 'Esqueleto ligeiro', 'Muralha de ossos', 'Crânio alado', 'Ossada rastejante'],
-  jerico: ['Guarda de Jericó', 'Fundeiro cananeu', 'Carro cananeu', 'Guardião da muralha', 'Espião cananeu', 'Porta-escudo de Jericó', 'Vigia de fogo', 'Sitiador da muralha'],
-  carmelo: ['Profeta de Baal', 'Arqueiro de Samaria', 'Carro de Acabe', 'Guardião de Baal', 'Servo de Jezabel', 'Porta-escudo de Samaria', 'Abutre de Jezreel', 'Profeta de Aserá'],
-  babilonia: ['Soldado babilônio', 'Arqueiro caldeu', 'Carro babilônio', 'Estátua de ouro', 'Mago caldeu', 'Guarda da Porta de Ishtar', 'Leão alado', 'Escalador dos jardins'],
+  ela: ['Soldado filisteu', 'Fundeiro filisteu', 'Carro filisteu', 'Gigante anaquim', 'Batedor filisteu', 'Escudeiro filisteu', 'Corvo de rapina', 'Batedor de Gate', 'Arremessador filisteu', 'Sacerdote de Dagom', 'Lami, irmão de Golias', 'Adivinho de Dagom'],
+  mar: ['Soldado egípcio', 'Arqueiro egípcio', 'Carro do Faraó', 'Colosso de pedra', 'Corredor egípcio', 'Guarda do Faraó', 'Gafanhoto da praga', 'Escorpião do Sinai', 'Lançador egípcio', 'Sacerdote de Rá', 'Capitão dos carros', 'Jambres, o mago'],
+  ossos: ['Esqueleto', 'Esqueleto atirador', 'Carro de ossos', 'Gigante de ossos', 'Esqueleto ligeiro', 'Muralha de ossos', 'Crânio alado', 'Ossada rastejante', 'Esqueleto lançador', 'Sacerdote de Moloque', 'Gigante de Magogue', 'Feiticeira de En-Dor'],
+  jerico: ['Guarda de Jericó', 'Fundeiro cananeu', 'Carro cananeu', 'Guardião da muralha', 'Espião cananeu', 'Porta-escudo de Jericó', 'Vigia de fogo', 'Sitiador da muralha', 'Lançador de piche', 'Sacerdote da Lua', 'Capitão de Jericó', 'Vidente de Jericó'],
+  carmelo: ['Profeta de Baal', 'Arqueiro de Samaria', 'Carro de Acabe', 'Guardião de Baal', 'Servo de Jezabel', 'Porta-escudo de Samaria', 'Abutre de Jezreel', 'Profeta de Aserá', 'Lançador de brasas', 'Sacerdote de Melcarte', 'Capitão de cinquenta', 'Mestre dos 450 profetas'],
+  babilonia: ['Soldado babilônio', 'Arqueiro caldeu', 'Carro babilônio', 'Estátua de ouro', 'Mago caldeu', 'Guarda da Porta de Ishtar', 'Leão alado', 'Escalador dos jardins', 'Lançador da fornalha', 'Astrólogo caldeu', 'Arioque, capitão da guarda', 'Chefe dos encantadores'],
 };

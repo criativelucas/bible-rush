@@ -112,6 +112,9 @@
     #clock { padding: 0 10px; display: flex; gap: 8px; align-items: center; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
     #phase-dot { width: 18px; height: 18px; image-rendering: pixelated; background: url(assets/ui/sun.png) 0 0 / 100% 100%; }
     #phase-dot.night { background-image: url(assets/ui/moon.png); }
+    #event-pointer { margin: 6px auto 0; padding: 3px 12px; display: flex; gap: 8px; align-items: center; width: max-content; font-size: 15px; animation: pointer-pulse 1.2s ease-in-out infinite; }
+    #event-arrow { display: inline-block; font-size: 20px; line-height: 1; text-shadow: 0 0 6px currentColor; transition: transform .1s linear; }
+    @keyframes pointer-pulse { 50% { box-shadow: 0 0 0 2px var(--line), 0 0 14px rgba(255, 214, 107, .55); } }
     #objective { padding: 2px 10px; font-size: 16px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
     .pips { display: flex; gap: 6px; }
     .pips i { width: 10px; height: 10px; transform: rotate(45deg); background: #3b251a; box-shadow: 0 0 0 2px var(--line); }
@@ -821,6 +824,7 @@
         <div id="clock" class="glass"><i id="phase-dot"></i><span id="timer">0:00</span></div>
         <div id="objective" class="glass"></div>
       </div>
+      <div id="event-pointer" class="glass" hidden><b id="event-arrow">▲</b><span id="event-label"></span></div>
       <div id="bossbar" class="glass" hidden><div id="boss-name"></div><div class="bar"><i id="boss-hp"></i></div><div id="boss-move"></div></div>
     </div>
     <div id="stats" class="hud glass">
