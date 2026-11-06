@@ -98,8 +98,8 @@ export function buildWorld(scene, id, random, PROPS) {
   }
 
   // ---- Terrain height map (water depth), then the terrain itself ----
-  const TH = 176; // the terrain spans [-176, 176] (models.js reads the water depth over the same square)
-  const HM = 512;
+  const TH = 216; // the terrain spans [-216, 216] (models.js reads the water depth over the same square)
+  const HM = 640;
   const hm = new Uint16Array(HM * HM);
   for (let j = 0; j < HM; j++) {
     for (let i = 0; i < HM; i++) hm[j * HM + i] = THREE.DataUtils.toHalfFloat(H(-TH + ((i + 0.5) * 2 * TH) / HM, -TH + ((j + 0.5) * 2 * TH) / HM));
@@ -108,7 +108,7 @@ export function buildWorld(scene, id, random, PROPS) {
   heightTex.magFilter = heightTex.minFilter = THREE.LinearFilter;
   heightTex.needsUpdate = true;
   {
-    const geo = new THREE.PlaneGeometry(2 * TH, 2 * TH, 240, 240).rotateX(-Math.PI / 2); // a vertex every ~1.5 m: crisp cliff edges
+    const geo = new THREE.PlaneGeometry(2 * TH, 2 * TH, 300, 300).rotateX(-Math.PI / 2); // a vertex every ~1.45 m: crisp cliff edges
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) pos.setY(i, H(pos.getX(i), pos.getZ(i)));
     const g = geo.toNonIndexed();
@@ -177,7 +177,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const cloudGeos = [0, 1, 2].map((k) => geo(`prop_cloud${k}`));
   const clouds = Array.from({ length: 18 }, (_, k) => {
     const m = new THREE.Mesh(cloudGeos[k % 3], cloudMat);
-    m.position.set((random() - 0.5) * 560, 40 + random() * 22, (random() - 0.5) * 560);
+    m.position.set((random() - 0.5) * 620, 72 + random() * 24, (random() - 0.5) * 620); // above the highest ridges
     m.scale.setScalar(1 + random() * 1.3);
     m.rotation.y = random() * 6;
     scene.add(m);
@@ -1214,7 +1214,7 @@ export function buildWorld(scene, id, random, PROPS) {
     for (const c of clouds) {
       c.visible = !T;
       c.position.x += dt * 1.5;
-      if (c.position.x > 220) c.position.x = -220;
+      if (c.position.x > 300) c.position.x = -300;
     }
     if (sea) waters[0].position.y = B.water + Math.sin(time * 0.8) * 0.04;
     for (const a of altars) {

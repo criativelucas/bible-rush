@@ -51,7 +51,7 @@ try { Object.assign(cfg, JSON.parse(localStorage.getItem('otr-cfg') || '{}')); }
 const saveCfg = () => { try { localStorage.setItem('otr-cfg', JSON.stringify(cfg)); } catch {} };
 
 // ---------- Tuning ----------
-const HALF = 170; // grids span [-170, 170] on X and Z
+const HALF = 210; // grids span [-210, 210] on X and Z
 const CLIFF = 1.0; // ground steeper than this (45°) is a rock face: no walking up it
 const MAX_ENEMIES = 1000;
 const MAX_SHOTS = 600;
@@ -85,7 +85,7 @@ const canvas = renderer.domElement;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color();
-scene.fog = new THREE.Fog(0, 55, 165); // the maps grew: see further
+scene.fog = new THREE.Fog(0, 60, 190); // the maps grew: see further
 const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 420);
 
 const target = new THREE.WebGLRenderTarget(1, 1, {
@@ -462,7 +462,7 @@ function instanced(geo, mat, max, colors = false, shadow = false) {
 const enemyMat = M.toon(0xffffff, { walk: true, fade: true, rim: true });
 const enemyMeshes = []; // by type (sparse: the boss is a rig)
 for (const t of MOB_TYPES) enemyMeshes[t] = instanced(ASSETS.mobs[`mob_${t}_${BABEL ? 'ela' : BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true); // the tower swaps them floor by floor
-const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca', 'scroll', 'ember', 'cetro'];
+const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca', 'scroll', 'ember', 'cetro', 'brick'];
 const shotMeshes = PROJ.map((k) => instanced(ASSETS.items[`proj_${k}`], M.toon(), MAX_SHOTS, true));
 const eshotMesh = instanced(new THREE.IcosahedronGeometry(0.25, 0), hdr(new THREE.MeshBasicMaterial({ color: 0xff3fb4 }), 2), MAX_ESHOTS);
 const manaMesh = instanced(ASSETS.items.proj_mana, hdr(new THREE.MeshBasicMaterial({ vertexColors: true }), 1.7), MAX_GEMS, true);
@@ -849,7 +849,7 @@ const P = {
   goldGot: 0, veins: 0, jars: 0, chests: 0, hits: 0, lastHit: -99, guardians: 0, // for tasks and trophies
   mods: { espd: 1, spawn: 1, chest: 1 }, endless: false, // survival: the prices of the alliances
   netT: 0, // caught in a climber's net
-  peakY: 0, diving: false, // highest point of this jump (the slam on landing); a Shift dive
+  wallT: 0, peakY: 0, diving: false, // highest point of this jump (the slam on landing); a Shift dive
   syn: new Set(), // the weapon families completed this run (content.js SYNERGIES)
   psalms: [], wardAt: 0, refugeAt: 0, cupT: 0, grazes: 0, grazeAt: -9, // the Psalms; the graze streak
 };
@@ -2366,7 +2366,31 @@ function slam(x, y, z, drop) {
   shake = Math.max(shake, Math.min(0.6, drop * 0.05));
   boom(0.5, 0.5, 600);
 }
+// Nehemiah's wall: while it stands, a ring of brick round the hero that no one but the boss gets through.
+let wallMesh = null;
+function wallTick(dt) {
+  if (!(P.wallT > 0) && !wallMesh?.visible) return;
+  P.wallT -= dt;
+  if (!wallMesh) {
+    wallMesh = new THREE.Mesh(new THREE.CylinderGeometry(6, 6.3, 2.4, 28, 1, true).translate(0, 1.2, 0),
+      new THREE.MeshBasicMaterial({ color: 0xc98a5a, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+    scene.add(wallMesh);
+  }
+  wallMesh.visible = P.wallT > 0;
+  if (!wallMesh.visible) return;
+  wallMesh.position.set(P.pos.x, terrainH(P.pos.x, P.pos.z) - 0.2, P.pos.z);
+  wallMesh.scale.y = Math.min(1, (8 - P.wallT) * 4 + 0.05); // it rises fast
+  for (let i = 0; i < E.n; i++) {
+    const dx = E.x[i] - P.pos.x;
+    const dz = E.z[i] - P.pos.z;
+    const d = Math.hypot(dx, dz) || 1;
+    if (d > 6.3 + E.r[i] || ENEMIES[E.type[i]].boss) continue;
+    E.x[i] = P.pos.x + (dx / d) * (6.3 + E.r[i]);
+    E.z[i] = P.pos.z + (dz / d) * (6.3 + E.r[i]);
+  }
+}
 function psalmTick(dt) {
+  wallTick(dt);
   if (P.psalms.includes('s23') && P.hp >= P.st.maxHp - 0.01 && (P.cupT -= dt) <= 0) { // Salmo 23: the cup runs over
     P.cupT = 4;
     const R = 5;
@@ -2435,7 +2459,7 @@ function useSpecial() {
   let dx = P.wishX;
   let dz = P.wishZ;
   if (!dx && !dz) { dx = P.faceX; dz = P.faceZ; }
-  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32], josue: [24, 0.28], debora: [22, 0.3], elias: [23, 0.3], gideao: [25, 0.28], daniel: [22, 0.3], ester: [23, 0.3] }[P.hero];
+  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32], josue: [24, 0.28], debora: [22, 0.3], elias: [23, 0.3], gideao: [25, 0.28], daniel: [22, 0.3], ester: [23, 0.3], neemias: [22, 0.3] }[P.hero];
   Object.assign(P, { dashX: dx, dashZ: dz, dashSpeed: speed, dashT: dur, sliding: false });
   P.dashId++;
   P.iframes = Math.max(P.iframes, dur + 0.12);
@@ -2462,6 +2486,8 @@ function dashHits() {
       damage(j, 20, P.dashX, P.dashZ, 8);
       E.burn[j] = Math.max(E.burn[j], 2);
       ember(E.x[j], E.y[j] + 0.5, E.z[j], 0xff8a3d, 4);
+    } else if (P.hero === 'neemias') { // trowel in one hand, sword in the other (Ne 4:17)
+      damage(j, 22, P.dashX, P.dashZ, 22);
     } else if (P.hero === 'ester') { // before the king: they falter as she passes (Et 5:2)
       damage(j, 12, P.dashX, P.dashZ, 6);
       E.slow[j] = Math.max(E.slow[j], 2.5);
@@ -2506,6 +2532,17 @@ function useMiracle() {
       addStrike(t >= 0 ? E.x[t] : x + Math.cos(a) * 8, t >= 0 ? E.z[t] : z + Math.sin(a) * 8, 3, 90, 0.35 + k * 0.1, 1, 3);
     }
     toast('Fogo do Carmelo!', '#ffb347');
+  } else if (P.hero === 'neemias') { // the wall finished in 52 days (Ne 6:15): a ring of stone holds the horde off
+    P.wallT = 8 * (1 + P.st.dur);
+    for (let i = 0; i < E.n; i++) {
+      const dx = E.x[i] - x;
+      const dz = E.z[i] - z;
+      const d = Math.hypot(dx, dz) || 1;
+      if (d > 7 || ENEMIES[E.type[i]].boss) continue;
+      damage(i, 40, dx / d, dz / d, 20);
+      E.stun[i] = Math.max(E.stun[i], 1.5);
+    }
+    toast('A muralha se ergue!', '#e0a070');
   } else if (P.hero === 'ester') { // the king's decree: the Jews stood for their lives (Et 8:11)
     const n = hash.query(x, z, 20 + MAX_R, near);
     for (let q = 0; q < n; q++) {
@@ -6248,7 +6285,7 @@ function updateCamera(dt) {
     const cy = Math.min(Math.max(camTarget.y + Math.sin(pitch) * d, terrainH(cx, cz) + 0.5), BABEL ? world.CEIL - 1 : Infinity); // under the tower's ceiling
     shake = state === 'play' ? Math.max(0, shake - dt * 2) : outro ? shake : 0; // paused, cards or end screen: hold still
   if (state === 'play') dustT = Math.max(0, dustT - dt);
-  scene.fog.far = 165 - 95 * Math.min(1, dustT / 3, (16 - dustT) / 2); // wind over the bones: dust closes in, then clears
+  scene.fog.far = 190 - 115 * Math.min(1, dustT / 3, (16 - dustT) / 2); // wind over the bones: dust closes in, then clears
     camera.position.set(cx + (Math.random() - 0.5) * shake, cy + (Math.random() - 0.5) * shake, cz);
     camera.lookAt(camTarget);
     focus.copy(P.pos);
@@ -6535,7 +6572,7 @@ function updateHud() {
   setText(hud['fe-text'], P.fe >= 100 ? `Fé cheia · Q ${h.miracle[0]}` : `Fé ${Math.floor(P.fe)}`);
   setText(hud.extra, {
     sansao: `Nazireu +${P.stacks}%`, davi: `Pedra Lisa em ${5 - (P.shotCount % 5)}`, moises: 'Praga a cada nível',
-    josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas', elias: 'Zelo: +15% queimar · +20% Fé', gideao: 'Valente: +10% crítico', daniel: 'Sábio: +15% XP', ester: 'Favor: +25% siclos',
+    josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas', elias: 'Zelo: +15% queimar · +20% Fé', gideao: 'Valente: +10% crítico', daniel: 'Sábio: +15% XP', ester: 'Favor: +25% siclos', neemias: `Obra: +${Math.round(P.st.armor * 100)}% armadura`,
   }[P.hero]);
   document.body.classList.toggle('sunstop', P.sunT > 0);
   touchEl.hidden = !(touchMode && state === 'play');

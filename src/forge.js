@@ -119,6 +119,13 @@ const sceptre = () => merge(
   ...[0, 1, 2, 3, 4].map((k) => part(new THREE.ConeGeometry(0.07, 0.3, 4), 0xf2c14e, [Math.cos(k * 1.26) * 0.28, Math.sin(k * 1.26) * 0.28, 1.15], Z)),
 );
 
+// Nehemiah's brick (Ne 4:6): fired clay with a seam of mortar, tumbling end over end.
+const brick = () => merge(
+  part(new THREE.BoxGeometry(1.1, 0.5, 0.55), 0xb8622a),
+  part(new THREE.BoxGeometry(1.14, 0.08, 0.6), 0xe8dcc0, [0, 0.27, 0]),
+  part(new THREE.BoxGeometry(0.5, 0.48, 0.56), 0xa85424, [0.28, 0, 0.01]),
+);
+
 export function forgeModels() {
   return {
     weapon_lanca: spear(), proj_lanca: spear(),
@@ -128,6 +135,7 @@ export function forgeModels() {
     weapon_brasas: emberModel(), proj_ember: emberModel(),
     weapon_escrita: writing(),
     weapon_cetro: sceptre(), proj_cetro: sceptre(),
+    weapon_tijolos: brick(), proj_brick: brick(),
     weapon_espada: sword(), weapon_incensario: censer(), weapon_rolo: scroll(), proj_scroll: scroll(),
     relic_la: fleece(), relic_amendoeira: blossom(), relic_selo: seal(),
   };

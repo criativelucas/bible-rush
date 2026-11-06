@@ -82,7 +82,7 @@ begin
   if v_name !~ '^[A-Za-zÀ-ÖØ-öø-ÿ0-9 _.-]{2,16}$' then raise exception 'nome inválido'; end if;
   if not ((p_map in ('ela', 'mar', 'ossos', 'jerico', 'carmelo', 'babilonia') and p_mode in ('classic', 'surv', 'weekly') and coalesce(p_floor, 0) = 0)
           or (p_map = 'babel' and p_mode = 'babel' and p_floor between 1 and 500))
-     or p_diff not between 0 and 2 or p_hero not in ('davi', 'sansao', 'moises', 'josue', 'debora', 'elias', 'gideao', 'daniel', 'ester') then
+     or p_diff not between 0 and 2 or p_hero not in ('davi', 'sansao', 'moises', 'josue', 'debora', 'elias', 'gideao', 'daniel', 'ester', 'neemias') then
     raise exception 'dados inválidos';
   end if;
   -- The tower: no floor is cleared in under 15 seconds.

@@ -197,6 +197,13 @@ test('weekly challenge is the same for everyone, combinations count evolutions, 
   for (const s of Object.values(C.SYNERGIES)) for (const id of s.weapons) assert.ok(C.WEAPONS[id],id);
   assert.ok(C.PACTS.length>=9);
 });
+test('Nehemiah opens with ten runs and builds with bricks; the maps grew 44%', () => {
+  assert.ok(C.openSet({trophies:{constancia:1}}).has('hero:neemias'));
+  const st=C.baseStats(C.HEROES.neemias);assert.equal(st.armor,0.12);assert.equal(st.regen,1);
+  assert.equal(C.readyToEvolve([{id:'tijolos',level:5}],[{id:'tabuas'}]).length,1);
+  assert.equal(fs.readFileSync(new URL('./assets/models/heroes/neemias.glb',import.meta.url)).toString('utf8',0,4),'glTF');
+  for (const b of Object.values(C.BIOMES)) assert.ok(b.radius>=170 && b.radius<=210, b.name);
+});
 // Offline retry: use the real module with a mocked network; never contact the production server.
 const previousFetch=globalThis.fetch;
 let fail=true;

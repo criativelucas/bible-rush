@@ -88,11 +88,18 @@ export const HEROES = {
     miracle: ['Decreto do Rei', 'Um decreto de ouro fere e deixa lenta a horda por perto, e cura 30% da vida (Et 8:11).'],
     gold: 0.25, area: 0.1,
   },
+  neemias: {
+    name: 'Neemias', role: 'Construtor, resistente', hp: 130, speed: 8, weapon: 'tijolos', color: 0xb8622a, noSprite: true,
+    passive: ['Mãos à Obra', 'Começa com +12% de armadura e recupera 1 de vida por segundo (Ne 2:18).'],
+    move: ['Trolha e Espada', 'Avança com a espada em punho e arremessa longe quem estiver no caminho (Ne 4:17).', 3.5],
+    miracle: ['Muralha em 52 Dias', 'Um muro de pedra se ergue ao seu redor por 8 s: a horda é empurrada para fora (Ne 6:15).'],
+    armor: 0.12, regen: 1,
+  },
 };
 
 export function baseStats(hero) {
   return {
-    dmg: 0, cd: 0, area: hero.area || 0, dur: 0, amount: 0, speed: 0, maxHp: hero.hp, regen: 0, armor: 0,
+    dmg: 0, cd: 0, area: hero.area || 0, dur: 0, amount: 0, speed: 0, maxHp: hero.hp, regen: hero.regen || 0, armor: hero.armor || 0,
     pickup: 0, luck: hero.luck || 0, crit: 0.05 + (hero.crit || 0), xp: hero.xp || 0, burn: hero.burn || 0, airJumps: 0, revives: 0, rerolls: 1 + (hero.rerolls || 0), skips: 1, bans: 1,
     vamp: 0, gold: hero.gold || 0, faith: hero.faith || 0, // life per kill, extra siclos, extra Fé
     critDmg: hero.critDmg || 0, dodge: 0, // Tábuas da Lei, Escudo de Abraão
@@ -301,6 +308,13 @@ export const WEAPONS = {
     levels: [{ count: 1 }, { dmg: 0.3 }, { cd: 0.15, pierce: 1 }, { count: 1, dmg: 0.3 }],
   },
 
+  tijolos: {
+    name: 'Tijolos de Jerusalém', unit: 'tijolo', kind: 'shot', ref: 'Ne 4:6',
+    desc: 'Dois tijolos voam e ricocheteiam de inimigo em inimigo.',
+    dmg: 14, cd: 1.05, count: 2, bounce: 2, speed: 26, life: 1.1, range: 24, size: 0.3, proj: 'brick',
+    levels: [{ dmg: 0.3 }, { bounce: 1 }, { cd: 0.15 }, { count: 1, dmg: 0.3 }],
+  },
+
   // Evolutions: a weapon at its last level, plus its relic, becomes one of these at the next chest.
   funda_evo: {
     name: 'Pedra do Gigante', evo: true, from: 'funda', needs: 'pedras', unit: 'pedra', kind: 'shot', ref: '1 Sm 17:49',
@@ -401,6 +415,11 @@ export const WEAPONS = {
     name: 'Favor da Rainha', evo: true, from: 'cetro', needs: 'anel', kind: 'seeker', unit: 'raio', ref: 'Et 8:2',
     desc: 'Quatro raios de ouro caçam a horda, atravessam muitos e incendeiam.',
     dmg: 30, cd: 0.9, count: 4, pierce: 5, speed: 22, life: 3, turn: 8, range: 28, size: 0.4, proj: 'cetro', burn: 2, levels: [],
+  },
+  tijolos_evo: {
+    name: 'Muralha Reconstruída', evo: true, from: 'tijolos', needs: 'tabuas', kind: 'shot', unit: 'tijolo', ref: 'Ne 6:15',
+    desc: 'Quatro tijolos atravessam e ricocheteiam pela horda inteira.',
+    dmg: 34, cd: 0.85, count: 4, bounce: 4, pierce: 2, speed: 30, life: 1.3, range: 28, size: 0.38, proj: 'brick', levels: [],
   },
   mo_evo: {
     name: 'Pedra da Torre', evo: true, from: 'mo', needs: 'arco', unit: 'mó', kind: 'sky', target: 'strong', mill: true, ref: 'Jz 9:53',
@@ -536,7 +555,7 @@ export const WEEKLY_PAY = 400; // denários for the first win of the week
 export const SYNERGIES = {
   fogo: { name: 'Fogo do Céu', ref: '1 Rs 18:38', n: 2, weapons: ['brasas', 'sarca', 'fogo', 'carros', 'incensario'], bonus: { burn: 0.15, dmg: 0.08 }, text: '+15% de chance de queimar, +8% de dano' },
   laminas: { name: 'Lâminas dos Juízes', ref: 'Jz 2:16', n: 2, weapons: ['queixada', 'espada', 'estaca', 'machado'], bonus: { area: 0.15, crit: 0.05 }, text: '+15% de área, +5% de crítico' },
-  arqueiros: { name: 'Arqueiros de Israel', ref: '1 Cr 12:2', n: 2, weapons: ['funda', 'flechas', 'lanca', 'cetro', 'trombeta'], bonus: { dmg: 0.12, crit: 0.03 }, text: '+12% de dano, +3% de crítico' },
+  arqueiros: { name: 'Arqueiros de Israel', ref: '1 Cr 12:2', n: 2, weapons: ['funda', 'flechas', 'lanca', 'cetro', 'trombeta', 'tijolos'], bonus: { dmg: 0.12, crit: 0.03 }, text: '+12% de dano, +3% de crítico' },
   juizo: { name: 'Chuva de Juízo', ref: 'Êx 9:23', n: 2, weapons: ['granizo', 'fogo', 'mo', 'escrita', 'gafanhotos'], bonus: { amount: 1 }, text: '+1 projétil em todas as armas' },
   profetas: { name: 'Sinais dos Profetas', ref: 'Am 3:7', n: 3, weapons: ['brasas', 'corvos', 'machado', 'rolo', 'escrita', 'rodas', 'cajado'], bonus: { cd: 0.12, faith: 0.2 }, text: '−12% de recarga, +20% de Fé' },
 };
@@ -874,8 +893,8 @@ export const BIOMES = {
 };
 // Every map is drawn 20% wider than it was laid out (MAP_K) and its land rises higher (MAP_V), with extra
 // rolling slopes away from the start: the shapes above stay in their own design units.
-export const MAP_K = 1.2;
-export const MAP_V = 1.3;
+export const MAP_K = 1.44; // 20% wider, then 20% wider again
+export const MAP_V = 1.56; // and 20% taller twice over
 for (const b of Object.values(BIOMES)) {
   const K = MAP_K;
   const T = b.terrain;
@@ -993,7 +1012,7 @@ export const TROPHIES = {
   conquista: { name: 'Terra Prometida', desc: 'Vença nos 6 cenários.', tier: 2, cat: 'mapas', title: 'Conquistador de Canaã' },
   veterano: { name: 'Veterano', desc: 'Derrote 5.000 inimigos, somando as partidas.', tier: 1, cat: 'progresso', goal: ['kills', 5000] },
   lenda: { name: 'Lenda de Israel', desc: 'Derrote 25.000 inimigos, somando as partidas.', tier: 2, cat: 'progresso', goal: ['kills', 25000], title: 'Lenda de Israel' },
-  constancia: { name: 'Constância', desc: 'Jogue 10 partidas.', tier: 0, cat: 'progresso', goal: ['runs', 10] },
+  constancia: { name: 'Constância', desc: 'Jogue 10 partidas.', tier: 0, unlock: 'hero:neemias', cat: 'progresso', goal: ['runs', 10] },
   peregrino: { name: 'Peregrino', desc: 'Some 2 horas de jornada.', tier: 1, cat: 'progresso', goal: ['seconds', 7200], title: 'Peregrino' },
   crescimento: { name: 'Crescimento', desc: 'Leve um herói ao estágio 2.', tier: 1, cat: 'colecao' },
   plenitude: { name: 'Plenitude', desc: 'Leve um herói ao estágio 3.', tier: 2, cat: 'colecao', title: 'Ungido do Senhor' },
@@ -1158,6 +1177,8 @@ export const STAGES = {
     gear: [[], ['turbante'], ['turbante', 'capeBlue', 'halo']] },
   ester: { names: ['Hadassa', 'Rainha da Pérsia', 'Libertadora do seu povo'], stat: ['gold', 0.1, 'de siclos'], ref: 'Et 9:22',
     gear: [[], ['veil'], ['veil', 'crown', 'capeRoyal']] },
+  neemias: { names: ['Copeiro do rei', 'Governador de Judá', 'Construtor dos muros'], stat: ['armor', 0.03, 'de armadura'], ref: 'Ne 6:15',
+    gear: [[], ['turbante'], ['turbante', 'armor', 'banner']] },
 };
 // Stage 2 and 3 add the stat once and twice; stage 3 also fills Fé 25% faster (the miracle comes sooner).
 export function stageBonus(st, hero, stage) {

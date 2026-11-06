@@ -42,7 +42,7 @@ export async function claimName(profile, name) {
   }
 }
 // Keep new-hero runs until the database migration has been applied.
-const NEW_HEROES = ['elias', 'gideao', 'daniel', 'ester'];
+const NEW_HEROES = ['elias', 'gideao', 'daniel', 'ester', 'neemias'];
 const NEW_MAPS = ['carmelo', 'babilonia'];
 const awaitingHeroMigration = (e, body) => (NEW_HEROES.includes(body.p_hero) || NEW_MAPS.includes(body.p_map) || body.p_mode === 'weekly') && /dados inválidos|vitória impossível/.test(e.message);
 // One finished run. Sent when the run ends; kept in profile.pending and sent later if the network fails.

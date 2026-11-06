@@ -565,6 +565,37 @@ def ester():
     return s
 
 
+
+def neemias():
+    """Nehemiah, the king's cupbearer who rebuilt Jerusalem's wall (Ne 2-6): a headwrap, a short beard,
+    a work tunic under a leather apron, a sword at his side and a trowel in his hand (Ne 4:17)."""
+    s = Sculpt('neemias', 1.78)
+    skin_, hair, tunic, apron, wrap, leather = 0xc99168, 0x3a2416, 0xc9b48a, 0x7a4a24, 0xe8dcc0, 0x5e3a20
+    head(s, dict(skin=skin_, eye=0x2a1a12, brow=hair, hair=hair, brow_h=0.007))
+    s.add(ellipsoid((0, 0.866, 0.036), (0.056, 0.036, 0.042)), hair, 'head')  # short beard
+    s.add(ellipsoid((0, 0.888, 0.068), (0.026, 0.007, 0.01)), hair, 'head', shade=0)
+    s.add(ellipsoid((0, 0.952, -0.012), (0.078, 0.058, 0.082)), wrap, 'head')  # headwrap
+    s.add(belt(0.93, 0.076, 0.08, 0.011, cz=-0.004), 0xb8622a, 'head')
+    s.add(loft([(0.38, 0, 0.004, 0.124, 0.098), (0.46, 0, 0, 0.112, 0.083), (0.54, 0, 0, 0.103, 0.075), (0.63, 0, 0, 0.105, 0.073),
+                (0.71, 0, 0, 0.117, 0.075), (0.78, 0, -0.003, 0.13, 0.072), (0.808, 0, -0.005, 0.1, 0.06), (0.828, 0, -0.005, 0.05, 0.046)], folds=0.05),
+          tunic, skirt)
+    s.add(prim('box', 0.15, 0.3, 0.012, p=(0, 0.5, 0.085), bevel=0.004), apron, 'spine', smooth=False)  # leather apron
+    s.add(belt(0.56, 0.108, 0.08, 0.014), leather, 'spine')
+    arms(s, dict(skin=skin_), 0.14)
+    for x in (-1, 1):
+        s.add(capsule((0.14 * x, 0.778, 0), (0.146 * x, 0.69, -0.002), 0.041, 0.04), tunic, f'upperarm.{"L" if x > 0 else "R"}')
+        s.add(capsule((0.153 * x, 0.6, 0.0), (0.158 * x, 0.51, 0.008), 0.031, 0.028), leather, f'forearm.{"L" if x > 0 else "R"}')
+    legs(s, dict(thigh=skin_, shin=leather, foot=skin_), 0.06, thigh=(0.05, 0.04), shin=(0.035, 0.028))
+    s.add(shell([(0.4, 0, -0.045, 0.15, 0.112), (0.56, 0, -0.035, 0.146, 0.104), (0.7, 0, -0.022, 0.146, 0.094),
+                  (0.78, 0, -0.014, 0.154, 0.09), (0.81, 0, -0.01, 0.12, 0.072)], gap=0.85, thick=0.012, folds=0.06), 0x6a7a4a, cape)
+    s.add(capsule((0.125, 0.52, 0.05), (0.165, 0.28, 0.09), 0.016, 0.013), leather, 'spine')  # sword at his side
+    s.add(capsule((0.115, 0.55, 0.045), (0.11, 0.62, 0.04), 0.009, 0.009), 0xd8dee6, 'spine')
+    # The trowel in the right hand: a wooden grip and a flat iron blade.
+    s.add(capsule((-0.16, 0.45, 0.03), (-0.158, 0.45, 0.09), 0.011, 0.011), 0x8a5a2b, 'forearm.R')
+    s.add(prim('box', 0.006, 0.05, 0.07, p=(-0.158, 0.43, 0.13), bevel=0.002), 0xb8c0c8, 'forearm.R', smooth=False)
+    return s
+
+
 HEROES = {
     'davi': dict(make=davi, sx=0.135, lx=0.058, attack='sling'),
     'sansao': dict(make=sansao, sx=0.165, lx=0.07, attack='club', hair=True),
@@ -574,6 +605,7 @@ HEROES = {
     'debora': dict(make=debora, sx=0.13, lx=0.056, attack='bow', robe=True, hair=True),
     'gideao': dict(make=gideao, sx=0.14, lx=0.062, attack='club'),
     'daniel': dict(make=daniel, sx=0.14, lx=0.058, attack='sling', robe=True),
+    'neemias': dict(make=neemias, sx=0.14, lx=0.06, attack='club'),
     'ester': dict(make=ester, sx=0.13, lx=0.056, attack='staff', staff=True, robe=True, hair=True),
 }
 
