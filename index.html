@@ -649,19 +649,23 @@
     .hub-card b { display: block; font: 400 34px/1 var(--f-title); text-shadow: 0 2px 0 var(--line); }
     .hub-card small { display: block; font-size: 15px; color: #fff1d6; opacity: .9; }
     .hc-txt { display: grid; gap: 2px; }
-    .play-row { display: grid; grid-template-columns: 1.35fr 1fr; gap: 12px; }
+    .play-row { display: grid; grid-template-columns: 1fr 1.15fr; gap: 12px; }
     .hub-card.week { --c1: #1f5a5a; --c2: #2a7a72; }
-    .hub-card.play { --c1: #9a2a2f; --c2: #ae3a3a; min-height: 150px; }
+    .hub-card.play { --c1: #9a2a2f; --c2: #ae3a3a; min-height: 150px; flex-direction: column; justify-content: center; text-align: center; gap: 10px; position: relative; }
+    .hub-card.play .hc-txt { display: grid; justify-items: center; gap: 6px; }
+    .hub-card.play kbd { position: absolute; right: 12px; bottom: 12px; }
     .hub-card.play b { font-size: 64px; }
-    .hub-card.play kbd { margin-left: auto; align-self: flex-end; }
     .hc-face { flex: none; display: grid; place-items: center; width: 88px; height: 88px; border-radius: 50%; background: #f6e8c6; box-shadow: 0 0 0 4px var(--gold), 0 0 0 7px var(--line); }
     .hc-face img { width: 72px; height: 72px; image-rendering: pixelated; }
-    .mode-col { display: grid; gap: 12px; }
+    /* The four modes: a 2 x 2 grid of equal cards beside Jogar (icon, title on one line, two lines of detail) */
+    .mode-col { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 10px; }
+    .mode-col .hub-card { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 4px; padding: 10px 12px; min-height: 118px; }
+    .mode-col .hub-card img { width: 26px; height: 26px; image-rendering: pixelated; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .45)); }
+    .mode-col .hub-card b { font-size: 23px; line-height: 1.05; white-space: nowrap; }
+    .mode-col .hub-card small { font-size: 13px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .hub-card.surv { --c1: #3e5a2a; --c2: #4a6a34; }
     .hub-card.event { --c1: #5b3a8a; --c2: #6a4a9a; }
     .hub-card.babel { --c1: #8a4a2a; --c2: #2f5f9a; }
-    .hub-card.surv, .hub-card.event, .hub-card.babel { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; }
-    .hub-card.surv b, .hub-card.event b, .hub-card.babel b { font-size: 30px; }
     .hub-card.tasks { --c1: #8a5a14; --c2: #a8701c; }
     .hub-card.tasks img { width: 40px; height: 40px; image-rendering: pixelated; }
     .pips3 { margin-left: auto; display: flex; gap: 6px; }
@@ -701,7 +705,7 @@
     .rk.me { box-shadow: 0 0 0 2px #8fdc7a, 0 0 0 4px var(--line); }
     .season-more { margin: 2px 8px 0; padding: 3px 8px 5px; font-size: 15px; }
     @media (max-width: 1080px) { .hub { grid-template-columns: 1fr; } .season { max-width: 640px; width: 100%; justify-self: center; } .hub-main { justify-self: center; width: 100%; max-width: 640px; } }
-    @media (max-width: 640px) { .tiles { grid-template-columns: repeat(3, 1fr); } .play-row { grid-template-columns: 1fr; } .hub-card.play b { font-size: 48px; } }
+    @media (max-width: 640px) { .tiles { grid-template-columns: repeat(3, 1fr); } .play-row { grid-template-columns: 1fr; } .hub-card.play { flex-direction: row; text-align: left; } .hub-card.play .hc-txt { justify-items: start; } .hub-card.play b { font-size: 48px; } .mode-col .hub-card { min-height: 104px; } .mode-col .hub-card b { font-size: 20px; } }
     #menu .verse { position: static; max-width: 640px; margin: 0 3vw 16px; }
     #menu .version { position: fixed; }
     /* Ranking screen and the name dialog */
@@ -900,10 +904,10 @@
         <div class="play-row">
           <button class="btn hub-card play" data-go="setup"><span class="hc-face"><img id="play-face" alt=""></span><span class="hc-txt"><b>Jogar</b><small id="play-sub"></small></span><kbd class="k">Enter</kbd></button>
           <div class="mode-col">
-            <button class="btn hub-card surv" id="surv-card"><b>Sobrevivência</b><small id="surv-sub">Sem fim · guardiões</small></button>
-            <button class="btn hub-card babel" id="babel-card"><b>Torre de Babel</b><small id="babel-sub">Andares · portais · Ninrode</small></button>
-            <button class="btn hub-card event" id="event-card"><b>Desafio do dia</b><small id="event-sub"></small></button>
-            <button class="btn hub-card week" id="week-card"><b>Desafio da semana</b><small id="week-sub"></small></button>
+            <button class="btn hub-card surv" id="surv-card"><img src="assets/ui/hourglass.png" alt=""><b>Sobrevivência</b><small id="surv-sub">Sem fim · guardiões</small></button>
+            <button class="btn hub-card babel" id="babel-card"><img src="assets/ui/star.png" alt=""><b>Torre de Babel</b><small id="babel-sub">Andares · portais · Ninrode</small></button>
+            <button class="btn hub-card event" id="event-card"><img src="assets/ui/sun.png" alt=""><b>Desafio do dia</b><small id="event-sub"></small></button>
+            <button class="btn hub-card week" id="week-card"><img src="assets/ui/moon.png" alt=""><b>Desafio da semana</b><small id="week-sub"></small></button>
           </div>
         </div>
         <button class="btn hub-card tasks" data-go="tasks"><img src="assets/ui/scroll.png" alt=""><span class="hc-txt"><b>Tarefas</b><small id="tasks-sub"></small></span><span id="tasks-pips" class="pips3"></span><i id="tasks-dot" class="dot" hidden></i></button>
