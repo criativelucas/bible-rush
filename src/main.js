@@ -47,7 +47,7 @@ try { Object.assign(cfg, JSON.parse(localStorage.getItem('otr-cfg') || '{}')); }
 const saveCfg = () => { try { localStorage.setItem('otr-cfg', JSON.stringify(cfg)); } catch {} };
 
 // ---------- Tuning ----------
-const HALF = 140; // grids span [-140, 140] on X and Z
+const HALF = 170; // grids span [-170, 170] on X and Z
 const CLIFF = 1.0; // ground steeper than this (45°) is a rock face: no walking up it
 const MAX_ENEMIES = 1000;
 const MAX_SHOTS = 600;
@@ -81,7 +81,7 @@ const canvas = renderer.domElement;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color();
-scene.fog = new THREE.Fog(0, 48, 135);
+scene.fog = new THREE.Fog(0, 55, 165); // the maps grew: see further
 const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 420);
 
 const target = new THREE.WebGLRenderTarget(1, 1, {
@@ -458,7 +458,7 @@ function instanced(geo, mat, max, colors = false, shadow = false) {
 const enemyMat = M.toon(0xffffff, { walk: true, fade: true, rim: true });
 const enemyMeshes = []; // by type (sparse: the boss is a rig)
 for (const t of MOB_TYPES) enemyMeshes[t] = instanced(ASSETS.mobs[`mob_${t}_${BABEL ? 'ela' : BIOME_ID}`], enemyMat, MAX_ENEMIES, true, true); // the tower swaps them floor by floor
-const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca', 'scroll', 'ember'];
+const PROJ = ['stone', 'arrow', 'snake', 'axe', 'lanca', 'scroll', 'ember', 'cetro'];
 const shotMeshes = PROJ.map((k) => instanced(ASSETS.items[`proj_${k}`], M.toon(), MAX_SHOTS, true));
 const eshotMesh = instanced(new THREE.IcosahedronGeometry(0.25, 0), hdr(new THREE.MeshBasicMaterial({ color: 0xff3fb4 }), 2), MAX_ESHOTS);
 const manaMesh = instanced(ASSETS.items.proj_mana, hdr(new THREE.MeshBasicMaterial({ vertexColors: true }), 1.7), MAX_GEMS, true);
@@ -1842,7 +1842,7 @@ function renderBestiary() {
   if (beastTab === 'inimigos') {
     $('beast-hint').textContent = 'Cada inimigo derrotado conta para a pesquisa do seu cenário. Complete as seis e ganhe a moldura do cenário para o retrato do herói.';
     $('beast-body').innerHTML = Object.entries(BIOMES).map(([biome, b]) => {
-      const names = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 4, escudeiro: 5, voador: 6, escalador: 7 };
+      const names = { soldado: 0, fundeiro: 1, carro: 2, gigante: 3, batedor: 4, escudeiro: 5, voador: 6, escalador: 7, lancador: 8, sacerdote: 9, minichefe1: 10, minichefe2: 11 };
       const done = researchOf(profile, biome);
       const cells = BEAST_KINDS.map((k) => {
         const n = kills[`${biome}:${k}`] || 0;
@@ -2360,7 +2360,7 @@ function useSpecial() {
   let dx = P.wishX;
   let dz = P.wishZ;
   if (!dx && !dz) { dx = P.faceX; dz = P.faceZ; }
-  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32], josue: [24, 0.28], debora: [22, 0.3], elias: [23, 0.3], gideao: [25, 0.28], daniel: [22, 0.3] }[P.hero];
+  const [speed, dur] = { davi: [24, 0.22], sansao: [26, 0.32], moises: [20, 0.32], josue: [24, 0.28], debora: [22, 0.3], elias: [23, 0.3], gideao: [25, 0.28], daniel: [22, 0.3], ester: [23, 0.3] }[P.hero];
   Object.assign(P, { dashX: dx, dashZ: dz, dashSpeed: speed, dashT: dur, sliding: false });
   P.dashId++;
   P.iframes = Math.max(P.iframes, dur + 0.12);
@@ -2387,6 +2387,10 @@ function dashHits() {
       damage(j, 20, P.dashX, P.dashZ, 8);
       E.burn[j] = Math.max(E.burn[j], 2);
       ember(E.x[j], E.y[j] + 0.5, E.z[j], 0xff8a3d, 4);
+    } else if (P.hero === 'ester') { // before the king: they falter as she passes (Et 5:2)
+      damage(j, 12, P.dashX, P.dashZ, 6);
+      E.slow[j] = Math.max(E.slow[j], 2.5);
+      burst(E.x[j], E.y[j] + 1, E.z[j], 0xe8b84a, 4, 2, 0.1, 2);
     } else if (P.hero === 'gideao') { // the shout of the three hundred: they reel, confused (Jz 7:21)
       damage(j, 22, P.dashX, P.dashZ, 8);
       if (!ENEMIES[E.type[j]].boss) E.stun[j] = Math.max(E.stun[j], 1.5);
@@ -2427,6 +2431,20 @@ function useMiracle() {
       addStrike(t >= 0 ? E.x[t] : x + Math.cos(a) * 8, t >= 0 ? E.z[t] : z + Math.sin(a) * 8, 3, 90, 0.35 + k * 0.1, 1, 3);
     }
     toast('Fogo do Carmelo!', '#ffb347');
+  } else if (P.hero === 'ester') { // the king's decree: the Jews stood for their lives (Et 8:11)
+    const n = hash.query(x, z, 20 + MAX_R, near);
+    for (let q = 0; q < n; q++) {
+      const j = near[q];
+      if (E.hp[j] <= 0 || Math.hypot(E.x[j] - x, E.z[j] - z) > 20 + E.r[j]) continue;
+      damage(j, 110);
+      E.slow[j] = Math.max(E.slow[j], 5 * (1 + P.st.dur));
+    }
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      addStrike(x + Math.cos(a) * 9, z + Math.sin(a) * 9, 2.4, 60, 0.15 + k * 0.05, 2);
+    }
+    P.hp = Math.min(P.st.maxHp, P.hp + P.st.maxHp * 0.3);
+    toast('Decreto do Rei: o povo se levanta!', '#e8b84a');
   } else if (P.hero === 'gideao') { // jars broken, torches lit: the camp turns on itself (Jz 7:20-22)
     const n = hash.query(x, z, 18 + MAX_R, near);
     for (let q = 0; q < n; q++) {
@@ -2703,6 +2721,112 @@ function spawnCarrier() {
   E.t[i] = 25;
   toast(B.carrier, '#ffd66b');
 }
+// ---------- Located events: each one is marked by a beam of light, on the minimap and by the pointer on top ----------
+const marks = []; // {x, z, color, label, until, kind, chest?}
+const markAt = (x, z, color, label, secs, extra = {}) => { const m = { x, z, color, label, until: time + secs, ...extra }; marks.push(m); return m; };
+// Somewhere 30-46 m from the hero, on open ground the horde can reach.
+function eventSpot(minD = 30, maxD = 46) {
+  for (let t = 0; t < 30; t++) {
+    const a = random() * Math.PI * 2;
+    const r = minD + random() * (maxD - minD);
+    let x = P.pos.x + Math.cos(a) * r;
+    let z = P.pos.z + Math.sin(a) * r;
+    const rr = Math.hypot(x, z);
+    const lim = B.radius * 0.85;
+    if (rr > lim) { x *= lim / rr; z *= lim / rr; }
+    const s = world.freeSpot(x, z);
+    if (walkable(s.x, s.z) && !flow.blocked[flow.index(s.x, s.z)]) return s;
+  }
+  return world.freeSpot(P.pos.x, P.pos.z);
+}
+// Mini-bosses: the champion (11) at 2:30 and the sorcerer (12) at 5:30; in Survival one every 4 minutes.
+const MINI_AT = [150, 330];
+let minisSpawned = 0;
+const miniName = (t) => BEAST_NAMES[BIOME_ID]?.[t - 1] ?? 'Mini-chefe';
+function spawnMini(k) {
+  const s = eventSpot();
+  const i = spawnEnemy(11 + k, s.x, s.z);
+  if (i < 0) return;
+  E.elite[i] = 4; // drops a chest like a champion (see the kills)
+  burst(s.x, terrainH(s.x, s.z) + 2, s.z, 0xff5a4a, 30, 6, 0.2, 6);
+  toast(`${miniName(11 + k)} apareceu! Siga a luz vermelha`, '#ff9a8a');
+  beep(70, 0.8, 'sawtooth', 0.07, 0, 110);
+}
+// Every 70 s one of these, somewhere else on the map.
+let nextLocated = 80;
+function locatedEvent() {
+  const kind = ['mana', 'tesouro', 'acampamento'][Math.floor(random() * 3)];
+  const s = eventSpot();
+  if (kind === 'mana') { // manna falls on one spot for 22 s (Êx 16:4)
+    markAt(s.x, s.z, '#9fe4ff', 'Chuva de maná', 22, { kind, rain: 0 });
+    toast('Maná cai do céu! Siga a luz azul', '#9fe4ff');
+  } else if (kind === 'tesouro') { // a free chest that waits a minute
+    const c = world.addChest(s.x, s.z, true);
+    indexObstacle(obstacles.length - 1);
+    markAt(s.x, s.z, '#ffd66b', 'Arca do tesouro', 60, { kind, chest: c });
+    toast('Uma arca de tesouro apareceu! Siga a luz dourada', '#ffd66b');
+  } else { // a camp: guards, a priest and fire-pot throwers round a chest
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2;
+      const x = s.x + Math.cos(a) * 4.5;
+      const z = s.z + Math.sin(a) * 4.5;
+      if (walkable(x, z) && !flow.blocked[flow.index(x, z)]) spawnEnemy(k === 0 ? 10 : k % 3 === 1 ? 9 : k % 4 === 2 ? 6 : 0, x, z);
+    }
+    const c = world.addChest(s.x, s.z, true);
+    indexObstacle(obstacles.length - 1);
+    markAt(s.x, s.z, '#ff8a3d', 'Acampamento inimigo', 75, { kind, chest: c });
+    toast('Um acampamento inimigo guarda um baú! Siga a luz laranja', '#ff9a8a');
+  }
+  chord([523, 659, 784], 'triangle');
+}
+// Everything worth walking to right now: the events above, plus whoever carries a reward.
+function liveMarks() {
+  const out = marks.slice();
+  for (let i = 0; i < E.n; i++) {
+    const el = E.elite[i];
+    if (el === 4) out.push({ x: E.x[i], z: E.z[i], color: '#ff5a4a', label: miniName(E.type[i]), prio: 2 });
+    else if (el === 1) out.push({ x: E.x[i], z: E.z[i], color: '#ffd66b', label: 'Campeão com baú', prio: 1 });
+    else if (el === 2) out.push({ x: E.x[i], z: E.z[i], color: '#8fdc7a', label: 'Tesouro em fuga', prio: 1 });
+  }
+  if (boss.idx >= 0) out.push({ x: E.x[boss.idx], z: E.z[boss.idx], color: '#e5534b', label: FOE.name, prio: 3 });
+  return out;
+}
+// Beams of light over the marks, seen from anywhere on the map.
+const beamGeo = new THREE.CylinderGeometry(0.9, 1.6, 90, 12, 1, true).translate(0, 45, 0);
+const beams = Array.from({ length: 8 }, () => {
+  const m = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
+  m.visible = false;
+  m.frustumCulled = false;
+  scene.add(m);
+  return m;
+});
+let pointerMark = null;
+function updateMarks(dt) {
+  for (let k = marks.length - 1; k >= 0; k--) {
+    const m = marks[k];
+    if (m.chest?.open || time > m.until) { marks.splice(k, 1); continue; }
+    if (m.kind === 'mana' && (m.rain -= dt) <= 0) {
+      m.rain = 0.2;
+      const x = m.x + (random() - 0.5) * 9;
+      const z = m.z + (random() - 0.5) * 9;
+      const y = terrainH(x, z);
+      dropGem(x, y + 0.4, z, 2, 0);
+      burst(x, y + 5, z, 0xdff4ff, 3, 2, 0.1, 2);
+    }
+  }
+  const live = liveMarks();
+  beams.forEach((b, k) => {
+    const m = live[k];
+    b.visible = !!m;
+    if (!m) return;
+    b.position.set(m.x, terrainH(m.x, m.z), m.z);
+    b.material.color.set(m.color);
+    b.material.opacity = (0.2 + 0.1 * Math.sin(time * 4 + k)) * clamp((Math.hypot(m.x - P.pos.x, m.z - P.pos.z) - 5) / 15, 0.15, 1); // faint up close, bright from afar
+  });
+  // The pointer: the most important mark, then the nearest.
+  pointerMark = live.sort((a, b) => (b.prio || 0) - (a.prio || 0) || Math.hypot(a.x - P.pos.x, a.z - P.pos.z) - Math.hypot(b.x - P.pos.x, b.z - P.pos.z))[0] || null;
+}
+
 // Each map's own event (see BIOMES[id].event).
 function mapEvent() {
   if (BABEL) return;
@@ -2716,6 +2840,7 @@ function mapEvent() {
         if (walkable(x, z) && !flow.blocked[flow.index(x, z)]) spawnEnemy(k === 12 ? 2 : k % 4 === 3 ? 1 : 0, x, z);
       }
       burst(g.x, terrainH(g.x, g.z) + 1, g.z, 0xcbb89a, 20, 5, 0.2, 4);
+      markAt(g.x, g.z, '#ff8a3d', 'Portão de Jericó', 20);
     }
   } else if (BIOME_ID === 'ela') { // the Philistine line advances (1 Sm 17:21)
     lineAcross(30, 1.8, (x, z, fx, fz, k) => spawnEnemy(k % 5 === 2 ? 1 : 0, x, z));
@@ -2730,6 +2855,7 @@ function mapEvent() {
     const piles = [...world.bonePiles].sort((p, q) => Math.hypot(p.x - P.pos.x, p.z - P.pos.z) - Math.hypot(q.x - P.pos.x, q.z - P.pos.z)).slice(0, 5);
     for (const pile of piles) {
       burst(pile.x, terrainH(pile.x, pile.z) + 0.5, pile.z, 0xe6dcc2, 16, 4, 0.18, 5);
+      markAt(pile.x, pile.z, '#e6dcc2', 'Ossos se levantando', 15);
       for (let k = 0; k < 5; k++) {
         const x = pile.x + Math.cos(k * 1.26) * 1.6;
         const z = pile.z + Math.sin(k * 1.26) * 1.6;
@@ -2802,6 +2928,8 @@ function director(dt) {
   if (!boss.spawned && time >= nextCarrier) { nextCarrier += 150; spawnCarrier(); }
   if (time >= melCarrier) { melCarrier = Infinity; spawnCarrier(); }
   if (!boss.spawned && time >= nextEvent) { nextEvent += 150; mapEvent(); }
+  if (!boss.spawned && time >= (SURV ? 240 * (minisSpawned + 1) : MINI_AT[minisSpawned] ?? Infinity)) spawnMini(minisSpawned++ % 2);
+  if (!boss.spawned && time >= nextLocated) { nextLocated += 70; locatedEvent(); }
   if (B.city && !wallsFell && time >= 300) { // Jericó at 5:00: stretches of the wall come down
     wallsFell = true;
     for (const f of world.collapse()) {
@@ -2817,6 +2945,7 @@ function director(dt) {
   if (!SURV && !boss.spawned && stonesDone === 3 && time >= bossWait) spawnBoss(false);
   if (!SURV && !boss.spawned && time >= RUN_TIME && time >= bossWait) spawnBoss(true);
   if (SURV && !boss.spawned && time >= nextGuardian) spawnBoss(false, true);
+  updateMarks(dt);
 }
 
 function enemyShot(x, y, z, dx, dz, dmg, speed = 13) {
@@ -2967,8 +3096,32 @@ function updateEnemies(dt) {
       face = Math.atan2(dx, dz);
       if (E.cd[i] <= 0 && dist < 20 && E.stun[i] <= 0) {
         if (P.pos.y - E.y[i] > 1.5) enemyLob(x, E.y[i] + 1.4, z, type.dmg * nightDmg); // up on a ledge: over the edge
-        else enemyShot(x, E.y[i] + 1.1, z, dx / dist, dz / dist, type.dmg * nightDmg);
-        E.cd[i] = 2.2 + random() * 1.5;
+        else for (let f = 0, n = type.fan || 1; f < n; f++) { // the sorcerer looses a fan
+          const a = Math.atan2(dx, dz) + (f - (n - 1) / 2) * 0.22;
+          enemyShot(x, E.y[i] + 1.1 * (type.mini ? 2 : 1), z, Math.sin(a), Math.cos(a), type.dmg * nightDmg);
+        }
+        E.cd[i] = (type.mini ? 1.6 : 2.2) + random() * 1.5;
+      }
+    } else if (type.lobber) { // fire pots in an arc from 9-14 m: their landing is marked, keep moving
+      if (dist < 9) { mx = -dx / dist; mz = -dz / dist; } else if (dist < 14) speed *= 0.3;
+      face = Math.atan2(dx, dz);
+      if (E.cd[i] <= 0 && dist < 18 && E.stun[i] <= 0) {
+        enemyLob(x, E.y[i] + 1.4, z, type.dmg * nightDmg, 11);
+        E.cd[i] = 3 + random() * 1.2;
+      }
+    } else if (type.healer) { // stays behind the horde and heals it: strike him first
+      if (dist < 12) { mx = -dx / dist; mz = -dz / dist; } else if (dist < 16) speed *= 0.3;
+      face = Math.atan2(dx, dz);
+      if (E.cd[i] <= 0 && E.stun[i] <= 0) {
+        const n = hash.query(x, z, 8 + MAX_R, near);
+        for (let q = 0; q < n; q++) {
+          const j = near[q];
+          if (j === i || E.hp[j] <= 0 || ENEMIES[E.type[j]].boss || Math.hypot(E.x[j] - x, E.z[j] - z) > 8) continue;
+          E.hp[j] = Math.min(E.maxhp[j], E.hp[j] + E.maxhp[j] * 0.25);
+        }
+        addFx(ringGeo, 0x7af0a0, x, 0.2, z, 1, 0.5, { grow: 8, ground: true });
+        burst(x, E.y[i] + 1.8, z, 0x7af0a0, 10, 3, 0.12, 4);
+        E.cd[i] = 4 + random();
       }
     } else if (type.charger) {
       // 0 chase, 1 wind-up (glows orange), 2 charge in a straight line, 3 recover.
@@ -3728,7 +3881,7 @@ function updateEnemyShots(dt) {
   }
 }
 
-const DEATH = [...B.death, 0, B.death[0], B.death[3], B.death[1], B.death[0]]; // the new kinds bleed like their cousins
+const DEATH = [...B.death, 0, B.death[0], B.death[3], B.death[1], B.death[0], B.death[0], B.death[1], B.death[3], B.death[1]]; // the new kinds bleed like their cousins
 function reapEnemies() {
   for (let i = 0; i < E.n; ) {
     if (E.hp[i] > 0) { i++; continue; }
@@ -3771,6 +3924,7 @@ function reapEnemies() {
       award('tesouro');
       chord([784, 988, 1175], 'square');
     } else if (E.elite[i]) {
+      if (type.mini) { toast(`${miniName(E.type[i])} caiu! Um baú ficou no lugar`, '#ffd66b'); chord([523, 784, 1046], 'square'); }
       if (time - P.lastHit > 12 && allies.length < 2) recruit(x, z); // beaten without a scratch: a valiant joins
       const s = world.freeSpot(x, z); // never inside a rock or tree, where it could not be reached
       world.addChest(s.x, s.z, true);
@@ -3791,7 +3945,7 @@ function reapEnemies() {
       lifeSamples++;
       lastLifeSample = time;
     }
-    const kt = E.elite[i] ? 'elite' : type.id;
+    const kt = type.mini ? type.id : E.elite[i] ? 'elite' : type.id;
     P.killsBy[kt] = (P.killsBy[kt] || 0) + 1;
     gainFe(E.elite[i] ? 15 : 0.6);
     if (P.hero === 'sansao') P.stacks = Math.min(100, P.stacks + 1);
@@ -4568,6 +4722,37 @@ function updateWorld(dt) {
       boom(0.5, 0.5, 1800);
       flash(t.x, t.y, t.z, 0xfff1b8, 140, 0.6);
       toast('Jarro de Gideão: “Espada do Senhor e de Gideão!”', '#ffe08f');
+    } else if (t.kind === 'shofar') { // blow the ram's horn (Js 6:20): the horde round you is thrown back and dazed
+      t.cd -= dt;
+      if (t.cd > 0) { if (d < 2.6) promptText = `Shofar · de novo em ${Math.ceil(t.cd)} s`; continue; }
+      if (d > 2.6) { t.p = 0; continue; }
+      t.p += dt / 0.8;
+      promptText = `Tocando o shofar · ${Math.floor(Math.min(1, t.p) * 100)}%`;
+      if (t.p < 1) continue;
+      t.p = 0;
+      t.cd = 90;
+      dmgSrc = 'other';
+      for (let i = 0; i < E.n; i++) {
+        const ex = E.x[i] - t.x;
+        const ez = E.z[i] - t.z;
+        const dd = Math.hypot(ex, ez) || 1;
+        if (dd > 16 || ENEMIES[E.type[i]].boss) continue;
+        damage(i, 25, ex / dd, ez / dd, 26);
+        E.stun[i] = Math.max(E.stun[i], 2);
+      }
+      addFx(ringGeo, 0xffe8b0, t.x, 0.3, t.z, 1, 0.7, { grow: 16, ground: true });
+      shake = 0.5;
+      beep(147, 1.1, 'sawtooth', 0.08, 0, 196);
+      toast('O shofar soou! A horda recua', '#ffe08f');
+    } else if (t.kind === 'cesto') { // a basket of manna (Êx 16:15): heals, then fills again in 75 s
+      t.cd -= dt;
+      t.manna.visible = t.cd <= 0;
+      if (t.cd > 0 || d > 1.8 || p.y - t.y > 1.5) continue;
+      t.cd = 75;
+      P.hp = Math.min(P.st.maxHp, P.hp + P.st.maxHp * 0.35);
+      burst(t.x, t.y + 0.8, t.z, 0xfff6dc, 16, 3, 0.12, 4);
+      chord([659, 784, 988], 'triangle');
+      toast('Maná: +35% de vida', '#8fdc7a');
     } else if (t.kind === 'bethel') { // Jacob's pillar (Gn 28:18): a blessing for a minute, again after two
       t.cd -= dt;
       t.flame.visible = t.cd <= 0;
@@ -5882,7 +6067,7 @@ function updateCamera(dt) {
     const cy = Math.min(Math.max(camTarget.y + Math.sin(pitch) * d, terrainH(cx, cz) + 0.5), BABEL ? world.CEIL - 1 : Infinity); // under the tower's ceiling
     shake = state === 'play' ? Math.max(0, shake - dt * 2) : outro ? shake : 0; // paused, cards or end screen: hold still
   if (state === 'play') dustT = Math.max(0, dustT - dt);
-  scene.fog.far = 135 - 75 * Math.min(1, dustT / 3, (16 - dustT) / 2); // wind over the bones: dust closes in, then clears
+  scene.fog.far = 165 - 95 * Math.min(1, dustT / 3, (16 - dustT) / 2); // wind over the bones: dust closes in, then clears
     camera.position.set(cx + (Math.random() - 0.5) * shake, cy + (Math.random() - 0.5) * shake, cz);
     camera.lookAt(camTarget);
     focus.copy(P.pos);
@@ -5907,7 +6092,7 @@ function updateCamera(dt) {
 // ---------- HUD (only touches the DOM when something changes) ----------
 const setText = (el, s) => { if (el._t !== s) { el._t = s; el.textContent = s; } };
 const setHtml = (el, s) => { if (el._t !== s) { el._t = s; el.innerHTML = s; } };
-const hud = Object.fromEntries(['hp', 'hp-text', 'fe', 'fe-text', 'fe-bar', 'extra', 'timer', 'phase-dot', 'objective', 'boss-hp', 'level',
+const hud = Object.fromEntries(['event-pointer', 'event-arrow', 'event-label', 'hp', 'hp-text', 'fe', 'fe-text', 'fe-bar', 'extra', 'timer', 'phase-dot', 'objective', 'boss-hp', 'level',
   'kills', 'gold', 'slots', 'skill-e', 'skill-q', 'prompt', 'fps', 'xp-fill', 'hurt', 'compass'].map((id) => [id, $(id)]));
 const compassTicks = [['N', Math.PI], ['L', Math.PI / 2], ['S', 0], ['O', -Math.PI / 2]].map(([txt, h]) => {
   const el = document.createElement('span');
@@ -6025,7 +6210,7 @@ function explore() {
 }
 const seen = (x, z) => explored[clamp(Math.floor((z + MAP_R) / fogCell), 0, FOG_N - 1) * FOG_N + clamp(Math.floor((x + MAP_R) / fogCell), 0, FOG_N - 1)] === 1;
 // What the maps show: [thing, colour, shape, name for the legend]. always: shown before it is discovered.
-const THING_NAME = { vein: 'Veio de prata', fruit: 'Árvore com frutos', gideon: 'Jarro de Gideão', bethel: 'Pilar de Betel', merchant: 'Caravana ismaelita' };
+const THING_NAME = { vein: 'Veio de prata', fruit: 'Árvore com frutos', gideon: 'Jarro de Gideão', bethel: 'Pilar de Betel', merchant: 'Caravana ismaelita', shofar: 'Shofar', cesto: 'Cesto de maná' };
 function mapMarks() {
   const m = [];
   for (const s of stones) m.push([s, s.done ? '#9a8f80' : '#f2c14e', 'diamond', 'Pedra do Memorial', true]);
@@ -6034,10 +6219,11 @@ function mapMarks() {
   for (const pd of world.pads) m.push([pd, '#9fe4ff', 'ring', 'Rocha de Horebe']);
   for (const c of chests) if (!c.open) m.push([c, c.challenge ? '#c8243a' : c.free ? '#ffd66b' : '#b0743a', 'square', c.challenge ? 'Baú selado' : 'Baú de cedro']);
   for (const t of world.things) {
-    if ((t.kind === 'vein' || t.kind === 'gideon') && t.used) continue;
-    m.push([t, { vein: '#dfe7ee', fruit: '#e05050', gideon: '#ffe08f', bethel: '#ffd66b', merchant: '#8fdc7a' }[t.kind], t.kind === 'merchant' ? 'square' : 'dot', THING_NAME[t.kind], t.kind === 'merchant']);
+    if (((t.kind === 'vein' || t.kind === 'gideon') && t.used) || (t.kind === 'cesto' && t.cd > 0)) continue;
+    m.push([t, { vein: '#dfe7ee', fruit: '#e05050', gideon: '#ffe08f', bethel: '#ffd66b', merchant: '#8fdc7a', shofar: '#f3e6c4', cesto: '#fff6dc' }[t.kind], t.kind === 'merchant' ? 'square' : 'dot', THING_NAME[t.kind], t.kind === 'merchant']);
   }
   if (world.rahab && !world.rahab.used) m.push([world.rahab, '#e03a50', 'dot', 'Casa de Raabe']);
+  if (!BABEL) for (const e of liveMarks()) m.push([e, e.color, 'event', e.label, true]);
   return m;
 }
 function drawMark(ctx, x, y, color, shape, size) {
@@ -6046,6 +6232,14 @@ function drawMark(ctx, x, y, color, shape, size) {
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   if (shape === 'diamond') { ctx.moveTo(x, y - size * 1.4); ctx.lineTo(x + size, y); ctx.lineTo(x, y + size * 1.4); ctx.lineTo(x - size, y); ctx.closePath(); }
+  else if (shape === 'event') { // a five-pointed star: something is happening here
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+      const r = k % 2 ? size * 0.5 : size * 1.25;
+      ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    ctx.closePath();
+  }
   else if (shape === 'square') ctx.rect(x - size, y - size, size * 2, size * 2);
   else ctx.arc(x, y, size, 0, Math.PI * 2);
   if (shape === 'ring') { ctx.lineWidth = 2.5; ctx.strokeStyle = color; ctx.stroke(); return; }
@@ -6085,8 +6279,8 @@ function updateMinimap(dt) {
     let y = (o.z - pz) * k;
     const d = Math.hypot(x, y);
     const edge = W / 2 - 7;
-    if (d > edge) { if (shape !== 'diamond') continue; x *= edge / d; y *= edge / d; } // stones stay on the rim, pointing the way
-    drawMark(mini, x, y, color, shape, shape === 'diamond' ? 4.5 : 3.5);
+    if (d > edge) { if (shape !== 'diamond' && shape !== 'event') continue; x *= edge / d; y *= edge / d; } // stones and events stay on the rim, pointing the way
+    drawMark(mini, x, y, color, shape, shape === 'event' ? 6 + Math.sin(time * 6) : shape === 'diamond' ? 4.5 : 3.5);
   }
   if (boss.idx >= 0) drawMark(mini, (E.x[boss.idx] - px) * k, (E.z[boss.idx] - pz) * k, '#e5534b', 'square', 6);
   mini.restore();
@@ -6159,9 +6353,17 @@ function updateHud() {
   setText(hud['fe-text'], P.fe >= 100 ? `Fé cheia · Q ${h.miracle[0]}` : `Fé ${Math.floor(P.fe)}`);
   setText(hud.extra, {
     sansao: `Nazireu +${P.stacks}%`, davi: `Pedra Lisa em ${5 - (P.shotCount % 5)}`, moises: 'Praga a cada nível',
-    josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas', elias: 'Zelo: +15% queimar · +20% Fé', gideao: 'Valente: +10% crítico', daniel: 'Sábio: +15% XP',
+    josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas', elias: 'Zelo: +15% queimar · +20% Fé', gideao: 'Valente: +10% crítico', daniel: 'Sábio: +15% XP', ester: 'Favor: +25% siclos',
   }[P.hero]);
   document.body.classList.toggle('sunstop', P.sunT > 0);
+  const pm = !BABEL && pointerMark;
+  hud['event-pointer'].hidden = !pm;
+  if (pm) { // an arrow turned the way to go, from where the camera looks
+    const rel = Math.atan2(pm.x - P.pos.x, pm.z - P.pos.z) - Math.atan2(-Math.sin(yaw), -Math.cos(yaw));
+    hud['event-arrow'].style.transform = `rotate(${-rel}rad)`;
+    hud['event-arrow'].style.color = pm.color;
+    setText(hud['event-label'], `${pm.label} · ${Math.round(Math.hypot(pm.x - P.pos.x, pm.z - P.pos.z))} m`);
+  }
   setText(hud.timer, BABEL ? (tower.clear ? 'Porta aberta' : fmt(Math.max(0, tower.left))) : fmt(time)); // the tower: time left on the floor
   hud['phase-dot'].classList.toggle('night', night > 0.5);
   setHtml(hud.objective, BABEL ? `<b>Andar ${tower.n}</b><span style="opacity:.8">· ${tower.clear ? 'vencido!' : tower.boss ? `derrote ${boss.spawned ? FOE.name : 'o chefe'}` : `abates ${Math.min(tower.kills, tower.goal)}/${tower.goal}`}${tower.tongue ? ` · ${TONGUES[tower.tongue].name}` : ''}</span>`

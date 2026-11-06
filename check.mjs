@@ -130,7 +130,7 @@ import { HEROES, WEAPONS, BIOMES, RELICS, EVOLUTIONS, TROPHIES, MAX_WEAPONS, MAX
   }
   assert.ok(BIOMES.mar.terrain(BIOMES.mar.radius, 0) < BIOMES.mar.water, 'island edge should be sea');
   for (let a = 0; a < Math.PI * 2; a += 0.2) { // shallows: wadeable ring around the island
-    const h = BIOMES.mar.terrain(Math.cos(a) * 100, Math.sin(a) * 100);
+    const h = BIOMES.mar.terrain(Math.cos(a) * 100 * BIOMES.mar.scale, Math.sin(a) * 100 * BIOMES.mar.scale);
     assert.ok(h < BIOMES.mar.water && h > BIOMES.mar.water - 0.9, `shallows at ${a.toFixed(1)}: ${h}`);
   }
 }

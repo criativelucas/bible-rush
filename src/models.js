@@ -67,6 +67,10 @@ diffuseColor.rgb *= (0.86 + 0.28 * hash3(floor(vWorld * 9.0))) * (0.9 + 0.2 * vn
   float macro = vnoise(vWorld.xz * 0.07) * 0.6 + vnoise(vWorld.xz * 0.23) * 0.4;
   diffuseColor.rgb *= (0.84 + 0.3 * macro) * (0.9 + 0.2 * vnoise(vWorld.xz * 2.2));
   diffuseColor.rgb *= 0.88 + 0.22 * n;
+  diffuseColor.rgb *= mix(vec3(0.96, 1.0, 1.04), vec3(1.06, 1.0, 0.88), vnoise(vWorld.xz * 0.025 + 7.0)); // warm and cool tracts across the map
+  float slopeK = smoothstep(0.97, 0.66, abs(wn.y)); // worn, dusty slopes between the flats and the rock
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.9, 0.84, 0.74), slopeK * 0.55);
+  diffuseColor.rgb *= 0.9 + 0.1 * smoothstep(-2.0, 14.0, vWorld.y); // hollows a little darker, heights a little brighter
   if (abs(wn.y) < 0.62) { // rock faces: courses of stone blocks, each its own shade, dark joints, lit top edges
     vec2 tg = normalize(vec2(-wn.z, wn.x) + 1e-5);
     float rowH = 0.9;
@@ -75,6 +79,10 @@ diffuseColor.rgb *= (0.86 + 0.28 * hash3(floor(vWorld * 9.0))) * (0.9 + 0.2 * vn
     vec2 f = vec2(fract(uu), fract(vWorld.y / rowH));
     float joint = min(1.0, step(f.x, 0.05) + step(f.y, 0.09));
     diffuseColor.rgb *= (0.8 + 0.32 * hash2(vec2(floor(uu), row))) * (1.0 - 0.42 * joint) * (1.0 + 0.14 * step(0.84, f.y));
+    diffuseColor.rgb *= 0.84 + 0.2 * vnoise(vec2(dot(vWorld.xz, tg) * 0.4, vWorld.y * 0.05)); // rain streaks down the face
+    #if GROUND == 1
+    if (f.y > 0.8 && hash2(vec2(floor(uu * 3.0), row)) > 0.45) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.5, 0.2), 0.55); // moss on the ledges
+    #endif
   }
   #ifdef PAVE
   else if (length(vWorld.xz - uPave.xy) < uPave.z) { // a paved city: cobbles in staggered rows

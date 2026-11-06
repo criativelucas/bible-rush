@@ -2326,11 +2326,99 @@ def belsazar():
     rigged('belsazar', m, GIANT_BONES, giant_clips(20, 2), 0.82)
 
 
+
+# ---------- Every map's fire-pot thrower (9), priest who heals the horde (10) and two mini-bosses (11, 12) ----------
+HEAL = 0x7af0a0
+KIN = {  # skin, tunic, kilt, accent, headgear, bones
+    'ela': (SKIN, 0x9c4a32, 0xe3d3ae, BRONZE, 'feathers', False),
+    'mar': (SKIN3, WHITE, WHITE, GOLD, 'nemes', False),
+    'ossos': (BONE2, RAG, 0x3a2e24, RUST, 'rusty', True),
+    'jerico': (SKIN2, PURPLE, CREAM, BRONZE, 'cone', False),
+    'carmelo': (SKIN2, BAAL, BAAL2, GOLD, 'cap', False),
+    'babilonia': (SKIN3, LAPIS, CREAM, GOLD, 'iron', False),
+}
+
+
+def kin_body(name, seed, h, mp, top=None, bottom=None):
+    skin_, tunic, kilt, acc, _, bones = KIN[mp]
+    m = Model(name, seed)
+    c = dict(skin=skin_, top=top or tunic, bottom=bottom or kilt, leg=skin_, feet=LEATHER, belt=acc, beard=BLACK if not bones else None)
+    return skeleton(m, h, dict(top=top or tunic, bottom=bottom or kilt)) if bones else humanoid(m, h, c)
+
+
+def kin_head(m, h, mp, tall=1.0):
+    _, tunic, _, acc, head, _ = KIN[mp]
+    y = 1.47 * h
+    if head == 'feathers':
+        m.part('box', 0.32 * h, 0.07 * h, 0.3 * h, p=(0, y, 0), color=BRONZE, bevel=0.015)
+        feathers(m, h, 1.62 * h)
+    elif head == 'nemes':
+        nemes(m, h, y)
+    elif head == 'rusty':
+        m.part('box', 0.32 * h, 0.16 * h, 0.3 * h, p=(0, y + 0.02 * h, 0), color=RUST, bevel=0.03)
+    elif head == 'cone':
+        m.part('cone', 0.17 * h, 0.34 * h * tall, 8, p=(0, y + 0.13 * h, 0), color=BRONZE)
+    elif head == 'cap':
+        m.part('cone', 0.17 * h, 0.5 * h * tall, 8, p=(0, y + 0.25 * h, 0), color=BAAL2)
+        m.part('cyl', 0.18 * h, 0.18 * h, 0.05 * h, 10, p=(0, y, 0), color=GOLD)
+    else:
+        m.part('cone', 0.17 * h, 0.36 * h * tall, 8, p=(0, y + 0.13 * h, 0), color=IRON)
+        m.part('cyl', 0.18 * h, 0.18 * h, 0.04 * h, 10, p=(0, y, 0), color=GOLD)
+
+
+def kin_mobs():
+    for k, mp in enumerate(KIN):
+        acc = KIN[mp][3]
+        # 9: fire-pot thrower: a pot with a flame in the right hand, a basket of pots on the back.
+        h = 0.95
+        m = kin_body(f'mob_9_{mp}', 90 + k, h, mp)
+        kin_head(m, h, mp)
+        m.part('ball', 0.11, 1, p=(0.3, 0.62, 0.12), s=(1, 0.9, 1), color=0xb86a3a, **RH(h))
+        m.part('cone', 0.07, 0.18, 6, p=(0.3, 0.76, 0.12), color=0xff8a3d, **RH(h))
+        m.part('cyl', 0.16, 0.13, 0.32, 10, p=(0, 1.0, -0.22), color=0x8a6a3e, bevel=0.01)
+        for x in (-0.07, 0.07):
+            m.part('ball', 0.07, 1, p=(x, 1.2, -0.22), color=0xb86a3a)
+        out('mobs', m)
+        # 10: priest: a robe to the ground, a tall hat, a staff with a green light that heals the horde.
+        h = 1.05
+        m = kin_body(f'mob_10_{mp}', 100 + k, h, mp, top=0x4a3a5a if not KIN[mp][5] else None, bottom=0x4a3a5a if not KIN[mp][5] else None)
+        m.part('cyl', 0.24 * h, 0.34 * h, 0.55 * h, 12, p=(0, 0.3 * h, 0), color=0x3a2e48 if not KIN[mp][5] else RAG)  # long robe
+        kin_head(m, h, mp, tall=1.5)
+        m.part('cyl', 0.02, 0.02, 1.7, 6, p=(-0.32, 0.95, 0.12), color=DARKWOOD, **LH(h))
+        m.part('ball', 0.12, 2, p=(-0.32, 1.85, 0.12), color=HEAL, **LH(h))
+        m.part('torus', 0.15, 0.02, 2 * PI, 12, p=(-0.32, 1.85, 0.12), r=(PI / 2, 0, 0), color=acc, **LH(h))
+        out('mobs', m)
+        # 11: mini-boss, the champion of the field: heavy armour, a horned helm, a two-handed mace.
+        h = 2.3
+        m = kin_body(f'mob_11_{mp}', 110 + k, h, mp, top=acc)
+        kin_head(m, h, mp)
+        for x in (-1, 1):
+            m.part('cone', 0.06 * h, 0.22 * h, 6, p=(x * 0.16 * h, 1.55 * h, 0.02 * h), r=(0, 0, -x * 0.9), color=IVORY)
+            m.part('ball', 0.11 * h, 1, p=(x * 0.29 * h, 1.12 * h, 0), s=(1.2, 0.8, 1.2), color=acc)  # pauldrons
+        m.part('cyl', 0.035 * h, 0.035 * h, 1.1 * h, 8, p=(0.29 * h, 0.95 * h, 0.12 * h), color=DARKWOOD, **RH(h))
+        m.part('ball', 0.13 * h, 1, p=(0.29 * h, 1.52 * h, 0.12 * h), color=IRON, **RH(h))
+        for a in range(6):
+            t = a / 6 * 2 * PI
+            m.part('cone', 0.03 * h, 0.1 * h, 4, p=(0.29 * h + math.sin(t) * 0.13 * h, 1.52 * h, 0.12 * h + math.cos(t) * 0.13 * h), r=(PI / 2, 0, -t), color=IRON, **RH(h))
+        out('mobs', m)
+        # 12: mini-boss, the sorcerer: a long robe and cape, a high crown, a staff with a burning orb.
+        h = 2.1
+        m = kin_body(f'mob_12_{mp}', 120 + k, h, mp, top=0x5a2a6a if not KIN[mp][5] else None)
+        m.part('cyl', 0.24 * h, 0.34 * h, 0.55 * h, 12, p=(0, 0.3 * h, 0), color=0x4a1f5a if not KIN[mp][5] else RAG)
+        m.part('box', 0.5 * h, 0.85 * h, 0.04 * h, p=(0, 0.75 * h, -0.17 * h), r=(-0.08, 0, 0), color=0x2a1a3a)  # cape
+        kin_head(m, h, mp, tall=1.8)
+        m.part('cyl', 0.02 * h, 0.02 * h, 1.5 * h, 6, p=(-0.32 * h, 0.95 * h, 0.12 * h), color=GOLD, **LH(h))
+        m.part('ball', 0.13 * h, 2, p=(-0.32 * h, 1.72 * h, 0.12 * h), color=0xff6a3d, **LH(h))
+        m.part('torus', 0.17 * h, 0.02 * h, 2 * PI, 12, p=(-0.32 * h, 1.72 * h, 0.12 * h), r=(PI / 2, 0, 0), color=acc, **LH(h))
+        out('mobs', m)
+
+
 if __name__ == '__main__':
     reset()
     mobs()
     carmel_mobs()
     babylon_mobs()
+    kin_mobs()
     goliath()
     pharaoh()
     gogue()
@@ -2347,7 +2435,7 @@ if __name__ == '__main__':
     items()
     props()
     for group, objs in built.items():
-        export_glb(os.path.join(ROOT, 'assets/models', f'{group}.glb'), objs)
+        export_glb(os.path.join(ROOT, 'assets/models', f'{group}.glb'), objs, draco=group == 'mobs')  # mobs: many models, compressed
     for k, ob in enumerate(o for objs in built.values() for o in objs):  # lay everything out in a grid for editing
         ob.location = ((k % 12) * 4.0, (k // 12) * 5.0, 0)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(ROOT, 'assets/blender/assets.blend'))

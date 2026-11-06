@@ -530,6 +530,41 @@ def daniel():
     return s
 
 
+
+def ester():
+    """Esther, queen of Persia (Et 2:17; 5:1): a gold crown over a sheer veil, a long purple gown with gold
+    trim, a jewelled collar and the king's golden sceptre in her right hand (Et 5:2)."""
+    s = Sculpt('ester', 1.66)
+    skin_, hair, purple, purple2, gold, veil = 0xd9a07a, 0x1e120c, 0x7a3a9a, 0x5a2a7a, 0xe8b84a, 0xf3e6f8
+    head(s, dict(skin=skin_, eye=0x2a1a12, brow=hair, hair=hair))
+    s.add(ellipsoid((0, 0.872, 0.066), (0.014, 0.005, 0.006), seg=10, rings=6), 0xb8384a, 'head', shade=0)  # lips
+    s.add(loft([(0.68, 0, -0.07, 0.08, 0.04), (0.8, 0, -0.06, 0.082, 0.05), (0.9, 0, -0.045, 0.076, 0.06)]), hair, locks)  # long hair
+    s.add(loft([(0.6, 0, -0.08, 0.1, 0.04), (0.78, 0, -0.07, 0.09, 0.05), (0.94, 0, -0.05, 0.08, 0.07)]), veil, locks)  # veil
+    s.add(belt(0.97, 0.07, 0.074, 0.012, cz=-0.006), gold, 'head')  # crown band...
+    for k in range(7):  # ...and its points
+        a = (k - 3) * 0.42
+        s.add(capsule((math.sin(a) * 0.07, 0.97, math.cos(a) * 0.074 - 0.006), (math.sin(a) * 0.072, 1.01, math.cos(a) * 0.076 - 0.006), 0.009, 0.004, seg=6), gold, 'head')
+    s.add(ellipsoid((0, 0.99, 0.074), (0.012, 0.012, 0.008)), 0xd94a4a, 'head', shade=0)
+    s.add(loft([(0.04, 0, 0.006, 0.15, 0.12), (0.2, 0, 0, 0.135, 0.105), (0.4, 0, 0, 0.114, 0.084), (0.53, 0, 0, 0.098, 0.072),
+                (0.64, 0, 0, 0.104, 0.074), (0.73, 0, 0, 0.118, 0.074), (0.79, 0, -0.004, 0.118, 0.066), (0.82, 0, -0.006, 0.052, 0.046)],
+               folds=0.08, nf=9), purple, lambda p: skirt(p, 0.6))
+    s.add(belt(0.08, 0.146, 0.116, 0.01), gold, lambda p: skirt(p, 0.6))  # gold hem
+    s.add(belt(0.56, 0.1, 0.074, 0.013), gold, 'spine')
+    s.add(belt(0.79, 0.11, 0.068, 0.014), gold, 'chest')  # jewelled collar
+    for k in range(5):
+        s.add(ellipsoid((-0.06 + k * 0.03, 0.775, 0.07), (0.008, 0.008, 0.006)), 0x3a8ad9 if k % 2 else 0xd94a4a, 'chest', shade=0)
+    arms(s, dict(skin=skin_, arm=purple2), 0.13, upper=(0.036, 0.034), fore=(0.03, 0.026))
+    s.add(shell([(0.06, 0, -0.06, 0.16, 0.13), (0.4, 0, -0.045, 0.14, 0.1), (0.68, 0, -0.022, 0.13, 0.09),
+                  (0.78, 0, -0.014, 0.14, 0.088), (0.81, 0, -0.01, 0.12, 0.07)], gap=0.9, thick=0.01, folds=0.08), purple2, locks)  # a train that sways with her hair
+    for x in (-1, 1):
+        s.add(ellipsoid((0.056 * x, 0.026, 0.05), (0.028 * FOOT, 0.018 * FOOT, 0.048 * FOOT)), gold, f'shin.{"L" if x > 0 else "R"}')
+    # The golden sceptre in the right hand.
+    s.add(capsule((-0.162, 0.42, 0.03), (-0.15, 0.62, 0.1), 0.008, 0.008), gold, 'forearm.R')
+    s.add(ellipsoid((-0.148, 0.645, 0.11), (0.022, 0.022, 0.022)), gold, 'forearm.R')
+    s.add(ellipsoid((-0.147, 0.67, 0.115), (0.01, 0.01, 0.01)), 0xd94a4a, 'forearm.R', shade=0)
+    return s
+
+
 HEROES = {
     'davi': dict(make=davi, sx=0.135, lx=0.058, attack='sling'),
     'sansao': dict(make=sansao, sx=0.165, lx=0.07, attack='club', hair=True),
@@ -539,6 +574,7 @@ HEROES = {
     'debora': dict(make=debora, sx=0.13, lx=0.056, attack='bow', robe=True, hair=True),
     'gideao': dict(make=gideao, sx=0.14, lx=0.062, attack='club'),
     'daniel': dict(make=daniel, sx=0.14, lx=0.058, attack='sling', robe=True),
+    'ester': dict(make=ester, sx=0.13, lx=0.056, attack='staff', staff=True, robe=True, hair=True),
 }
 
 

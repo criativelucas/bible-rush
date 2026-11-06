@@ -111,6 +111,14 @@ const writing = () => merge(
   part(cyl(0.06, 0.05, 0.4), 0xf0d0b0, [0.25, 0.62, 0.15], [0, 0, 1.2]),
 );
 
+// Esther's golden sceptre (Et 5:2): a gold rod, a ball and a crown of points; flies head first.
+const sceptre = () => merge(
+  part(cyl(0.09, 0.09, 2.2), 0xe8b84a, [0, 0, -0.3], Z),
+  part(ball(0.32), 0xf2c14e, [0, 0, 0.95]),
+  part(ball(0.14), 0xd94a4a, [0, 0, 1.3]),
+  ...[0, 1, 2, 3, 4].map((k) => part(new THREE.ConeGeometry(0.07, 0.3, 4), 0xf2c14e, [Math.cos(k * 1.26) * 0.28, Math.sin(k * 1.26) * 0.28, 1.15], Z)),
+);
+
 export function forgeModels() {
   return {
     weapon_lanca: spear(), proj_lanca: spear(),
@@ -119,6 +127,7 @@ export function forgeModels() {
     weapon_estaca: peg(),
     weapon_brasas: emberModel(), proj_ember: emberModel(),
     weapon_escrita: writing(),
+    weapon_cetro: sceptre(), proj_cetro: sceptre(),
     weapon_espada: sword(), weapon_incensario: censer(), weapon_rolo: scroll(), proj_scroll: scroll(),
     relic_la: fleece(), relic_amendoeira: blossom(), relic_selo: seal(),
   };

@@ -1,6 +1,6 @@
 # Bible Rush
 
-Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão, Moisés, Josué, Débora, Elias, Gideão e Daniel.
+Jogo de sobrevivência em 3D com visual de pixel art, com heróis do Antigo Testamento: Davi, Sansão, Moisés, Josué, Débora, Elias, Gideão, Daniel e Ester.
 Escolha um herói e um dos seis cenários, erga as três Pedras do Memorial e derrote o chefe.
 Cada jornada rende denários para o Mercado: melhorias permanentes, ferramentas para as cartas, armas, maestria e roupas.
 Os heróis evoluem com o tempo jogado; há tarefas diárias, bestiário, troféus com títulos, dificuldades e o modo Sobrevivência.
@@ -127,3 +127,15 @@ motivo ficam na fila local de reenvio (sujeita ao limite existente de 10 pendên
 
 Modelos: `tools/blender/heroes.py` (`ONLY=gideao,daniel` reconstrói só esses) e `tools/blender/assets.py`.
 **Ranking:** execute `tools/add-new-content-ranking.sql` no SQL Editor do Supabase; até lá as partidas novas ficam na fila local.
+
+## Ester, mapas maiores, novos inimigos, mini-chefes e eventos marcados
+
+- **Ester** (troféu *Riqueza de Salomão*): arma nova **Cetro de Ouro** (raios que perseguem; evolui com o Anel de José em
+  Favor da Rainha). +25% siclos e +10% área. E — Diante do Rei (deixa lento). Q — Decreto do Rei (fere, deixa lenta a horda e cura 30%).
+- **Mapas 20% maiores** (`MAP_K` em `src/content.js`), relevo mais alto (`MAP_V`) e colinas extras fora do início.
+- **2 inimigos novos por cenário:** lançador de potes de fogo (arco, marca no chão) e sacerdote que cura a horda.
+- **2 mini-chefes por cenário** (2:30 e 5:30; na Sobrevivência a cada 4 min): campeão com maça e feiticeiro com leque de tiros. Deixam baú.
+- **Eventos marcados:** coluna de luz no mundo, estrela no minimapa/mapa e seta no topo com nome e distância.
+  A cada 70 s: chuva de maná, arca do tesouro ou acampamento inimigo. Campeões, tesouro em fuga e chefes também são marcados.
+- **Itens interativos novos:** Shofar (empurra e atordoa a horda) e Cesto de maná (cura 35%).
+- Chão com mais variação (manchas de cor, encostas, musgo, escorridos nas rochas) e visão mais longa.
