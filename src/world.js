@@ -253,7 +253,7 @@ export function buildWorld(scene, id, random, PROPS) {
   const padMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9fe4ff).multiplyScalar(1.6), transparent: true, opacity: 0.55, depthWrite: false });
   const spoutGeo = new THREE.CylinderGeometry(0.35, 0.55, 2.4, 8, 1, true).translate(0, 1.2, 0);
   const ringGeoP = new THREE.RingGeometry(0.9, 1.3, 16).rotateX(-Math.PI / 2);
-  for (let k = 0, t = 0; k < (T ? 0 : Math.round(4 * S * S)) && t < 4000; t++) {
+  for (let k = 0, t = 0; k < (T ? 0 : Math.round(7 * S * S)) && t < 4000; t++) { // springs at the foot of the heights
     const a = random() * Math.PI * 2;
     const r = 14 + random() * (B.radius * 0.88 - 14);
     const x = Math.cos(a) * r;
@@ -369,6 +369,23 @@ export function buildWorld(scene, id, random, PROPS) {
     obstacles.push({ x: s.x, z: s.z, r: 0.35, top: y + 2 });
     placed.push(s);
     things.push({ kind: 'shofar', x: s.x, z: s.z, y, mesh: g, p: 0, cd: 0 });
+  }
+  // Altars of vows (Jz 11:30): a power for a price, chosen once at each.
+  for (let k = 0; k < (T ? 0 : n2(2)); k++) {
+    const s = spot(22, B.radius * 0.85, 18);
+    if (!s) continue;
+    const y = H(s.x, s.z);
+    const g = new THREE.Group();
+    g.position.set(s.x, y, s.z);
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.1, 8).translate(0, 0.55, 0), M.toon(0x5a4a5a, { grain: true })));
+    for (const x of [-0.75, 0.75]) g.add(new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.5, 4).translate(x, 1.35, 0), M.toon(0xc8243a))); // horns of the altar
+    const flame = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(1.2, 0.7, 2.4) })); // a violet fire
+    flame.position.y = 1.2;
+    g.add(flame);
+    scene.add(g);
+    obstacles.push({ x: s.x, z: s.z, r: 1.1, top: y + 1.1 });
+    placed.push(s);
+    things.push({ kind: 'voto', x: s.x, z: s.z, y, mesh: g, flame, p: 0, used: false });
   }
   for (let k = 0; k < (T ? 0 : n2(4)); k++) {
     const s = spot(14, B.radius * 0.88, 10);

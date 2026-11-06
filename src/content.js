@@ -509,6 +509,43 @@ export const ENEMIES = [
 ];
 export const MOB_TYPES = [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]; // every kind but the boss (4), drawn from mobs.glb as mob_<type>_<map>
 
+// ---------- The weekly challenge: the same map, hero and two rules for everyone, Monday to Sunday ----------
+export const WEEKLY_RULES = {
+  pressa: { name: 'Pressa', text: 'inimigos 25% mais rápidos' },
+  fartura: { name: 'Fartura', text: 'siclos em dobro' },
+  vidro: { name: 'Vaso de barro', text: '+50% de dano, −40% de vida' },
+  horda: { name: 'Multidão', text: '+40% de inimigos' },
+  fe: { name: 'Fé ardente', text: 'Fé duas vezes mais rápida' },
+  sorte: { name: 'Sorte lançada', text: '+50% de sorte' },
+  pesado: { name: 'Armadura pesada', text: '−15% de velocidade, −20% de recarga' },
+  gigantes: { name: 'Terra de gigantes', text: 'inimigos com +50% de vida, +50% de experiência' },
+};
+export function weeklyChallenge(week) {
+  const h = hashStr(`semana${week}`);
+  const maps = Object.keys(BIOMES);
+  const heroes = Object.keys(HEROES);
+  const rules = Object.keys(WEEKLY_RULES);
+  const a = (h >>> 6) % rules.length;
+  const b = (a + 1 + ((h >>> 11) % (rules.length - 1))) % rules.length;
+  return { week, map: maps[h % maps.length], hero: heroes[(h >>> 3) % heroes.length], rules: [rules[a], rules[b]] };
+}
+export const WEEKLY_PAY = 400; // denários for the first win of the week
+
+// ---------- Combinations: holding enough weapons of a family adds a bonus for the rest of the run ----------
+// An evolved weapon counts for its family too (main.js refreshWeapons).
+export const SYNERGIES = {
+  fogo: { name: 'Fogo do Céu', ref: '1 Rs 18:38', n: 2, weapons: ['brasas', 'sarca', 'fogo', 'carros', 'incensario'], bonus: { burn: 0.15, dmg: 0.08 }, text: '+15% de chance de queimar, +8% de dano' },
+  laminas: { name: 'Lâminas dos Juízes', ref: 'Jz 2:16', n: 2, weapons: ['queixada', 'espada', 'estaca', 'machado'], bonus: { area: 0.15, crit: 0.05 }, text: '+15% de área, +5% de crítico' },
+  arqueiros: { name: 'Arqueiros de Israel', ref: '1 Cr 12:2', n: 2, weapons: ['funda', 'flechas', 'lanca', 'cetro', 'trombeta'], bonus: { dmg: 0.12, crit: 0.03 }, text: '+12% de dano, +3% de crítico' },
+  juizo: { name: 'Chuva de Juízo', ref: 'Êx 9:23', n: 2, weapons: ['granizo', 'fogo', 'mo', 'escrita', 'gafanhotos'], bonus: { amount: 1 }, text: '+1 projétil em todas as armas' },
+  profetas: { name: 'Sinais dos Profetas', ref: 'Am 3:7', n: 3, weapons: ['brasas', 'corvos', 'machado', 'rolo', 'escrita', 'rodas', 'cajado'], bonus: { cd: 0.12, faith: 0.2 }, text: '−12% de recarga, +20% de Fé' },
+};
+// The families a set of weapons (ids, evolutions included) completes.
+export function activeSynergies(ids) {
+  const base = ids.map((id) => WEAPONS[id]?.from || id);
+  return Object.keys(SYNERGIES).filter((k) => SYNERGIES[k].weapons.filter((w) => base.includes(w)).length >= SYNERGIES[k].n);
+}
+
 // ---------- Biomes ----------
 export const smooth = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -1182,6 +1219,9 @@ export const PACTS = [
   { name: 'Pão da aflição', ref: 'Dt 16:3', good: ['regen', 3, '+3 de vida por segundo'], bad: ['speed', -0.15, '−15% de velocidade'] },
   { name: 'Trombetas de Gideão', ref: 'Jz 7:20', good: ['area', 0.3, '+30% de área'], bad: ['spawn', 1.3, '+30% de inimigos'] },
   { name: 'Oferta apressada', ref: '1 Sm 13:9', good: ['cd', 0.2, '−20% de recarga'], bad: ['armor', -0.15, '−15% de armadura'] },
+  { name: 'Voto de Ana', ref: '1 Sm 1:11', good: ['xp', 0.35, '+35% de experiência'], bad: ['dmg', -0.12, '−12% de dano'] },
+  { name: 'Jejum de Ester', ref: 'Et 4:16', good: ['faith', 0.6, 'Fé 60% mais rápida'], bad: ['hpMul', 0.85, '−15% de vida máxima'] },
+  { name: 'Segredo de Sansão', ref: 'Jz 16:17', good: ['crit', 0.15, '+15% de crítico'], bad: ['espd', 1.15, 'inimigos 15% mais rápidos'] },
 ];
 
 // ---------- Tasks: three a day (easy, medium, hard) and three a week, the same for everyone that day ----------

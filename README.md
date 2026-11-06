@@ -139,3 +139,15 @@ Modelos: `tools/blender/heroes.py` (`ONLY=gideao,daniel` reconstrói só esses) 
   A cada 70 s: chuva de maná, arca do tesouro ou acampamento inimigo. Campeões, tesouro em fuga e chefes também são marcados.
 - **Itens interativos novos:** Shofar (empurra e atordoa a horda) e Cesto de maná (cura 35%).
 - Chão com mais variação (manchas de cor, encostas, musgo, escorridos nas rochas) e visão mais longa.
+
+## Celular, controle, combinações, votos, quedas, primeira partida, desafio da semana e música
+
+- **Celular:** joystick onde o polegar esquerdo tocar, arrastar à direita gira a câmera, botões de pular, deslizar, E, Q e pausa (`src/input.js`).
+- **Controle (gamepad):** analógico esquerdo anda, direito gira; A pula, B desliza, X/LB especial, Y/RB milagre, Start pausa; nos menus, direcional + A/B.
+- **Combinações:** 2 ou 3 armas da mesma família dão um bônus (Fogo do Céu, Lâminas dos Juízes, Arqueiros de Israel, Chuva de Juízo, Sinais dos Profetas). Aparecem nas cartas e na pausa.
+- **Altares do voto:** em todos os cenários; escolha um poder com um preço (ou siga sozinho). 3 votos novos.
+- **Quedas:** cair de 4 m ou mais causa um impacto; Shift no ar mergulha. Mais fontes de Horebe nos mapas.
+- **Primeira partida guiada:** dicas passo a passo e horda mais calma no início; "Rever as dicas" em Configurações.
+- **Desafio da semana:** mesmo cenário, herói e 2 regras para todos; ranking "Semana" (mais abates numa partida) e 400 denários na 1ª vitória.
+- **Música:** gerada no navegador, com modo e ritmo próprios de cada cenário, mais intensa na horda e no chefe; sons próprios para cada evento. Volume em Configurações (`src/music.js`).
+- **Ranking:** rode de novo `tools/add-new-content-ranking.sql` (aceita o modo semanal e cria o quadro "Semana").
