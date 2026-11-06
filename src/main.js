@@ -8,6 +8,9 @@ import {
   SECRET_BOSSES, SERPENT, SECRET_ODDS, SERPENT_ODDS, TOWER, FLOOR_MAPS, TOWER_LAYOUTS, TONGUES, floorGoal, floorTime, PSALMS,
   baseStats, weaponStats, describeLevel, rollOffers, rollRelic, rollRarity, pickWeighted, spawnWeights, statText, applyEntry, readyToEvolve,
 } from './content.js';
+import { SYNERGIES, activeSynergies, WEEKLY_RULES, weeklyChallenge, WEEKLY_PAY } from './content.js';
+import { move, held, initTouch, pollGamepad, touchMode } from './input.js';
+import { startMusic, setMusicLevel, setMusicVolume, stopMusic, cue } from './music.js';
 import * as M from './models.js';
 import { buildGear, dress, PIECES } from './gear.js';
 import { forgeModels } from './forge.js';
@@ -35,13 +38,14 @@ const params = new URLSearchParams(location.search);
 const DEBUG = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) && params.get('debug') === '1';
 const wantBiome = params.get('biome');
 let BABEL = params.get('mode') === 'babel'; // the Tower of Babel: its own arena, floor after floor
-const BIOME_ID = BABEL ? 'babel' : BIOMES[wantBiome] && isOpen('map', wantBiome) ? wantBiome : 'ela'; // a locked map in the URL falls back
+const WEEK = !BABEL && params.get('week') === '1' ? weeklyChallenge(weekKey()) : null; // the weekly challenge: map and hero fixed, even locked ones
+const BIOME_ID = BABEL ? 'babel' : WEEK ? WEEK.map : BIOMES[wantBiome] && isOpen('map', wantBiome) ? wantBiome : 'ela'; // a locked map in the URL falls back
 // Difficulty and mode: chosen on the setup screen (kept in the URL for "Jogar de novo"); fixed once a run starts.
-let DIFF_ID = Math.min(2, Math.max(0, Number(params.get('diff')) || 0));
+let DIFF_ID = WEEK ? 0 : Math.min(2, Math.max(0, Number(params.get('diff')) || 0));
 if (!diffOpen(profile, BIOME_ID, DIFF_ID)) DIFF_ID = 0;
 let DIFF = DIFFS[DIFF_ID];
-let SURV = params.get('mode') === 'surv';
-const DEFAULTS = { style: 'crisp', shadows: true, bloom: true, lights: true, cinema: true, dmgNumbers: true, fps: false, sens: 1, camDist: 8.5, invertY: false, autoCam: true, lockMouse: true, volume: 0.7 };
+let SURV = !WEEK && params.get('mode') === 'surv';
+const DEFAULTS = { style: 'crisp', shadows: true, bloom: true, lights: true, cinema: true, dmgNumbers: true, fps: false, sens: 1, camDist: 8.5, invertY: false, autoCam: true, lockMouse: true, volume: 0.7, music: 0.6 };
 const cfg = { ...DEFAULTS };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('otr-cfg') || '{}')); } catch {}
 const saveCfg = () => { try { localStorage.setItem('otr-cfg', JSON.stringify(cfg)); } catch {} };
@@ -845,6 +849,8 @@ const P = {
   goldGot: 0, veins: 0, jars: 0, chests: 0, hits: 0, lastHit: -99, guardians: 0, // for tasks and trophies
   mods: { espd: 1, spawn: 1, chest: 1 }, endless: false, // survival: the prices of the alliances
   netT: 0, // caught in a climber's net
+  peakY: 0, diving: false, // highest point of this jump (the slam on landing); a Shift dive
+  syn: new Set(), // the weapon families completed this run (content.js SYNERGIES)
   psalms: [], wardAt: 0, refugeAt: 0, cupT: 0, grazes: 0, grazeAt: -9, // the Psalms; the graze streak
 };
 let dmgSrc = 'other'; // who is dealing damage right now (a weapon id, 'move', 'miracle', 'passive', 'other'): fills P.dmgBy
@@ -881,7 +887,7 @@ function setHero(id) {
 let state = 'menu'; // menu | setup | settings | howto | play | pause | choice | end
 let prevScreen = 'menu';
 let runStarted = false;
-let selHero = HEROES[params.get('hero')] && isOpen('hero', params.get('hero')) ? params.get('hero') : 'davi';
+let selHero = WEEK ? WEEK.hero : HEROES[params.get('hero')] && isOpen('hero', params.get('hero')) ? params.get('hero') : 'davi';
 let packed = (profile.packSel || []).filter((id) => SUPPLIES[id]); // what goes in the saddlebag (kept for next time)
 let time = 0;
 let night = 0;
@@ -977,6 +983,38 @@ addEventListener('keydown', (e) => {
   }
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
+const jumpHeld = () => keys.has('Space') || held.has('jump');
+// Touch and gamepads (src/input.js) call the same actions as the keys.
+const fakeKey = (code) => { dispatchEvent(new KeyboardEvent('keydown', { code, key: code })); dispatchEvent(new KeyboardEvent('keyup', { code, key: code })); };
+let padSel = 0;
+const playActs = {
+  turn: (dx, dy) => turnCamera(dx, dy),
+  jump: () => { P.jumpBuffer = 0.15; },
+  special: () => state === 'play' && useSpecial(),
+  miracle: () => state === 'play' && useMiracle(),
+  pause: () => (state === 'play' ? pause() : state === 'pause' && resume()),
+};
+initTouch(document.getElementById('touch'), playActs);
+const padActs = {
+  ...playActs,
+  nav(hor, ver) {
+    if (state === 'choice') { // the cards: left and right choose, A takes it
+      const cards = [...$('cards').children];
+      padSel = (padSel + (hor || ver) + cards.length) % cards.length;
+      cards.forEach((c, k) => c.classList.toggle('cur', k === padSel));
+      beep(520, 0.03, 'square', 0.02);
+    } else fakeKey(hor < 0 ? 'ArrowLeft' : hor > 0 ? 'ArrowRight' : ver < 0 ? 'ArrowUp' : 'ArrowDown');
+  },
+  confirm() {
+    if (state === 'choice') return pick(padSel);
+    const cur = document.querySelector('.screen.on .nav .btn.cur');
+    if (cur?.offsetParent && state !== 'setup' && state !== 'hero-pick' && state !== 'tower') cur.click();
+    else fakeKey('Enter');
+  },
+  back: () => (state === 'pause' ? resume() : fakeKey('Escape')),
+  start: () => (state === 'pause' ? resume() : fakeKey('Enter')),
+  key: (code) => state === 'choice' && fakeKey(code),
+};
 canvas.addEventListener('mousedown', (e) => {
   if (state !== 'play') return;
   if (e.button === 2) return useMiracle();
@@ -1103,7 +1141,7 @@ function syncMapVideo() {
     else v.pause();
   }
 }
-const playQuery = (biome = BIOME_ID) => ({ biome, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : BABEL ? 'babel' : 'classic', diff: DIFF_ID, ...(DEBUG ? { debug: '1' } : {}) });
+const playQuery = (biome = BIOME_ID) => ({ ...(WEEK ? { week: '1' } : {}), biome, hero: selHero, screen: 'setup', mode: SURV ? 'surv' : BABEL ? 'babel' : 'classic', diff: DIFF_ID, ...(DEBUG ? { debug: '1' } : {}) });
 // Map screen: the maps as tabs, a big view of the chosen one (its hero, its milestones), and the panel to
 // prepare the run (mode, difficulty, saddlebag, records).
 function renderSetup() {
@@ -1538,12 +1576,18 @@ addEventListener('resize', () => { if (state === 'menu') fitSeason(); });
 $('surv-card').onclick = () => { SURV = true; BABEL = false; go('setup'); };
 $('babel-card').onclick = () => go('tower');
 document.querySelector('#hero-pick .btn.back').onclick = () => go(heroBack);
+// The weekly challenge card: this week's map, hero and rules; it starts right away.
+const WK = weeklyChallenge(weekKey());
+$('week-sub').textContent = `${BIOMES[WK.map].name} · ${HEROES[WK.hero].name} · ${WK.rules.map((r) => WEEKLY_RULES[r].name).join(' + ')}`;
+$('week-card').title = WK.rules.map((r) => `${WEEKLY_RULES[r].name}: ${WEEKLY_RULES[r].text}`).join('\n');
+$('week-card').onclick = () => reload({ week: '1', biome: WK.map, hero: WK.hero, mode: 'classic', diff: 0, screen: 'play' });
 $('event-card').onclick = () => { BABEL = false; pickMapTo(EVENT_MAP); go('setup'); };
 $('fs-btn').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.());
 $('profile-pill').onclick = () => askName();
 
 const BOARDS = {
   abates: ['Abates', 'abates acumulados em qualquer modo'],
+  semana: ['Semana', 'mais abates numa partida do desafio da semana'],
   sobrevivencia: ['Sobrevivência', 'maior tempo de pé no Sobrevivência'],
   torre: ['Torre', 'andar mais alto na Torre de Babel'],
 };
@@ -1896,11 +1940,13 @@ function applyCfg() {
   resize();
   sun.castShadow = cfg.shadows;
   if (master) master.gain.value = cfg.volume;
+  setMusicVolume(cfg.music);
   $('fps').hidden = !cfg.fps;
 }
 
 function startRun() {
   if (BABEL !== (BIOME_ID === 'babel') || (!BABEL && pickMap !== BIOME_ID)) return reload({ ...playQuery(BABEL ? 'babel' : pickMap), screen: 'play' }); // build the picked map (or the tower) first
+  if (WEEK) selHero = WEEK.hero; // the week's hero, whatever the setup screen says
   const h = HEROES[selHero];
   P.hero = selHero;
   P.pack = packed.filter((id) => profile.bag[id] > 0);
@@ -1909,6 +1955,7 @@ function startRun() {
   for (const id of P.pack) profile.bag[id]--;
   saveProfile();
   P.st = stageBonus(applyMarket(baseStats(h), profile, P.pack), P.hero, stageOf(P.hero));
+  if (WEEK) applyWeekRules();
   P.hp = P.st.maxHp;
   if (P.pack.includes('mana')) { P.level = 3; pendingLevels = 2; P.xpNext = Math.round(5 + 2 * 7 + 0.3 * 4); }
   if (P.pack.includes('mel')) melCarrier = 45;
@@ -1925,7 +1972,10 @@ function startRun() {
   yaw = 0;
   pitch = 0.5;
   audio();
+  startMusic(actx, master, BIOME_ID); // each map its own mode and tempo (src/music.js)
+  setMusicVolume(cfg.music);
   runStarted = true;
+  startTutorial();
   M.shared.uFadeOn.value = 1;
   $('hud').hidden = false;
   $('hero-face').src = ICON.face[P.hero];
@@ -1954,7 +2004,9 @@ function renderBuild() {
   const g = seen.map(([from, e]) => `<li>${iconImg(ICON.weapon[e.into])}<div>${WEAPONS[e.into].name}<small>${WEAPONS[from].name} nv ${MAX_LEVEL} + ${RELICS[e.needs].name}</small></div></li>`).join('')
     || '<li><small>Evolua uma arma (nível máximo + a relíquia dela, num baú) e a receita fica aqui.</small></li>';
   const ps = P.psalms.map((id) => `<li><div>${PSALMS[id].name}<small>${PSALMS[id].text}</small></div></li>`).join('');
-  $('pause-build').innerHTML = `<div><h3>Armas</h3><ul>${w}</ul><h3>Dano</h3>${dmgRows()}</div><div><h3>Relíquias</h3><ul>${r}</ul>${ps ? `<h3>Salmos</h3><ul>${ps}</ul>` : ''}<h3>Grimório <small>${seen.length} de ${Object.keys(EVOLUTIONS).length}</small></h3><ul>${g}</ul></div><div><h3>Atributos</h3>${attrRows()}</div>`;
+  const have = P.weapons.map((x) => WEAPONS[x.id].from || x.id);
+  const sy = Object.entries(SYNERGIES).map(([k, c]) => `<li><div style="color:${P.syn.has(k) ? '#ffd66b' : '#9a8f80'}">${c.name} ${P.syn.has(k) ? '✓' : `(${c.weapons.filter((x) => have.includes(x)).length}/${c.n})`}<small>${c.text} · ${c.weapons.map((x) => WEAPONS[x].name).join(', ')}</small></div></li>`).join('');
+  $('pause-build').innerHTML = `<div><h3>Armas</h3><ul>${w}</ul><h3>Dano</h3>${dmgRows()}</div><div><h3>Relíquias</h3><ul>${r}</ul>${ps ? `<h3>Salmos</h3><ul>${ps}</ul>` : ''}<h3>Combinações</h3><ul>${sy}</ul><h3>Grimório <small>${seen.length} de ${Object.keys(EVOLUTIONS).length}</small></h3><ul>${g}</ul></div><div><h3>Atributos</h3>${attrRows()}</div>`;
 }
 // Every stat of the run, with what it does on hover; green when better than the hero's start.
 function attrRows() {
@@ -2128,17 +2180,17 @@ function updateDmgNumbers(dt) {
 function updatePlayer(dt) {
   const v = P.vel;
   const p = P.pos;
-  const ix = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
-  const iz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+  const ix = clamp((keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + move.x, -1, 1); // keyboard, touch stick or gamepad
+  const iz = clamp((keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0) + move.z, -1, 1);
   let wx = -Math.sin(yaw) * iz + Math.cos(yaw) * ix; // wish direction, relative to camera
   let wz = -Math.cos(yaw) * iz - Math.sin(yaw) * ix;
   const wl = Math.hypot(wx, wz);
-  if (wl) { wx /= wl; wz /= wl; }
+  if (wl) { const k = Math.min(1, Math.max(wl, Math.hypot(ix, iz))) / wl; wx *= k; wz *= k; } // a light push on the stick walks
   P.wishX = wx;
   P.wishZ = wz;
   const speed = moveSpeed();
   const hs = Math.hypot(v.x, v.z);
-  const slideKey = keys.has('ShiftLeft') || keys.has('ShiftRight');
+  const slideKey = keys.has('ShiftLeft') || keys.has('ShiftRight') || held.has('slide');
   P.slideCd -= dt;
   P.jumpBuffer -= dt;
   P.coyote -= dt;
@@ -2196,7 +2248,7 @@ function updatePlayer(dt) {
       const feet = p.y - terrainH(p.x, p.z);
       const onFace = feet < 0.5 || terrainH(p.x + ux * 0.7, p.z + uz * 0.7) - p.y > -0.3; // standing on it, or right against it
       const pushing = wl > 0 && wx * ux + wz * uz > 0.35;
-      if (onFace && pushing && keys.has('Space')) {
+      if (onFace && pushing && jumpHeld()) {
         P.climbing = true;
         v.x = ux * 2.4;
         v.z = uz * 2.4;
@@ -2212,7 +2264,7 @@ function updatePlayer(dt) {
       }
     }
   }
-  const wantJump = P.jumpBuffer > 0 || keys.has('Space'); // holding Space = auto bunny hop
+  const wantJump = P.jumpBuffer > 0 || jumpHeld(); // holding Space = auto bunny hop
   if (wantJump && (P.grounded || P.coyote > 0) && !P.onCliff) {
     v.y = JUMP;
     P.grounded = false;
@@ -2245,7 +2297,7 @@ function updatePlayer(dt) {
     const nz = dz / d;
     if (o.top - p.y <= 0.65 && (P.grounded || P.coyote > 0)) { p.y = o.top; v.y = Math.max(v.y, 0); continue; } // a step
     const into = wl > 0 && -(wx * nx + wz * nz) > 0.35;
-    if (into && keys.has('Space')) { // climb
+    if (into && jumpHeld()) { // climb
       v.y = 5.5;
       P.climbing = true;
       P.grounded = false;
@@ -2273,7 +2325,11 @@ function updatePlayer(dt) {
       P.groundTime = 0;
       P.airJumps = P.st.airJumps;
       if (v.y < -12) burst(p.x, g + 0.1, p.z, 0xcbb89a, 8, 3, 0.12, 1.5);
+      const drop = P.peakY - g;
+      if (drop >= 4 || P.diving) slam(p.x, g, p.z, Math.max(drop, 4));
+      P.diving = false;
     }
+    P.peakY = g;
     p.y = g;
     v.y = 0;
     P.grounded = true;
@@ -2281,6 +2337,8 @@ function updatePlayer(dt) {
   } else {
     if (P.grounded) P.coyote = 0.1;
     P.grounded = false;
+    P.peakY = Math.max(P.peakY, p.y);
+    if (slideKey && !P.diving && p.y - g > 2.5) { P.diving = true; v.y = -30; beep(300, 0.25, 'sawtooth', 0.04, 0, 80); } // Shift in the air: dive
     gainFe(1.2 * dt); // time in the air feeds Fé
   }
   if (hs > 0.5) { P.faceX = v.x / hs; P.faceZ = v.z / hs; }
@@ -2290,6 +2348,23 @@ function updatePlayer(dt) {
   }
   P.hp = Math.min(P.st.maxHp, P.hp + (P.st.regen + (P.harpT > 0 ? 6 : 0)) * dt);
   psalmTick(dt);
+}
+// Coming down from a height (or diving with Shift): a shockwave, stronger the further the fall.
+function slam(x, y, z, drop) {
+  const R = Math.min(9, 3 + drop * 0.35);
+  dmgSrc = 'move';
+  for (let i = 0; i < E.n; i++) {
+    const dx = E.x[i] - x;
+    const dz = E.z[i] - z;
+    const d = Math.hypot(dx, dz) || 1;
+    if (d > R + E.r[i] || Math.abs(E.y[i] - y) > 3) continue;
+    damage(i, 18 + drop * 5, dx / d, dz / d, 12);
+    if (!ENEMIES[E.type[i]].boss) E.stun[i] = Math.max(E.stun[i], 0.6);
+  }
+  addFx(ringGeo, 0xffe8b0, x, y + 0.2, z, 1, 0.45, { grow: R, ground: true });
+  burst(x, y + 0.3, z, 0xcbb89a, 18, 6, 0.16, 3);
+  shake = Math.max(shake, Math.min(0.6, drop * 0.05));
+  boom(0.5, 0.5, 600);
 }
 function psalmTick(dt) {
   if (P.psalms.includes('s23') && P.hp >= P.st.maxHp - 0.01 && (P.cupT -= dt) <= 0) { // Salmo 23: the cup runs over
@@ -2750,7 +2825,7 @@ function spawnMini(k) {
   E.elite[i] = 4; // drops a chest like a champion (see the kills)
   burst(s.x, terrainH(s.x, s.z) + 2, s.z, 0xff5a4a, 30, 6, 0.2, 6);
   toast(`${miniName(11 + k)} apareceu! Siga a luz vermelha`, '#ff9a8a');
-  beep(70, 0.8, 'sawtooth', 0.07, 0, 110);
+  cue('mini');
 }
 // Every 70 s one of these, somewhere else on the map.
 let nextLocated = 80;
@@ -2777,7 +2852,7 @@ function locatedEvent() {
     markAt(s.x, s.z, '#ff8a3d', 'Acampamento inimigo', 75, { kind, chest: c });
     toast('Um acampamento inimigo guarda um baú! Siga a luz laranja', '#ff9a8a');
   }
-  chord([523, 659, 784], 'triangle');
+  cue(kind);
 }
 // Everything worth walking to right now: the events above, plus whoever carries a reward.
 function liveMarks() {
@@ -2804,7 +2879,7 @@ let pointerMark = null;
 function updateMarks(dt) {
   for (let k = marks.length - 1; k >= 0; k--) {
     const m = marks[k];
-    if (m.chest?.open || time > m.until) { marks.splice(k, 1); continue; }
+    if (m.chest?.open || m.stone?.done || time > m.until) { marks.splice(k, 1); continue; }
     if (m.kind === 'mana' && (m.rain -= dt) <= 0) {
       m.rain = 0.2;
       const x = m.x + (random() - 0.5) * 9;
@@ -2825,6 +2900,74 @@ function updateMarks(dt) {
   });
   // The pointer: the most important mark, then the nearest.
   pointerMark = live.sort((a, b) => (b.prio || 0) - (a.prio || 0) || Math.hypot(a.x - P.pos.x, a.z - P.pos.z) - Math.hypot(b.x - P.pos.x, b.z - P.pos.z))[0] || null;
+}
+
+// The weekly challenge's two rules, on top of the hero's stats (content.js WEEKLY_RULES).
+function applyWeekRules() {
+  const fx = {
+    pressa: () => { P.mods.espd *= 1.25; },
+    fartura: () => { P.st.gold += 1; },
+    vidro: () => { P.st.dmg += 0.5; P.st.maxHp *= 0.6; },
+    horda: () => { P.mods.spawn *= 1.4; },
+    fe: () => { P.st.faith += 1; },
+    sorte: () => { P.st.luck += 0.5; },
+    pesado: () => { P.st.speed -= 0.15; P.st.cd += 0.2; },
+    gigantes: () => { DIFF = { ...DIFF, hp: DIFF.hp * 1.5 }; P.st.xp += 0.5; },
+  };
+  for (const r of WEEK.rules) fx[r]();
+  setTimeout(() => toast(`Desafio da semana: ${WEEK.rules.map((r) => `${WEEKLY_RULES[r].name} (${WEEKLY_RULES[r].text})`).join(' · ')}`, '#b07af0'), 1500);
+}
+// ---------- The first run: a guided start, one step at a time, with a gentler horde ----------
+const tut = { on: false, i: -1, t: 0, dist: 0, jumped: false, special: false, lx: 0, lz: 0 };
+const btn = (k, touch) => (touchMode ? `o botão ${touch}` : k);
+const TUTOR = [
+  { text: () => (touchMode ? 'Arraste o polegar esquerdo para andar. Suas armas atacam sozinhas.' : 'Ande com W A S D. Suas armas atacam sozinhas.'), done: () => tut.dist > 8 },
+  { text: () => `Pule com ${btn('Espaço', '⤒')}. Segure encostado numa parede para escalar; caia de cima para causar um impacto.`, done: () => tut.jumped },
+  { text: () => 'Derrote inimigos e pegue o maná azul que eles deixam. Ao subir de nível, escolha uma carta: arma nova, melhoria ou rolo.', done: () => P.level >= 2 && state === 'play' },
+  { text: () => 'Siga a seta no topo: fique perto da Pedra do Memorial para erguê-la.', start: tutorStone, done: () => stonesDone >= 1 },
+  { text: () => `Use ${btn('E', 'E')}: ${HEROES[P.hero].move[0]}.`, done: () => tut.special },
+  { text: () => `Sua Fé está cheia! Use ${btn('Q', 'Q')}: ${HEROES[P.hero].miracle[0]}.`, start: () => { P.fe = 100; }, done: () => P.miracles >= 1 },
+  { text: () => 'Pronto! Erga as 3 pedras e vença o chefe. Luzes e estrelas no mapa marcam eventos: vá até elas.', done: () => tut.t > 8 },
+];
+function tutorStone() {
+  const s = stones.filter((x) => !x.done).sort((a, b) => Math.hypot(a.x - P.pos.x, a.z - P.pos.z) - Math.hypot(b.x - P.pos.x, b.z - P.pos.z))[0];
+  if (s) markAt(s.x, s.z, '#f2c14e', 'Pedra do Memorial', 900, { stone: s, prio: 4 });
+}
+function startTutorial() {
+  if (profile.seen.tutorial || BABEL || SURV || WEEK) return;
+  Object.assign(tut, { on: true, i: -1, lx: P.pos.x, lz: P.pos.z });
+  P.mods.spawn *= 0.55;
+  nextTutor();
+}
+function nextTutor() {
+  tut.i++;
+  tut.t = 0;
+  const st = TUTOR[tut.i];
+  if (!st) return endTutorial();
+  st.start?.();
+  $('tip-text').textContent = st.text();
+  $('tip').hidden = false;
+  if (tut.i) beep(880, 0.1, 'triangle', 0.04);
+  if (tut.i === 4) P.mods.spawn /= 0.55; // the horde back to normal once the basics are known
+}
+function endTutorial() {
+  if (tut.on && tut.i < 4) P.mods.spawn /= 0.55;
+  tut.on = false;
+  $('tip').hidden = true;
+  profile.seen.tutorial = 1;
+  saveProfile();
+}
+$('tip-skip').onclick = endTutorial;
+$('redo-tutorial').onclick = () => { profile.seen.tutorial = 0; saveProfile(); toast('As dicas voltam na próxima partida do Clássico', '#ffe08f'); };
+function updateTutorial(dt) {
+  if (!tut.on) return;
+  tut.t += dt;
+  tut.dist += Math.hypot(P.pos.x - tut.lx, P.pos.z - tut.lz);
+  tut.lx = P.pos.x;
+  tut.lz = P.pos.z;
+  if (!P.grounded && P.vel.y > 2) tut.jumped = true;
+  if (P.dashT > 0) tut.special = true;
+  if (tut.t > 1.2 && TUTOR[tut.i].done()) nextTutor();
 }
 
 // Each map's own event (see BIOMES[id].event).
@@ -2946,6 +3089,8 @@ function director(dt) {
   if (!SURV && !boss.spawned && time >= RUN_TIME && time >= bossWait) spawnBoss(true);
   if (SURV && !boss.spawned && time >= nextGuardian) spawnBoss(false, true);
   updateMarks(dt);
+  updateTutorial(dt);
+  setMusicLevel(boss.spawned ? 2 : E.n > 35 || night > 0.5 ? 1 : 0);
 }
 
 function enemyShot(x, y, z, dx, dz, dmg, speed = 13) {
@@ -3956,6 +4101,13 @@ function reapEnemies() {
 // ---------- Weapons ----------
 const evoHinted = new Set();
 function refreshWeapons() {
+  for (const k of activeSynergies(P.weapons.map((w) => w.id))) { // a family completed: its bonus, once
+    if (P.syn.has(k)) continue;
+    P.syn.add(k);
+    for (const [stat, v] of Object.entries(SYNERGIES[k].bonus)) P.st[stat] += v;
+    toast(`Combinação: ${SYNERGIES[k].name}! ${SYNERGIES[k].text}`, '#ffd66b');
+    cue('combo');
+  }
   for (const w of P.weapons) {
     w.s = weaponStats(w.id, w.level, P.st);
     w.s.dmg *= (1 + MASTERY.per * masteryOf(profile, w.id)) * (1 + (w.bonus || 0)); // the Arsenal's mastery, the cards' rarity
@@ -4744,6 +4896,20 @@ function updateWorld(dt) {
       shake = 0.5;
       beep(147, 1.1, 'sawtooth', 0.08, 0, 196);
       toast('O shofar soou! A horda recua', '#ffe08f');
+    } else if (t.kind === 'voto') { // an altar of vows: a power for a price (Jz 11:30)
+      if (t.used) continue;
+      if (d > 2.8) { t.p = 0; continue; }
+      t.p += dt / 1;
+      promptText = `Altar do voto · ${Math.floor(Math.min(1, t.p) * 100)}%`;
+      if (t.p < 1) continue;
+      t.used = true;
+      t.flame.visible = false;
+      const pool = PACTS.filter((pc) => (pc.good[0] !== 'cd' || P.st.cd < 0.6) && (pc.bad[0] !== 'speed' || P.st.speed + pc.bad[1] >= -0.75));
+      const list = [];
+      while (list.length < 3 && pool.length) list.push({ kind: 'pact', pact: pool.splice(Math.floor(random() * pool.length), 1)[0] });
+      list.push({ kind: 'leave', pact: true });
+      openChoice('Um voto diante do altar?', list, 'pact');
+      return;
     } else if (t.kind === 'cesto') { // a basket of manna (Êx 16:15): heals, then fills again in 75 s
       t.cd -= dt;
       t.manna.visible = t.cd <= 0;
@@ -4869,6 +5035,7 @@ function openLevelUp() {
 }
 
 function openChoice(title, offers, source) {
+  padSel = 0;
   state = 'choice';
   choice = { title, offers, source };
   document.exitPointerLock?.();
@@ -4925,6 +5092,13 @@ function tiltCard(el) {
   };
   el.onpointerleave = () => { for (const k of TILT) el.style.removeProperty(k); };
 }
+// On a weapon card: the family it counts for, and how close that family is.
+function synHint(id) {
+  const have = P.weapons.map((w) => WEAPONS[w.id].from || w.id);
+  const base = WEAPONS[id].from || id;
+  return Object.entries(SYNERGIES).filter(([k, c]) => c.weapons.includes(base) && !P.syn.has(k))
+    .map(([, c]) => `<em class="evo">Combinação ${c.name}: ${c.weapons.filter((x) => have.includes(x) || x === base).length}/${c.n} · ${c.text}</em>`).join('');
+}
 function renderChoice() {
   $('choice-title').textContent = choice.title;
   $('choice').classList.toggle('banning', !!choice.banning);
@@ -4937,7 +5111,7 @@ function renderChoice() {
     let icon;
     let tier = null;
     let rar = '';
-    const evoHint = (id) => (EVOLUTIONS[id] ? `<em class="evo">Evolui com ${RELICS[EVOLUTIONS[id].needs].name} no nível ${MAX_LEVEL}</em>` : '');
+    const evoHint = (id) => (EVOLUTIONS[id] ? `<em class="evo">Evolui com ${RELICS[EVOLUTIONS[id].needs].name} no nível ${MAX_LEVEL}</em>` : '') + synHint(id);
     const bonusLine = (t) => (t ? `<li>Dano desta arma <ins>+${Math.round(RARITY[t].weapon * 100)}%</ins></li>` : '');
     if (o.kind === 'psalm') {
       tag = `Salmo · ${PSALMS[o.id].ref}`;
@@ -5179,6 +5353,7 @@ function checkTrophies(dt) { // the ones that build up over a run, checked once 
 }
 
 function endScreen(title, text, verse, won = false) {
+  stopMusic();
   award('inicio');
   recordRun(won);
   state = 'end';
@@ -5200,6 +5375,12 @@ function endScreen(title, text, verse, won = false) {
   if (P.guardians) { pay.lines.push([`Guardiões vencidos (${P.guardians})`, P.guardians * 40]); pay.total += P.guardians * 40; }
   if (BABEL && tower.n > 1) { pay.lines.push([`Andares vencidos (${tower.n - 1})`, (tower.n - 1) * 35]); pay.total += (tower.n - 1) * 35; }
   if (DIFF.pay > 1) { const extra = Math.round(pay.total * (DIFF.pay - 1)); pay.lines.push([`${DIFF.name} ×${DIFF.pay}`, extra]); pay.total += extra; }
+  if (WEEK) {
+    const wb = profile.weekly?.week === WEEK.week ? profile.weekly : { week: WEEK.week, best: 0, won: false };
+    wb.best = Math.max(wb.best, P.kills);
+    if (won && !wb.won) { wb.won = true; pay.lines.push(['Desafio da semana: 1ª vitória', WEEKLY_PAY]); pay.total += WEEKLY_PAY; }
+    profile.weekly = wb;
+  }
   if (BIOME_ID === EVENT_MAP && pay.total) { const extra = Math.round(pay.total * 0.5); pay.lines.push(['Desafio do dia +50%', extra]); pay.total += extra; }
   for (const f of hiddenBeaten) { pay.lines.push([`${f.name} derrotado`, f.pay]); pay.total += f.pay; }
   const trophyPay = 0;
@@ -5230,7 +5411,7 @@ function endScreen(title, text, verse, won = false) {
   else if (!onlineOn()) online.textContent = '';
   else {
     const lookF = heroRec(P.hero).look.frame;
-    const runData = { map: BIOME_ID, mode: BABEL ? 'babel' : SURV ? 'surv' : 'classic', diff: DIFF_ID, hero: P.hero, kills: P.kills, seconds: Math.floor(time), won, floor: BABEL ? tower.n : 0,
+    const runData = { map: BIOME_ID, mode: BABEL ? 'babel' : SURV ? 'surv' : WEEK ? 'weekly' : 'classic', diff: DIFF_ID, hero: P.hero, kills: P.kills, seconds: Math.floor(time), won, floor: BABEL ? tower.n : 0,
       title: titleOf(), frame: lookF && hasCosmetic(lookF) ? lookF : '' };
     if (!profile.name) {
       online.innerHTML = '<button id="end-pick-name" style="color:var(--gold);text-decoration:underline;cursor:pointer;background:none;border:none;font:inherit;font-weight:bold">Escolha um nome</button> para esta partida contar na temporada!';
@@ -6092,6 +6273,7 @@ function updateCamera(dt) {
 // ---------- HUD (only touches the DOM when something changes) ----------
 const setText = (el, s) => { if (el._t !== s) { el._t = s; el.textContent = s; } };
 const setHtml = (el, s) => { if (el._t !== s) { el._t = s; el.innerHTML = s; } };
+const touchEl = $('touch');
 const hud = Object.fromEntries(['event-pointer', 'event-arrow', 'event-label', 'hp', 'hp-text', 'fe', 'fe-text', 'fe-bar', 'extra', 'timer', 'phase-dot', 'objective', 'boss-hp', 'level',
   'kills', 'gold', 'slots', 'skill-e', 'skill-q', 'prompt', 'fps', 'xp-fill', 'hurt', 'compass'].map((id) => [id, $(id)]));
 const compassTicks = [['N', Math.PI], ['L', Math.PI / 2], ['S', 0], ['O', -Math.PI / 2]].map(([txt, h]) => {
@@ -6210,7 +6392,7 @@ function explore() {
 }
 const seen = (x, z) => explored[clamp(Math.floor((z + MAP_R) / fogCell), 0, FOG_N - 1) * FOG_N + clamp(Math.floor((x + MAP_R) / fogCell), 0, FOG_N - 1)] === 1;
 // What the maps show: [thing, colour, shape, name for the legend]. always: shown before it is discovered.
-const THING_NAME = { vein: 'Veio de prata', fruit: 'Árvore com frutos', gideon: 'Jarro de Gideão', bethel: 'Pilar de Betel', merchant: 'Caravana ismaelita', shofar: 'Shofar', cesto: 'Cesto de maná' };
+const THING_NAME = { vein: 'Veio de prata', fruit: 'Árvore com frutos', gideon: 'Jarro de Gideão', bethel: 'Pilar de Betel', merchant: 'Caravana ismaelita', shofar: 'Shofar', cesto: 'Cesto de maná', voto: 'Altar do voto' };
 function mapMarks() {
   const m = [];
   for (const s of stones) m.push([s, s.done ? '#9a8f80' : '#f2c14e', 'diamond', 'Pedra do Memorial', true]);
@@ -6219,8 +6401,8 @@ function mapMarks() {
   for (const pd of world.pads) m.push([pd, '#9fe4ff', 'ring', 'Rocha de Horebe']);
   for (const c of chests) if (!c.open) m.push([c, c.challenge ? '#c8243a' : c.free ? '#ffd66b' : '#b0743a', 'square', c.challenge ? 'Baú selado' : 'Baú de cedro']);
   for (const t of world.things) {
-    if (((t.kind === 'vein' || t.kind === 'gideon') && t.used) || (t.kind === 'cesto' && t.cd > 0)) continue;
-    m.push([t, { vein: '#dfe7ee', fruit: '#e05050', gideon: '#ffe08f', bethel: '#ffd66b', merchant: '#8fdc7a', shofar: '#f3e6c4', cesto: '#fff6dc' }[t.kind], t.kind === 'merchant' ? 'square' : 'dot', THING_NAME[t.kind], t.kind === 'merchant']);
+    if (((t.kind === 'vein' || t.kind === 'gideon' || t.kind === 'voto') && t.used) || (t.kind === 'cesto' && t.cd > 0)) continue;
+    m.push([t, { vein: '#dfe7ee', fruit: '#e05050', gideon: '#ffe08f', bethel: '#ffd66b', merchant: '#8fdc7a', shofar: '#f3e6c4', cesto: '#fff6dc', voto: '#b07af0' }[t.kind], t.kind === 'merchant' ? 'square' : 'dot', THING_NAME[t.kind], t.kind === 'merchant']);
   }
   if (world.rahab && !world.rahab.used) m.push([world.rahab, '#e03a50', 'dot', 'Casa de Raabe']);
   if (!BABEL) for (const e of liveMarks()) m.push([e, e.color, 'event', e.label, true]);
@@ -6356,6 +6538,7 @@ function updateHud() {
     josue: `Conquista +${Math.round(Math.min(0.8, 0.08 * P.conquests) * 100)}%`, debora: 'Profetisa: 4 cartas', elias: 'Zelo: +15% queimar · +20% Fé', gideao: 'Valente: +10% crítico', daniel: 'Sábio: +15% XP', ester: 'Favor: +25% siclos',
   }[P.hero]);
   document.body.classList.toggle('sunstop', P.sunT > 0);
+  touchEl.hidden = !(touchMode && state === 'play');
   const pm = !BABEL && pointerMark;
   hud['event-pointer'].hidden = !pm;
   if (pm) { // an arrow turned the way to go, from where the camera looks
@@ -6406,6 +6589,7 @@ renderer.setAnimationLoop((now) => {
   fps += (1 / Math.max(raw, 1e-3) - fps) * 0.05;
   const playing = state === 'play';
   const dt = Math.min(raw, 1 / 30);
+  pollGamepad(raw, state, padActs);
   if (playing) step(dt);
   else M.shared.uTime.value = now / 1000; // keep water moving on the menus
   world.update(raw, playing ? time : now / 1000, night, camera);

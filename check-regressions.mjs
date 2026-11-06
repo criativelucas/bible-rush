@@ -185,6 +185,18 @@ test('Ester, the new enemies, the mini-bosses and the 20% larger maps', () => {
   assert.equal(C.spawnWeights(600)[11],0,'mini-bosses only come by event');assert.ok(C.spawnWeights(600)[9]>0&&C.spawnWeights(600)[10]>0);
   for (const [id,bm] of Object.entries(C.BIOMES)) { assert.ok(bm.radius>=144,id); assert.equal(C.BEAST_NAMES[id].length,12,id); }
 });
+test('weekly challenge is the same for everyone, combinations count evolutions, vows exist', () => {
+  const w=C.weeklyChallenge('2026-W45');
+  assert.deepEqual(w,C.weeklyChallenge('2026-W45'));
+  assert.ok(C.BIOMES[w.map]&&C.HEROES[w.hero]);assert.notEqual(w.rules[0],w.rules[1]);
+  for (const r of w.rules) assert.ok(C.WEEKLY_RULES[r]);
+  const seen=new Set();for(let k=1;k<=52;k++) seen.add(C.weeklyChallenge(`2026-W${k}`).map);assert.ok(seen.size>=4,'the map changes week to week');
+  assert.deepEqual(C.activeSynergies(['funda','flechas']),['arqueiros']);
+  assert.deepEqual(C.activeSynergies(['brasas_evo','sarca']),['fogo']);
+  assert.deepEqual(C.activeSynergies(['brasas','corvos']),[]);
+  for (const s of Object.values(C.SYNERGIES)) for (const id of s.weapons) assert.ok(C.WEAPONS[id],id);
+  assert.ok(C.PACTS.length>=9);
+});
 // Offline retry: use the real module with a mocked network; never contact the production server.
 const previousFetch=globalThis.fetch;
 let fail=true;
